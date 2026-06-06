@@ -62,6 +62,16 @@ async function logGame(interaction) {
     const unixMatch = startRaw.match(/<t:(\d+)/);
     if (unixMatch) startedAt = new Date(parseInt(unixMatch[1]) * 1000);
     else { const parsed = new Date(startRaw); if (!isNaN(parsed)) startedAt = parsed; }
+  } else if (link) {
+    try {
+      const parts = link.match(/channels\/([^/]+)\/([^/]+)\/([^/]+)/);
+      if (parts) {
+        const msgId = parts[3];
+        const fetchedChannel = await interaction.client.channels.fetch(parts[2]);
+        const fetchedMsg = await fetchedChannel.messages.fetch(msgId);
+        startedAt = fetchedMsg.createdAt;
+      }
+    } catch {}
   }
 
   await interaction.deferReply({ ephemeral: true });
