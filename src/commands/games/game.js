@@ -20,7 +20,7 @@ module.exports = {
           { name: 'Sins (Play & Regret)', value: 'Sins' },
           { name: 'Crowns (MEE6)', value: 'Crowns' },
           { name: 'MEE6',   value: 'Crowns' },
-          { name: 'OOS',    value: 'Goos' },
+          { name: 'Goos (Ghosty)', value: 'Goos' },
         ))
       .addStringOption(o => o.setName('start_time').setDescription('Start time (e.g. 8PM ET, or <t:UNIX:F>)').setRequired(false))
     )
