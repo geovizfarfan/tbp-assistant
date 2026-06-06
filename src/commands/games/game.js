@@ -16,11 +16,11 @@ module.exports = {
       .addIntegerOption(o => o.setName('amount').setDescription('Prize amount').setRequired(false))
       .addStringOption(o => o.setName('currency').setDescription('Currency').setRequired(false)
         .addChoices(
-          { name: 'Goos (Ghosty)', value: 'GOOS' },
-          { name: 'Sins (Play & Regret)', value: 'SINS' },
-          { name: 'Crowns (MEE6)', value: 'CROWNS' },
-          { name: 'MEE6',   value: 'MEE6' },
-          { name: 'OOS',    value: 'OOS' },
+          { name: 'Goos (Ghosty)', value: 'Goos' },
+          { name: 'Sins (Play & Regret)', value: 'Sins' },
+          { name: 'Crowns (MEE6)', value: 'Crowns' },
+          { name: 'MEE6',   value: 'Crowns' },
+          { name: 'OOS',    value: 'Goos' },
         ))
       .addStringOption(o => o.setName('start_time').setDescription('Start time (e.g. 8PM ET, or <t:UNIX:F>)').setRequired(false))
     )
@@ -55,7 +55,7 @@ async function logGame(interaction) {
   const link      = interaction.options.getString('link');
   const prize     = interaction.options.getString('prize') || null;
   const amount    = interaction.options.getInteger('amount') || null;
-  const currency  = interaction.options.getString('currency') || 'GOOS';
+  const currency  = interaction.options.getString('currency') || 'Goos';
   const startRaw  = interaction.options.getString('start_time') || null;
 
   // Parse start time if provided

@@ -20,9 +20,9 @@ module.exports = {
         ))
       .addStringOption(o => o.setName('currency').setDescription('Pay currency').setRequired(false)
         .addChoices(
-          { name: 'Crowns (MEE6)', value: 'MEE6' },
-          { name: 'Sins (Play & Regret)', value: 'SINS' },
-          { name: 'Goos (Ghosty)', value: 'OOS'  },
+          { name: 'Crowns (MEE6)', value: 'Crowns' },
+          { name: 'Sins (Play & Regret)', value: 'Sins' },
+          { name: 'Goos (Ghosty)', value: 'Goos'  },
         ))
       .addIntegerOption(o => o.setName('pay').setDescription('Pay amount per period').setRequired(false))
     )
@@ -53,7 +53,7 @@ module.exports = {
 async function addStaff(interaction) {
   const user     = interaction.options.getUser('user');
   const role     = interaction.options.getString('role');
-  const currency = interaction.options.getString('currency') || 'MEE6';
+  const currency = interaction.options.getString('currency') || 'Crowns';
   const pay      = interaction.options.getInteger('pay') || 0;
 
   await interaction.deferReply({ ephemeral: true });

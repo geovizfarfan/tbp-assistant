@@ -15,9 +15,9 @@ module.exports = {
       .addIntegerOption(o => o.setName('amount').setDescription('Prize amount').setRequired(false))
       .addStringOption(o => o.setName('currency').setDescription('Currency').setRequired(false)
         .addChoices(
-          { name: 'Crowns (MEE6)', value: 'MEE6' },
-          { name: 'Sins (Play & Regret)', value: 'SINS' },
-          { name: 'Goos (Ghosty)', value: 'OOS'  },
+          { name: 'Crowns (MEE6)', value: 'Crowns' },
+          { name: 'Sins (Play & Regret)', value: 'Sins' },
+          { name: 'Goos (Ghosty)', value: 'Goos'  },
         ))
     )
     .addSubcommand(sub => sub
@@ -48,7 +48,7 @@ module.exports = {
 async function logGiveaway(interaction) {
   const prize    = interaction.options.getString('prize');
   const amount   = interaction.options.getInteger('amount') || null;
-  const currency = interaction.options.getString('currency') || 'MEE6';
+  const currency = interaction.options.getString('currency') || 'Crowns';
   const link     = interaction.options.getString('link') || null;
   const endsRaw  = interaction.options.getString('ends');
 
