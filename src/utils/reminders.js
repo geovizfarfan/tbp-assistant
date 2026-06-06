@@ -33,7 +33,7 @@ async function runPayoutReminders(client) {
       let adminMention = '';
       if (tier.tagAdmin) {
         const adminStaff = await query(
-          'SELECT user_id FROM staff WHERE role IN ('admin','owner') AND active = true',
+          `SELECT user_id FROM staff WHERE role IN ('admin','owner') AND active = true`,
           []
         );
         adminMention = adminStaff.rows.map(r => `<@${r.user_id}>`).join(' ');
