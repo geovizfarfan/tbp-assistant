@@ -39,7 +39,7 @@ async function runPayoutReminders(client) {
         adminMention = adminStaff.rows.map(r => `<@${r.user_id}>`).join(' ');
       }
 
-      const lateTag = tier.markLate ? ` ${e('atention')} **LATE PAYOUT**` : '';
+      const lateTag = tier.markLate ? ' **LATE PAYOUT**' : '';
       await channel.send(
         `${e('RojasClock')}${lateTag} <@${reminder.host_id}> reminder: <@${reminder.winner_id}> is waiting for **${reminder.prize}**.${adminMention ? `\n${adminMention}` : `'}'
       );
