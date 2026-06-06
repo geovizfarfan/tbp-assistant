@@ -71,7 +71,7 @@ async function addStaff(interaction) {
   const embed = baseEmbed('<:checkmark:1512916161493205165> Staff Added', COLORS.green)
     .addFields(
       { name: '<:members:1512912429913342174> User',     value: `<@${user.id}>`, inline: true },
-      { name: '<a:trophies:1512912823062364281> Role',    value: role, inline: true },
+      { name: '<a:trophies:1512912823062364281> Role',    value: ({owner:'👑 Owner',admin:'⚔️ Admin',staff:'🛡️ Mod',host:'🎮 Host'})[role] || role, inline: true },
       { name: '<a:payday:1512919809975783434> Pay',      value: `${pay} ${currency}`, inline: true },
       { name: '<a:calender:1512917858760523776> Next Due', value: tsF(nextDue), inline: true },
       { name: '+ Added by', value: `<@${interaction.user.id}>`, inline: true },
