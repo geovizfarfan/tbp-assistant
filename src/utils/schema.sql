@@ -1,0 +1,210 @@
+-- TBP Assistant Bot Database Schema
+
+-- Staff / Role tracking
+CREATE TABLE IF NOT EXISTS staff (
+  user_id TEXT PRIMARY KEY,
+  username TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('owner','admin','staff','host')),
+  joined_staff_at TIMESTAMPTZ DEFAULT NOW(),
+  active BOOLEAN DEFAULT TRUE,
+  pay_currency TEXT DEFAULT 'MEE6' CHECK (pay_currency IN ('MEE6','SINS','OOS')),
+  last_paid_at TIMESTAMPTZ,
+  next_pay_due_at TIMESTAMPTZ,
+  pay_amount INTEGER DEFAULT 0,
+  added_by TEXT,
+  notes TEXT
+);
+
+-- Pay periods
+CREATE TABLE IF NOT EXISTS pay_periods (
+  id SERIAL PRIMARY KEY,
+  staff_id TEXT REFERENCES staff(user_id),
+  period_start TIMESTAMPTZ NOT NULL,
+  period_end TIMESTAMPTZ NOT NULL,
+  amount_owed INTEGER DEFAULT 0,
+  amount_paid INTEGER DEFAULT 0,
+  currency TEXT DEFAULT 'MEE6',
+  paid_at TIMESTAMPTZ,
+  on_time BOOLEAN,
+  late_reason TEXT,
+  approved_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Pay requirements config (per guild)
+CREATE TABLE IF NOT EXISTS pay_requirements (
+  guild_id TEXT PRIMARY KEY,
+  min_games_hosted INTEGER DEFAULT 10,
+  min_giveaways_hosted INTEGER DEFAULT 2,
+  min_raffles_hosted INTEGER DEFAULT 2,
+  max_late_payouts INTEGER DEFAULT 3,
+  max_missed_shifts INTEGER DEFAULT 1,
+  ticket_response_limit_minutes INTEGER DEFAULT 30,
+  pay_period_days INTEGER DEFAULT 30,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Raffles
+CREATE TABLE IF NOT EXISTS raffles (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  message_id TEXT,
+  host_id TEXT NOT NULL,
+  prize TEXT NOT NULL,
+  prize_amount INTEGER,
+  currency TEXT DEFAULT 'MEE6',
+  ends_at TIMESTAMPTZ NOT NULL,
+  ended_at TIMESTAMPTZ,
+  winner_id TEXT,
+  status TEXT DEFAULT 'active' CHECK (status IN ('active','ended','cancelled')),
+  payout_status TEXT DEFAULT 'pending' CHECK (payout_status IN ('pending','paid','auto_paid','late')),
+  payout_confirmed_at TIMESTAMPTZ,
+  payout_confirmed_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Raffle entries
+CREATE TABLE IF NOT EXISTS raffle_entries (
+  id SERIAL PRIMARY KEY,
+  raffle_id INTEGER REFERENCES raffles(id),
+  user_id TEXT NOT NULL,
+  username TEXT NOT NULL,
+  joined_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(raffle_id, user_id)
+);
+
+-- Giveaways
+CREATE TABLE IF NOT EXISTS giveaways (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  message_id TEXT,
+  message_link TEXT,
+  host_id TEXT NOT NULL,
+  prize TEXT NOT NULL,
+  prize_amount INTEGER,
+  currency TEXT DEFAULT 'MEE6',
+  started_at TIMESTAMPTZ DEFAULT NOW(),
+  ends_at TIMESTAMPTZ NOT NULL,
+  ended_at TIMESTAMPTZ,
+  winner_id TEXT,
+  status TEXT DEFAULT 'active' CHECK (status IN ('active','ended','cancelled')),
+  payout_status TEXT DEFAULT 'pending' CHECK (payout_status IN ('pending','paid','late')),
+  payout_confirmed_at TIMESTAMPTZ,
+  payout_confirmed_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Game logs
+CREATE TABLE IF NOT EXISTS game_logs (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT,
+  message_link TEXT,
+  host_id TEXT NOT NULL,
+  game_name TEXT NOT NULL,
+  prize TEXT,
+  prize_amount INTEGER,
+  currency TEXT DEFAULT 'MEE6',
+  started_at TIMESTAMPTZ DEFAULT NOW(),
+  ended_at TIMESTAMPTZ,
+  winner_id TEXT,
+  status TEXT DEFAULT 'active' CHECK (status IN ('active','ended','cancelled')),
+  payout_status TEXT DEFAULT 'pending' CHECK (payout_status IN ('pending','paid','late','n/a')),
+  payout_confirmed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Payout reminders (active tracking)
+CREATE TABLE IF NOT EXISTS payout_reminders (
+  id SERIAL PRIMARY KEY,
+  type TEXT NOT NULL CHECK (type IN ('raffle','giveaway','game')),
+  ref_id INTEGER NOT NULL,
+  host_id TEXT NOT NULL,
+  winner_id TEXT NOT NULL,
+  prize TEXT NOT NULL,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  last_reminded_at TIMESTAMPTZ,
+  reminder_count INTEGER DEFAULT 0,
+  escalation_level INTEGER DEFAULT 0,
+  resolved BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Staff schedules
+CREATE TABLE IF NOT EXISTS schedules (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  staff_id TEXT NOT NULL,
+  scheduled_date DATE NOT NULL,
+  time_start TEXT NOT NULL,
+  time_end TEXT NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('Games','Giveaway','Raffle','General','Other')),
+  checked_in_at TIMESTAMPTZ,
+  checked_out_at TIMESTAMPTZ,
+  status TEXT DEFAULT 'scheduled' CHECK (status IN ('scheduled','completed','missed','late')),
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Ticket tracking
+CREATE TABLE IF NOT EXISTS ticket_logs (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  ticket_number TEXT,
+  opened_at TIMESTAMPTZ NOT NULL,
+  opened_by TEXT NOT NULL,
+  first_staff_reply_at TIMESTAMPTZ,
+  first_staff_responder TEXT,
+  response_time_minutes INTEGER,
+  closed_at TIMESTAMPTZ,
+  status TEXT DEFAULT 'open' CHECK (status IN ('open','closed')),
+  late_response BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Member wins (aggregated view friendly)
+CREATE TABLE IF NOT EXISTS member_wins (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  username TEXT NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('raffle','giveaway','game')),
+  ref_id INTEGER NOT NULL,
+  prize TEXT NOT NULL,
+  prize_amount INTEGER,
+  currency TEXT,
+  host_id TEXT,
+  won_at TIMESTAMPTZ NOT NULL,
+  payout_status TEXT DEFAULT 'pending',
+  paid_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Game schedule board (one pinned message per guild the bot manages)
+CREATE TABLE IF NOT EXISTS game_schedule_board (
+  guild_id TEXT PRIMARY KEY,
+  channel_id TEXT NOT NULL,
+  message_id TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Raffle prize image URLs (built-in + custom)
+CREATE TABLE IF NOT EXISTS raffle_images (
+  guild_id TEXT NOT NULL,
+  prize_key TEXT NOT NULL,
+  image_url TEXT NOT NULL,
+  PRIMARY KEY (guild_id, prize_key)
+);
+
+-- Indexes for performance
+CREATE INDEX IF NOT EXISTS idx_staff_role ON staff(role);
+CREATE INDEX IF NOT EXISTS idx_raffles_guild ON raffles(guild_id, status);
+CREATE INDEX IF NOT EXISTS idx_giveaways_guild ON giveaways(guild_id, status);
+CREATE INDEX IF NOT EXISTS idx_game_logs_guild ON game_logs(guild_id, status);
+CREATE INDEX IF NOT EXISTS idx_member_wins_user ON member_wins(guild_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_schedules_staff ON schedules(guild_id, staff_id);
+CREATE INDEX IF NOT EXISTS idx_payout_reminders_active ON payout_reminders(resolved, guild_id);
