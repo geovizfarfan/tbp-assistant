@@ -149,8 +149,8 @@ async function listBoosters(interaction) {
     if (b.currency === 'Goos')   totalGoos   += b.amount_owed;
 
     embed.addFields({
-      name: `${tierEmoji} <@${b.user_id}>`,
-      value: `${status} | **${b.amount_owed} ${b.currency}/mo** | Due: ${b.next_pay_due_at ? tsF(b.next_pay_due_at) : 'N/A'} | Last paid: ${b.last_paid_at ? tsF(b.last_paid_at) : 'Never'}`,
+      name: `${tierEmoji} ${b.username}`,
+      value: `<@${b.user_id}> | ${status} | **${b.amount_owed} ${b.currency}/mo** | Due: ${b.next_pay_due_at ? tsF(b.next_pay_due_at) : 'N/A'} | Last paid: ${b.last_paid_at ? tsF(b.last_paid_at) : 'Never'}`,
     });
   }
 
