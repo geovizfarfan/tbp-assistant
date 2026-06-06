@@ -80,7 +80,7 @@ async function payroll(interaction) {
     });
   }
 
-  embed.addFields({ name: `${e('payout')} Totals This Period`, value: `MEE6: ${totalMEE6} | SINS: ${totalSINS} | OOS: ${totalOOS}` });
+  embed.addFields({ name: `${e('payout')} Totals This Period`, value: `Crowns: ${totalCrowns} | Sins: ${totalSins} | Goos: ${totalGoos}` });
   await interaction.editReply({ embeds: [embed] });
 }
 
