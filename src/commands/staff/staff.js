@@ -124,7 +124,7 @@ async function staffReport(interaction) {
   const embed = baseEmbed(`📋 Staff Report — ${user.username}`, COLORS.blue)
     .setThumbnail(user.displayAvatarURL())
     .addFields(
-      { name: '<a:trophies:1512912823062364281> Role',        value: staff.role, inline: true },
+      { name: '<a:trophies:1512912823062364281> Role',        value: { owner: '👑 Owner', admin: '⚔️ Admin', staff: '🛡️ Mod', host: '🎮 Host' }[staff.role] || staff.role, inline: true },
       { name: '<a:payday:1512919809975783434> Pay',          value: `${staff.pay_amount} ${staff.pay_currency}`, inline: true },
       { name: '<a:calender:1512917858760523776> Last Paid',    value: staff.last_paid_at ? tsF(staff.last_paid_at) : 'Never', inline: true },
       { name: '<a:RojasClock:1512912822613446787> Next Pay Due', value: staff.next_pay_due_at ? tsF(staff.next_pay_due_at) : 'N/A', inline: true },
