@@ -20,9 +20,9 @@ module.exports = {
         ))
       .addStringOption(o => o.setName('currency').setDescription('Pay currency').setRequired(false)
         .addChoices(
-          { name: 'MEE6', value: 'MEE6' },
-          { name: 'SINS', value: 'SINS' },
-          { name: 'OOS',  value: 'OOS'  },
+          { name: 'Crowns (MEE6)', value: 'MEE6' },
+          { name: 'Sins (Play & Regret)', value: 'SINS' },
+          { name: 'Goos (Ghosty)', value: 'OOS'  },
         ))
       .addIntegerOption(o => o.setName('pay').setDescription('Pay amount per period').setRequired(false))
     )

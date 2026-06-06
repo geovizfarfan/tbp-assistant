@@ -15,9 +15,9 @@ module.exports = {
       .addIntegerOption(o => o.setName('amount').setDescription('Prize amount').setRequired(false))
       .addStringOption(o => o.setName('currency').setDescription('Currency').setRequired(false)
         .addChoices(
-          { name: 'MEE6', value: 'MEE6' },
-          { name: 'SINS', value: 'SINS' },
-          { name: 'OOS',  value: 'OOS'  },
+          { name: 'Crowns (MEE6)', value: 'MEE6' },
+          { name: 'Sins (Play & Regret)', value: 'SINS' },
+          { name: 'Goos (Ghosty)', value: 'OOS'  },
         ))
     )
     .addSubcommand(sub => sub
