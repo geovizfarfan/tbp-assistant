@@ -115,7 +115,7 @@ async function startRaffle(interaction) {
       `**Ends:** ${tsF(endsAt)} (${tsR(endsAt)})`
     )
     .addFields({ name: '👥 Entries', value: '0 entries so far — be the first!' })
-    .setFooter({ text: '👑 TBP Royal Ops — Click Join Raffle to enter!' });
+    .setFooter({ text: '👑 𝚃𝙷𝙴 𝙱𝙾𝙰𝚁𝙳 𝙿𝚁𝙸𝙽𝙲𝙴𝚂𝚂 — Click Join Raffle to enter!' });
 
   const joinRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -180,7 +180,7 @@ async function startRaffle(interaction) {
           `**Ends:** ${tsF(endsAt)} (${tsR(endsAt)})`
         )
         .addFields({ name: '👥 Entries', value: `${count} entered` })
-        .setFooter({ text: '👑 TBP Royal Ops — Click Join Raffle to enter!' });
+        .setFooter({ text: '👑 𝚃𝙷𝙴 𝙱𝙾𝙰𝚁𝙳 𝙿𝚁𝙸𝙽𝙲𝙴𝚂𝚂 — Click Join Raffle to enter!' });
 
       if (imageData.type === 'attachment') {
         updatedEmbed.setThumbnail(`attachment://${attachmentName}`);

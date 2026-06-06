@@ -34,7 +34,7 @@ function baseEmbed(title, color = COLORS.crown) {
   return new EmbedBuilder()
     .setTitle(title)
     .setColor(color)
-    .setFooter({ text: '👑 TBP Royal Ops' })
+    .setFooter({ text: '𝚃𝙷𝙴 𝙱𝙾𝙰𝚁𝙳 𝙿𝚁𝙸𝙽𝙲𝙴𝚂𝚂' })
     .setTimestamp();
 }
 

@@ -46,7 +46,7 @@ async function refreshScheduleBoard(client, guildId) {
     });
   }
 
-  embed.setFooter({ text: `👑 TBP Royal Ops • Last updated` }).setTimestamp();
+  embed.setFooter({ text: `👑 𝚃𝙷𝙴 𝙱𝙾𝙰𝚁𝙳 𝙿𝚁𝙸𝙽𝙲𝙴𝚂𝚂 • Last updated` }).setTimestamp();
 
   try {
     const guild = await client.guilds.fetch(guildId);

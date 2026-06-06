@@ -93,7 +93,7 @@ async function logGame(interaction) {
       { name: '🆔 Game ID',   value: `#${gameId}`, inline: true },
       { name: '🔗 Jump In',   value: `[Click here to join](${link})`, inline: false },
     )
-    .setFooter({ text: '👑 TBP Royal Ops — Use /game end when finished' });
+    .setFooter({ text: '👑 𝚃𝙷𝙴 𝙱𝙾𝙰𝚁𝙳 𝙿𝚁𝙸𝙽𝙲𝙴𝚂𝚂 — Use /game end when finished' });
 
   await interaction.editReply({ embeds: [embed] });
 
