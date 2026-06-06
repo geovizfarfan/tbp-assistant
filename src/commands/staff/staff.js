@@ -68,13 +68,13 @@ async function addStaff(interaction) {
     [user.id, user.username, role, currency, pay, nextDue, interaction.user.id]
   );
 
-  const embed = baseEmbed('✅ Staff Added', COLORS.green)
+  const embed = baseEmbed('<:checkmark:1512916161493205165> Staff Added', COLORS.green)
     .addFields(
-      { name: '👤 User',     value: `<@${user.id}>`, inline: true },
-      { name: '🎖️ Role',    value: role, inline: true },
-      { name: '💰 Pay',      value: `${pay} ${currency}`, inline: true },
-      { name: '📅 Next Due', value: tsF(nextDue), inline: true },
-      { name: '➕ Added by', value: `<@${interaction.user.id}>`, inline: true },
+      { name: '<:members:1512912429913342174> User',     value: `<@${user.id}>`, inline: true },
+      { name: '<a:trophies:1512912823062364281> Role',    value: role, inline: true },
+      { name: '<a:payday:1512919809975783434> Pay',      value: `${pay} ${currency}`, inline: true },
+      { name: '<a:calender:1512917858760523776> Next Due', value: tsF(nextDue), inline: true },
+      { name: '+ Added by', value: `<@${interaction.user.id}>`, inline: true },
     );
   await interaction.editReply({ embeds: [embed] });
 }
@@ -116,7 +116,7 @@ async function staffReport(interaction) {
   await interaction.deferReply();
 
   const staffRes = await query(`SELECT * FROM staff WHERE user_id=$1`, [user.id]);
-  if (!staffRes.rows.length) return interaction.editReply({ content: '❌ User not in staff database.' });
+  if (!staffRes.rows.length) return interaction.editReply({ content: '<:wrong:1512916350375301160> User not in staff database.' });
   const staff = staffRes.rows[0];
 
   const eligibility = await checkEligibility(interaction.guildId, user.id);
@@ -124,22 +124,22 @@ async function staffReport(interaction) {
   const embed = baseEmbed(`📋 Staff Report — ${user.username}`, COLORS.blue)
     .setThumbnail(user.displayAvatarURL())
     .addFields(
-      { name: '🎖️ Role',        value: staff.role, inline: true },
-      { name: '💰 Pay',          value: `${staff.pay_amount} ${staff.pay_currency}`, inline: true },
-      { name: '📅 Last Paid',    value: staff.last_paid_at ? tsF(staff.last_paid_at) : 'Never', inline: true },
-      { name: '⏰ Next Pay Due', value: staff.next_pay_due_at ? tsF(staff.next_pay_due_at) : 'N/A', inline: true },
-      { name: '🎮 Games Hosted', value: `${eligibility.gamesHosted}`, inline: true },
-      { name: '🎁 Giveaways',   value: `${eligibility.giveawaysHosted}`, inline: true },
-      { name: '🎟️ Raffles',     value: `${eligibility.rafflesHosted}`, inline: true },
-      { name: '🚨 Late Payouts', value: `${eligibility.latePayouts}`, inline: true },
-      { name: '📅 Missed Shifts',value: `${eligibility.missedShifts}`, inline: true },
-      { name: '🎫 Late Tickets', value: `${eligibility.lateTickets}`, inline: true },
+      { name: '<a:trophies:1512912823062364281> Role',        value: staff.role, inline: true },
+      { name: '<a:payday:1512919809975783434> Pay',          value: `${staff.pay_amount} ${staff.pay_currency}`, inline: true },
+      { name: '<a:calender:1512917858760523776> Last Paid',    value: staff.last_paid_at ? tsF(staff.last_paid_at) : 'Never', inline: true },
+      { name: '<a:RojasClock:1512912822613446787> Next Pay Due', value: staff.next_pay_due_at ? tsF(staff.next_pay_due_at) : 'N/A', inline: true },
+      { name: '<:controller:1512911931827159091> Games Hosted', value: `${eligibility.gamesHosted}`, inline: true },
+      { name: '<a:gift:1512915751458050268> Giveaways',   value: `${eligibility.giveawaysHosted}`, inline: true },
+      { name: '<:raffle:1512914674402853085> Raffles',     value: `${eligibility.rafflesHosted}`, inline: true },
+      { name: '<a:atention:1512916995543273642> Late Payouts', value: `${eligibility.latePayouts}`, inline: true },
+      { name: '<a:calender:1512917858760523776> Missed Shifts',value: `${eligibility.missedShifts}`, inline: true },
+      { name: '<a:rules:1512912821862793467> Late Tickets', value: `${eligibility.lateTickets}`, inline: true },
       {
         name: '💸 Pay Eligibility',
-        value: eligibility.eligible === 'full' ? '✅ Full Pay'
-             : eligibility.eligible === 'partial' ? '⚠️ Partial Pay'
-             : eligibility.eligible === 'review' ? '🔍 Admin Review'
-             : '❌ Not Eligible',
+        value: eligibility.eligible === 'full' ? '<:checkmark:1512916161493205165> Full Pay'
+             : eligibility.eligible === 'partial' ? '<a:moneyfly:1512920066759594074> Partial Pay'
+             : eligibility.eligible === 'review' ? '<a:search:1512912830054010950> Admin Review'
+             : '<:wrong:1512916350375301160> Not Eligible',
         inline: true,
       },
     );
