@@ -15,7 +15,7 @@ module.exports = {
         .addChoices(
           { name: 'Owner', value: 'owner' },
           { name: 'Admin', value: 'admin' },
-          { name: 'Staff', value: 'staff' },
+          { name: 'Mod', value: 'staff' },
           { name: 'Host',  value: 'host'  },
         ))
       .addStringOption(o => o.setName('currency').setDescription('Pay currency').setRequired(false)
@@ -96,10 +96,10 @@ async function listStaff(interaction) {
   if (!res.rows.length) return interaction.editReply({ content: 'No staff found.' });
 
   const embed = baseEmbed('👑 TBP Staff List', COLORS.crown);
-  const grouped = { owner: [], admin: [], staff: [], host: [] };
+  const grouped = { owner: [], admin: [], mod: [], host: [] };
   for (const s of res.rows) grouped[s.role]?.push(s);
 
-  const roleLabels = { owner: '👑 Owner', admin: '⚔️ Admin', staff: '🛡️ Staff', host: '🎮 Host' };
+  const roleLabels = { owner: '👑 Owner', admin: '⚔️ Admin', staff: '🛡️ Mod', host: '🎮 Host' };
   for (const [role, members] of Object.entries(grouped)) {
     if (members.length) {
       embed.addFields({
