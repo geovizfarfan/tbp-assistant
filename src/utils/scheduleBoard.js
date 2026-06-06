@@ -1,29 +1,21 @@
-const { AttachmentBuilder } = require('discord.js');
 const { query } = require('./database');
+const { e } = require('./appEmojis');
 const { baseEmbed, tsF, tsR, COLORS } = require('./embeds');
 
-/**
- * Rebuilds and edits (or posts) the game schedule board in the configured channel.
- */
 async function refreshScheduleBoard(client, guildId) {
-  // Get board config
   const boardRes = await query(
     `SELECT * FROM game_schedule_board WHERE guild_id=$1`,
     [guildId]
   );
-  if (!boardRes.rows.length) return; // not configured yet
-
+  if (!boardRes.rows.length) return;
   const board = boardRes.rows[0];
 
-  // Fetch active games
   const gamesRes = await query(
-    `SELECT * FROM game_logs
-     WHERE guild_id=$1 AND status='active'
-     ORDER BY started_at ASC`,
+    `SELECT * FROM game_logs WHERE guild_id=$1 AND status='active' ORDER BY started_at ASC`,
     [guildId]
   );
 
-  const embed = baseEmbed('🎮 Live Game Schedule', COLORS.crown)
+  const embed = baseEmbed(`${e('controller')} Live Game Schedule`, COLORS.lightpurple, guild.name)
     .setDescription(
       gamesRes.rows.length
         ? 'Active games happening right now. Click the link to jump in!'
@@ -31,40 +23,33 @@ async function refreshScheduleBoard(client, guildId) {
     );
 
   for (const game of gamesRes.rows) {
-    const prizeText = game.prize_amount
-      ? `${game.prize_amount} ${game.currency}`
-      : game.prize || 'No prize';
-
+    const prizeText = game.prize_amount ? `${game.prize_amount} ${game.currency}` : game.prize || 'No prize';
     embed.addFields({
-      name: `🎮 ${game.game_name}`,
+      name: `${e('controller')} ${game.game_name}`,
       value: [
         `**Host:** <@${game.host_id}>`,
         `**Prize:** ${prizeText}`,
         `**Started:** ${tsF(game.started_at)} (${tsR(game.started_at)})`,
-        game.message_link ? `**[➡️ Jump to Game](${game.message_link})**` : '',
+        game.message_link ? `**[Jump to Game](${game.message_link})**` : '',
       ].filter(Boolean).join('\n'),
     });
   }
 
-  embed.setFooter({ text: `👑 𝚃𝙷𝙴 𝙱𝙾𝙰𝚁𝙳 𝙿𝚁𝙸𝙽𝙲𝙴𝚂𝚂 • Last updated` }).setTimestamp();
+  embed.setFooter({ text: `${guild.name} • Last updated` }).setTimestamp();
 
   try {
-    const guild = await client.guilds.fetch(guildId);
+    const guild   = await client.guilds.fetch(guildId);
     const channel = await guild.channels.fetch(board.channel_id);
 
     if (board.message_id) {
-      // Edit existing message
       try {
         const msg = await channel.messages.fetch(board.message_id);
         await msg.edit({ embeds: [embed] });
         await query(`UPDATE game_schedule_board SET updated_at=NOW() WHERE guild_id=$1`, [guildId]);
         return;
-      } catch {
-        // Message was deleted, fall through to post a new one
-      }
+      } catch {}
     }
 
-    // Post new message and save the ID
     const msg = await channel.send({ embeds: [embed] });
     try { await msg.pin(); } catch {}
     await query(

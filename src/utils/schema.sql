@@ -208,3 +208,23 @@ CREATE INDEX IF NOT EXISTS idx_game_logs_guild ON game_logs(guild_id, status);
 CREATE INDEX IF NOT EXISTS idx_member_wins_user ON member_wins(guild_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_schedules_staff ON schedules(guild_id, staff_id);
 CREATE INDEX IF NOT EXISTS idx_payout_reminders_active ON payout_reminders(resolved, guild_id);
+
+-- Boosters
+CREATE TABLE IF NOT EXISTS boosters (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  username TEXT NOT NULL,
+  boost_tier TEXT DEFAULT 'basic' CHECK (boost_tier IN ('basic','standard','premium')),
+  amount_owed INTEGER DEFAULT 0,
+  currency TEXT DEFAULT 'Crowns',
+  last_paid_at TIMESTAMPTZ,
+  next_pay_due_at TIMESTAMPTZ,
+  active BOOLEAN DEFAULT TRUE,
+  added_by TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(guild_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_boosters_guild ON boosters(guild_id, active);

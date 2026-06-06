@@ -1,4 +1,5 @@
 const { SlashCommandBuilder } = require('discord.js');
+const { e } = require('../../utils/appEmojis');
 const { query } = require('../../utils/database');
 const { baseEmbed, tsF, COLORS } = require('../../utils/embeds');
 
@@ -42,31 +43,28 @@ module.exports = {
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
-    if (sub === 'add')          await addSchedule(interaction);
-    if (sub === 'checkin')      await checkIn(interaction);
-    if (sub === 'checkout')     await checkOut(interaction);
-    if (sub === 'list')         await listSchedules(interaction);
-    if (sub === 'mark-missed')  await markMissed(interaction);
+    if (sub === 'add')         await addSchedule(interaction);
+    if (sub === 'checkin')     await checkIn(interaction);
+    if (sub === 'checkout')    await checkOut(interaction);
+    if (sub === 'list')        await listSchedules(interaction);
+    if (sub === 'mark-missed') await markMissed(interaction);
   },
 };
 
 function parseDate(str) {
-  // Try YYYY-MM-DD first
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
-  // Try "June 7" style
   const d = new Date(str + ' ' + new Date().getFullYear());
   if (!isNaN(d)) return d.toISOString().split('T')[0];
   return null;
 }
 
 async function addSchedule(interaction) {
-  const dateStr  = interaction.options.getString('date');
-  const timeStr  = interaction.options.getString('time');
-  const type     = interaction.options.getString('type');
+  const dateStr = interaction.options.getString('date');
+  const timeStr = interaction.options.getString('time');
+  const type    = interaction.options.getString('type');
   const [start, end] = timeStr.split('-');
-
   const date = parseDate(dateStr);
-  if (!date) return interaction.reply({ content: '❌ Invalid date format. Use YYYY-MM-DD or "June 7".', ephemeral: true });
+  if (!date) return interaction.reply({ content: `${e('wrong')} Invalid date format. Use YYYY-MM-DD or "June 7".`, ephemeral: true });
 
   await interaction.deferReply({ ephemeral: true });
 
@@ -77,7 +75,7 @@ async function addSchedule(interaction) {
   );
 
   await interaction.editReply({
-    content: `✅ Schedule #${res.rows[0].id} added!\n📅 **${date}** | 🕐 ${timeStr} | 🎮 ${type}`,
+    content: `${e('checkmark')} Schedule #${res.rows[0].id} added!\n${e('calender')} **${date}** | ${e('RojasClock')} ${timeStr} | ${e('controller')} ${type}`,
   });
 }
 
@@ -90,9 +88,8 @@ async function checkIn(interaction) {
     `UPDATE schedules SET checked_in_at=$1, status='completed' WHERE id=$2 AND staff_id=$3 AND guild_id=$4 RETURNING *`,
     [now, id, interaction.user.id, interaction.guildId]
   );
-  if (!res.rows.length) return interaction.editReply({ content: '❌ Schedule not found or not yours.' });
-
-  await interaction.editReply({ content: `✅ Checked in for shift #${id} at ${tsF(now)}` });
+  if (!res.rows.length) return interaction.editReply({ content: `${e('wrong')} Schedule not found or not yours.` });
+  await interaction.editReply({ content: `${e('checkmark')} Checked in for shift #${id} at ${tsF(now)}` });
 }
 
 async function checkOut(interaction) {
@@ -104,16 +101,10 @@ async function checkOut(interaction) {
     `UPDATE schedules SET checked_out_at=$1 WHERE id=$2 AND staff_id=$3 AND guild_id=$4 RETURNING *`,
     [now, id, interaction.user.id, interaction.guildId]
   );
-  if (!res.rows.length) return interaction.editReply({ content: '❌ Schedule not found or not yours.' });
-
+  if (!res.rows.length) return interaction.editReply({ content: `${e('wrong')} Schedule not found or not yours.` });
   const sched = res.rows[0];
-  const duration = sched.checked_in_at
-    ? Math.round((now - new Date(sched.checked_in_at)) / 60000)
-    : null;
-
-  await interaction.editReply({
-    content: `✅ Checked out of shift #${id}${duration ? ` — hosted for ${duration} minutes` : ''}.`,
-  });
+  const duration = sched.checked_in_at ? Math.round((now - new Date(sched.checked_in_at)) / 60000) : null;
+  await interaction.editReply({ content: `${e('checkmark')} Checked out of shift #${id}${duration ? ` — hosted for ${duration} minutes` : ''}.` });
 }
 
 async function listSchedules(interaction) {
@@ -124,11 +115,12 @@ async function listSchedules(interaction) {
   );
   if (!res.rows.length) return interaction.editReply({ content: 'No upcoming schedules.' });
 
-  const embed = baseEmbed('📅 Upcoming Schedules', COLORS.blue);
+  const embed = baseEmbed(`${e('calender')} Upcoming Schedules`, COLORS.lightpurple, interaction.guild?.name);
   for (const s of res.rows) {
-    const statusEmoji = s.status === 'completed' ? '✅' : s.status === 'missed' ? '❌' : '🕐';
+    const statusEmoji = s.status === 'completed' ? e('checkmark') : s.status === 'missed' ? e('wrong') : e('RojasClock');
+    const typeEmoji   = s.type === 'Games' ? e('controller') : s.type === 'Giveaway' ? e('gift') : s.type === 'Raffle' ? e('raffle') : e('calender');
     embed.addFields({
-      name: `${statusEmoji} #${s.id} — ${s.scheduled_date} | ${s.type}`,
+      name: `${statusEmoji} #${s.id} — ${s.scheduled_date} | ${typeEmoji} ${s.type}`,
       value: `<@${s.staff_id}> | ${s.time_start}–${s.time_end}${s.checked_in_at ? ` | In: ${tsF(s.checked_in_at)}` : ''}`,
     });
   }
@@ -143,7 +135,6 @@ async function markMissed(interaction) {
     `UPDATE schedules SET status='missed' WHERE id=$1 AND guild_id=$2 RETURNING staff_id`,
     [id, interaction.guildId]
   );
-  if (!res.rows.length) return interaction.editReply({ content: '❌ Schedule not found.' });
-
-  await interaction.editReply({ content: `✅ Schedule #${id} marked as missed. Staff <@${res.rows[0].staff_id}> noted.` });
+  if (!res.rows.length) return interaction.editReply({ content: `${e('wrong')} Schedule not found.` });
+  await interaction.editReply({ content: `${e('checkmark')} Schedule #${id} marked as missed. Staff <@${res.rows[0].staff_id}> noted.` });
 }

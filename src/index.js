@@ -5,6 +5,7 @@ const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord
 const { initDB } = require('./utils/database');
 const { startReminderLoop } = require('./utils/reminders');
 const { handleTicketMessage, handleChannelDelete } = require('./events/ticketTracker');
+const { loadAppEmojis } = require('./utils/appEmojis');
 
 const client = new Client({
   intents: [
@@ -38,6 +39,7 @@ loadCommands(path.join(__dirname, 'commands'));
 
 client.once('ready', async () => {
   console.log(`[Bot] Logged in as ${client.user.tag}`);
+  await loadAppEmojis(client.user.id, process.env.DISCORD_TOKEN);
   await initDB();
   startReminderLoop(client);
 

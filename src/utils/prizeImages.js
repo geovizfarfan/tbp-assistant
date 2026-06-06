@@ -7,7 +7,8 @@ const path = require('path');
 const BUILT_IN_ASSETS = {
   'accessory':     'raffle_accesory.png',
   'nitro_basic':   'raffle_nitro_basic.png',
-  'nitro':         'raffle_nitro_basic.png', // same image both tiers
+  'nitro':         'raffle_nitro_basic.png',
+  'nitro_premium': 'raffle_nitro_basic.png', // same image until premium art ready
   'carry':         'raffle_carry.png',
   'goos':          'raffle_goos.png',
   'sins':          'raffle_sins.png',
@@ -51,6 +52,7 @@ const PRIZE_LABELS = {
   'accessory':   'Discord Profile Accessory',
   'nitro_basic': 'Discord Nitro Basic',
   'nitro':       'Discord Nitro',
+  'nitro_premium': 'Discord Nitro',
   'carry':       'Partner Carry',
   'goos':        'Goos',
   'sins':        'Sins',

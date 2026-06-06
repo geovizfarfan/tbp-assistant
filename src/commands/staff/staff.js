@@ -1,7 +1,15 @@
 const { SlashCommandBuilder } = require('discord.js');
+const { e } = require('../../utils/appEmojis');
 const { query } = require('../../utils/database');
-const { baseEmbed, tsF, tsR, COLORS } = require('../../utils/embeds');
+const { baseEmbed, tsF, COLORS } = require('../../utils/embeds');
 const { checkEligibility } = require('../../utils/eligibility');
+
+const ROLE_LABELS = {
+  owner: '👑 Owner',
+  admin: '⚔️ Admin',
+  staff: '🛡️ Mod',
+  host: '🎮 Host',
+};
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -15,14 +23,14 @@ module.exports = {
         .addChoices(
           { name: 'Owner', value: 'owner' },
           { name: 'Admin', value: 'admin' },
-          { name: 'Mod', value: 'staff' },
+          { name: 'Mod',   value: 'staff' },
           { name: 'Host',  value: 'host'  },
         ))
       .addStringOption(o => o.setName('currency').setDescription('Pay currency').setRequired(false)
         .addChoices(
-          { name: 'Crowns (MEE6)', value: 'Crowns' },
-          { name: 'Sins (Play & Regret)', value: 'Sins' },
-          { name: 'Goos (Ghosty)', value: 'Goos'  },
+          { name: 'Crowns (MEE6)',        value: 'Crowns' },
+          { name: 'Sins (Play & Regret)', value: 'Sins'   },
+          { name: 'Goos (Ghosty)',        value: 'Goos'   },
         ))
       .addIntegerOption(o => o.setName('pay').setDescription('Pay amount per period').setRequired(false))
     )
@@ -68,13 +76,13 @@ async function addStaff(interaction) {
     [user.id, user.username, role, currency, pay, nextDue, interaction.user.id]
   );
 
-  const embed = baseEmbed('<:checkmark:1512916161493205165> Staff Added', COLORS.green)
+  const embed = baseEmbed(`${e('checkmark')} Staff Added`, COLORS.softgreen, interaction.guild?.name)
     .addFields(
-      { name: '<:members:1512912429913342174> User',     value: `<@${user.id}>`, inline: true },
-      { name: '<a:trophies:1512912823062364281> Role',    value: ({owner:'👑 Owner',admin:'⚔️ Admin',staff:'🛡️ Mod',host:'🎮 Host'})[role] || role, inline: true },
-      { name: '<a:payday:1512919809975783434> Pay',      value: `${pay} ${currency}`, inline: true },
-      { name: '<a:calender:1512917858760523776> Next Due', value: tsF(nextDue), inline: true },
-      { name: '+ Added by', value: `<@${interaction.user.id}>`, inline: true },
+      { name: `${e('members')} User`,                value: `<@${user.id}>`, inline: true },
+      { name: `${e('trophies')} Role`,               value: ROLE_LABELS[role] || role, inline: true },
+      { name: `${e('payday')} Pay`,                  value: `${pay} ${currency}`, inline: true },
+      { name: `${e('calender')} Next Due`,           value: tsF(nextDue), inline: true },
+      { name: `+ Added by`,                          value: `<@${interaction.user.id}>`, inline: true },
     );
   await interaction.editReply({ embeds: [embed] });
 }
@@ -83,27 +91,26 @@ async function removeStaff(interaction) {
   const user = interaction.options.getUser('user');
   await interaction.deferReply({ ephemeral: true });
   await query(`UPDATE staff SET active=false WHERE user_id=$1`, [user.id]);
-  await interaction.editReply({ content: `✅ <@${user.id}> removed from staff.` });
+  await interaction.editReply({ content: `${e('checkmark')} <@${user.id}> removed from staff.` });
 }
 
 async function listStaff(interaction) {
   await interaction.deferReply({ ephemeral: true });
   const res = await query(
-    `SELECT * FROM staff WHERE active=true ORDER BY 
+    `SELECT * FROM staff WHERE active=true ORDER BY
       CASE role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 WHEN 'staff' THEN 3 WHEN 'host' THEN 4 END`,
     []
   );
   if (!res.rows.length) return interaction.editReply({ content: 'No staff found.' });
 
-  const embed = baseEmbed('👑 TBP Staff List', COLORS.crown);
-  const grouped = { owner: [], admin: [], mod: [], host: [] };
+  const embed = baseEmbed('👑 TBP Staff List', COLORS.tbppurple, interaction.guild?.name);
+  const grouped = { owner: [], admin: [], staff: [], host: [] };
   for (const s of res.rows) grouped[s.role]?.push(s);
 
-  const roleLabels = { owner: '👑 Owner', admin: '⚔️ Admin', staff: '🛡️ Mod', host: '🎮 Host' };
   for (const [role, members] of Object.entries(grouped)) {
     if (members.length) {
       embed.addFields({
-        name: roleLabels[role],
+        name: ROLE_LABELS[role],
         value: members.map(m => `<@${m.user_id}> — ${m.pay_amount} ${m.pay_currency}`).join('\n'),
       });
     }
@@ -116,36 +123,36 @@ async function staffReport(interaction) {
   await interaction.deferReply();
 
   const staffRes = await query(`SELECT * FROM staff WHERE user_id=$1`, [user.id]);
-  if (!staffRes.rows.length) return interaction.editReply({ content: '<:wrong:1512916350375301160> User not in staff database.' });
+  if (!staffRes.rows.length) return interaction.editReply({ content: `${e('wrong')} User not in staff database.` });
   const staff = staffRes.rows[0];
 
   const eligibility = await checkEligibility(interaction.guildId, user.id);
 
-  const embed = baseEmbed(`📋 Staff Report — ${user.username}`, COLORS.blue)
+  const embed = baseEmbed(`📋 Staff Report — ${user.username}`, COLORS.lightpurple, interaction.guild?.name)
     .setThumbnail(user.displayAvatarURL())
     .addFields(
-      { name: '<a:trophies:1512912823062364281> Role',        value: { owner: '👑 Owner', admin: '⚔️ Admin', staff: '🛡️ Mod', host: '🎮 Host' }[staff.role] || staff.role, inline: true },
-      { name: '<a:payday:1512919809975783434> Pay',          value: `${staff.pay_amount} ${staff.pay_currency}`, inline: true },
-      { name: '<a:calender:1512917858760523776> Last Paid',    value: staff.last_paid_at ? tsF(staff.last_paid_at) : 'Never', inline: true },
-      { name: '<a:RojasClock:1512912822613446787> Next Pay Due', value: staff.next_pay_due_at ? tsF(staff.next_pay_due_at) : 'N/A', inline: true },
-      { name: '<:controller:1512911931827159091> Games Hosted', value: `${eligibility.gamesHosted}`, inline: true },
-      { name: '<a:gift:1512915751458050268> Giveaways',   value: `${eligibility.giveawaysHosted}`, inline: true },
-      { name: '<:raffle:1512914674402853085> Raffles',     value: `${eligibility.rafflesHosted}`, inline: true },
-      { name: '<a:atention:1512916995543273642> Late Payouts', value: `${eligibility.latePayouts}`, inline: true },
-      { name: '<a:calender:1512917858760523776> Missed Shifts',value: `${eligibility.missedShifts}`, inline: true },
-      { name: '<a:rules:1512912821862793467> Late Tickets', value: `${eligibility.lateTickets}`, inline: true },
+      { name: `${e('trophies')} Role`,          value: ROLE_LABELS[staff.role] || staff.role, inline: true },
+      { name: `${e('payday')} Pay`,              value: `${staff.pay_amount} ${staff.pay_currency}`, inline: true },
+      { name: `${e('calender')} Last Paid`,      value: staff.last_paid_at ? tsF(staff.last_paid_at) : 'Never', inline: true },
+      { name: `${e('RojasClock')} Next Pay Due`, value: staff.next_pay_due_at ? tsF(staff.next_pay_due_at) : 'N/A', inline: true },
+      { name: `${e('controller')} Games Hosted`, value: `${eligibility.gamesHosted}`, inline: true },
+      { name: `${e('gift')} Giveaways`,          value: `${eligibility.giveawaysHosted}`, inline: true },
+      { name: `${e('raffle')} Raffles`,          value: `${eligibility.rafflesHosted}`, inline: true },
+      { name: `${e('atention')} Late Payouts`,   value: `${eligibility.latePayouts}`, inline: true },
+      { name: `${e('calender')} Missed Shifts`,  value: `${eligibility.missedShifts}`, inline: true },
+      { name: `${e('rules')} Late Tickets`,      value: `${eligibility.lateTickets}`, inline: true },
       {
-        name: '💸 Pay Eligibility',
-        value: eligibility.eligible === 'full' ? '<:checkmark:1512916161493205165> Full Pay'
-             : eligibility.eligible === 'partial' ? '<a:moneyfly:1512920066759594074> Partial Pay'
-             : eligibility.eligible === 'review' ? '<a:search:1512912830054010950> Admin Review'
-             : '<:wrong:1512916350375301160> Not Eligible',
+        name: `${e('payout')} Pay Eligibility`,
+        value: eligibility.eligible === 'full'    ? `${e('checkmark')} Full Pay`
+             : eligibility.eligible === 'partial' ? `${e('moneyfly')} Partial Pay`
+             : eligibility.eligible === 'review'  ? `${e('search')} Admin Review`
+             : `${e('wrong')} Not Eligible`,
         inline: true,
       },
     );
 
   if (eligibility.notes.length) {
-    embed.addFields({ name: '📝 Notes', value: eligibility.notes.join('\n') });
+    embed.addFields({ name: `${e('receipt')} Notes`, value: eligibility.notes.join('\n') });
   }
 
   await interaction.editReply({ embeds: [embed] });

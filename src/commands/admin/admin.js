@@ -1,4 +1,5 @@
 const { SlashCommandBuilder } = require('discord.js');
+const { e } = require('../../utils/appEmojis');
 const { query } = require('../../utils/database');
 const { baseEmbed, tsF, tsR, COLORS } = require('../../utils/embeds');
 const { checkEligibility } = require('../../utils/eligibility');
@@ -64,12 +65,12 @@ async function payroll(interaction) {
   const staffRes = await query(`SELECT * FROM staff WHERE active=true ORDER BY role`, []);
   if (!staffRes.rows.length) return interaction.editReply({ content: 'No active staff.' });
 
-  const embed = baseEmbed('💰 TBP Payroll', COLORS.gold);
+  const embed = baseEmbed(`${e('payday')} TBP Payroll`, COLORS.tbppurple, interaction.guild?.name);
   let totalMEE6 = 0, totalSINS = 0, totalOOS = 0;
 
   for (const s of staffRes.rows) {
     const overdue = s.next_pay_due_at && new Date(s.next_pay_due_at) < new Date();
-    const status = overdue ? '🚨 OVERDUE' : '✅';
+    const status = overdue ? `${e('atention')} OVERDUE` : `${e('checkmark')}`;
     if (s.pay_currency === 'MEE6') totalMEE6 += s.pay_amount;
     if (s.pay_currency === 'SINS') totalSINS += s.pay_amount;
     if (s.pay_currency === 'OOS')  totalOOS  += s.pay_amount;
@@ -79,7 +80,7 @@ async function payroll(interaction) {
     });
   }
 
-  embed.addFields({ name: '📊 Totals This Period', value: `MEE6: ${totalMEE6} | SINS: ${totalSINS} | OOS: ${totalOOS}` });
+  embed.addFields({ name: `${e('payout')} Totals This Period`, value: `MEE6: ${totalMEE6} | SINS: ${totalSINS} | OOS: ${totalOOS}` });
   await interaction.editReply({ embeds: [embed] });
 }
 
@@ -88,7 +89,7 @@ async function paycheckCheck(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
   const staffRes = await query(`SELECT * FROM staff WHERE user_id=$1`, [user.id]);
-  if (!staffRes.rows.length) return interaction.editReply({ content: '❌ Not in staff database.' });
+  if (!staffRes.rows.length) return interaction.editReply({ content: `${e('wrong')} Not in staff database.` });
 
   const result = await checkEligibility(interaction.guildId, user.id);
   const embed = eligibilityEmbed(staffRes.rows[0], result);
@@ -105,14 +106,14 @@ async function latePayouts(interaction) {
   ]);
 
   const all = [...raffles.rows, ...giveaways.rows, ...games.rows];
-  if (!all.length) return interaction.editReply({ content: '✅ No pending/late payouts!' });
+  if (!all.length) return interaction.editReply({ content: `${e('checkmark')} No pending/late payouts!` });
 
-  const embed = baseEmbed('🚨 Pending & Late Payouts', COLORS.red);
+  const embed = baseEmbed(`${e('atention')} Pending & Late Payouts`, COLORS.softred, interaction.guild?.name);
   for (const p of all) {
     const minutesOld = Math.floor((Date.now() - new Date(p.ended_at)) / 60000);
     const isLate = minutesOld >= 120;
     embed.addFields({
-      name: `${isLate ? '🚨' : '⏳'} ${p.type} #${p.id} — ${p.prize_amount || p.prize} ${p.currency}`,
+      name: `${isLate ? e('atention') : e('Loading')} ${p.type} #${p.id} — ${p.prize_amount || p.prize} ${p.currency}`,
       value: `Host: <@${p.host_id}> | Winner: <@${p.winner_id}> | Ended: ${tsF(p.ended_at)} (${minutesOld}m ago)`,
     });
   }
@@ -125,9 +126,9 @@ async function missedSchedules(interaction) {
     `SELECT * FROM schedules WHERE guild_id=$1 AND status='missed' ORDER BY scheduled_date DESC LIMIT 15`,
     [interaction.guildId]
   );
-  if (!res.rows.length) return interaction.editReply({ content: '✅ No missed schedules.' });
+  if (!res.rows.length) return interaction.editReply({ content: `${e('checkmark')} No missed schedules.` });
 
-  const embed = baseEmbed('📅 Missed Schedules', COLORS.orange);
+  const embed = baseEmbed(`${e('calender')} Missed Schedules`, COLORS.softpeach, interaction.guild?.name);
   for (const s of res.rows) {
     embed.addFields({
       name: `${s.scheduled_date} — ${s.type}`,
@@ -149,7 +150,7 @@ async function ticketReport(interaction) {
   );
   if (!res.rows.length) return interaction.editReply({ content: 'No ticket data.' });
 
-  const embed = baseEmbed('🎫 Ticket Response Report', COLORS.blue);
+  const embed = baseEmbed(`${e('rules')} Ticket Response Report`, COLORS.lightpurple, interaction.guild?.name);
   for (const r of res.rows) {
     embed.addFields({
       name: `<@${r.first_staff_responder}>`,
@@ -178,7 +179,7 @@ async function setRequirements(interaction) {
     if (v !== null) { setClauses.push(`${k}=$${i++}`); vals.push(v); }
   }
 
-  if (!setClauses.length) return interaction.editReply({ content: '⚠️ No fields provided.' });
+  if (!setClauses.length) return interaction.editReply({ content: `${e('moneyfly')} No fields provided.` });
 
   await query(
     `INSERT INTO pay_requirements (guild_id) VALUES ($1)
@@ -186,7 +187,7 @@ async function setRequirements(interaction) {
     vals
   );
 
-  await interaction.editReply({ content: `✅ Pay requirements updated.` });
+  await interaction.editReply({ content: `${e('checkmark')} Pay requirements updated.` });
 }
 
 async function markPaid(interaction) {
@@ -203,12 +204,12 @@ async function markPaid(interaction) {
     [now, nextDue, user.id]
   );
 
-  const embed = baseEmbed('✅ Staff Paid', COLORS.green)
+  const embed = baseEmbed(`${e('checkmark')} Staff Paid`, COLORS.softgreen, interaction.guild?.name)
     .addFields(
-      { name: '👤 Staff',      value: `<@${user.id}>`, inline: true },
-      { name: '💰 Amount',     value: amount ? `${amount}` : 'Logged', inline: true },
-      { name: '🕐 Paid At',    value: tsF(now), inline: true },
-      { name: '📅 Next Due',   value: tsF(nextDue), inline: true },
+      { name: `${e('members')} Staff`,      value: `<@${user.id}>`, inline: true },
+      { name: `${e('payday')} Amount`,     value: amount ? `${amount}` : 'Logged', inline: true },
+      { name: `${e('RojasClock')} Paid At`,    value: tsF(now), inline: true },
+      { name: `${e('calender')} Next Due`,   value: tsF(nextDue), inline: true },
       { name: '✍️ Approved by',value: `<@${interaction.user.id}>`, inline: true },
     );
   await interaction.editReply({ embeds: [embed] });
