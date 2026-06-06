@@ -75,7 +75,7 @@ async function addBooster(interaction) {
     [interaction.guildId, user.id, user.username, tier, amount, currency, nextDue, interaction.user.id, notes]
   );
 
-  const tierEmoji = { basic: '⭐', standard: '🌟', premium: '💎' }[tier] || '⭐';
+  const tierEmoji = { basic: e('purplesparkle'), standard: e('heart'), premium: e('diamond') }[tier] || e('purplesparkle');
 
   const embed = baseEmbed(`${e('checkmark')} Booster Added`, COLORS.lightpurple, interaction.guild?.name)
     .addFields(
@@ -143,7 +143,7 @@ async function listBoosters(interaction) {
   for (const b of res.rows) {
     const overdue  = b.next_pay_due_at && new Date(b.next_pay_due_at) < now;
     const status   = overdue ? `${e('atention')} OVERDUE` : `${e('checkmark')} On track`;
-    const tierEmoji = { basic: '⭐', standard: '🌟', premium: '💎' }[b.boost_tier] || '⭐';
+    const tierEmoji = { basic: e('purplesparkle'), standard: e('heart'), premium: e('diamond') }[b.boost_tier] || e('purplesparkle');
     if (b.currency === 'Crowns') totalCrowns += b.amount_owed;
     if (b.currency === 'Sins')   totalSins   += b.amount_owed;
     if (b.currency === 'Goos')   totalGoos   += b.amount_owed;
