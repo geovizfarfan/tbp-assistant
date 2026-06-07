@@ -75,7 +75,7 @@ async function addBooster(interaction) {
     [interaction.guildId, user.id, user.username, tier, amount, currency, nextDue, interaction.user.id, notes]
   );
 
-  const tierEmoji = { basic: e('purplesparkle'), standard: e('heart'), premium: e('diamond') }[tier] || e('purplesparkle');
+  const tierEmoji = { basic: '⭐', standard: '🌟', premium: '💎' }[tier] || '⭐';
 
   const embed = baseEmbed(`${e('checkmark')} Booster Added`, COLORS.lightpurple, interaction.guild?.name)
     .addFields(
@@ -143,14 +143,14 @@ async function listBoosters(interaction) {
   for (const b of res.rows) {
     const overdue  = b.next_pay_due_at && new Date(b.next_pay_due_at) < now;
     const status   = overdue ? `${e('atention')} OVERDUE` : `${e('checkmark')} On track`;
-    const tierEmoji = { basic: e('purplesparkle'), standard: e('heart'), premium: e('diamond') }[b.boost_tier] || e('purplesparkle');
+    const tierEmoji = { basic: '⭐', standard: '🌟', premium: '💎' }[b.boost_tier] || '⭐';
     if (b.currency === 'Crowns') totalCrowns += b.amount_owed;
     if (b.currency === 'Sins')   totalSins   += b.amount_owed;
     if (b.currency === 'Goos')   totalGoos   += b.amount_owed;
 
     embed.addFields({
-      name: `${tierEmoji} ${b.username}`,
-      value: `<@${b.user_id}> | ${status} | **${b.amount_owed} ${b.currency}/mo** | Due: ${b.next_pay_due_at ? tsF(b.next_pay_due_at) : 'N/A'} | Last paid: ${b.last_paid_at ? tsF(b.last_paid_at) : 'Never'}`,
+      name: `${tierEmoji} <@${b.user_id}>`,
+      value: `${status} | **${b.amount_owed} ${b.currency}/mo** | Due: ${b.next_pay_due_at ? tsF(b.next_pay_due_at) : 'N/A'} | Last paid: ${b.last_paid_at ? tsF(b.last_paid_at) : 'Never'}`,
     });
   }
 

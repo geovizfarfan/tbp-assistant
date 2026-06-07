@@ -26,7 +26,7 @@ module.exports = {
     .addSubcommand(sub => sub
       .setName('start')
       .setDescription('Start a new raffle')
-      .addStringOption(o => o.setName('duration').setDescription('How long the raffle runs e.g. 2h, 30m, 1h30m, 24h').setRequired(true))
+      .addStringOption(o => o.setName('ends').setDescription('End timestamp <t:UNIX:F> or unix').setRequired(true))
       .addIntegerOption(o => o.setName('amount').setDescription('Prize amount (if currency-based)').setRequired(false))
       .addStringOption(o => o.setName('custom_prize').setDescription('Custom prize name (use when selecting Other Gift)').setRequired(false))
     )
@@ -48,27 +48,16 @@ module.exports = {
   },
 };
 
-
-function parseDuration(str) {
-  if (!str) return null;
-  str = str.trim().toLowerCase();
-  let ms = 0;
-  const hours   = str.match(/(\d+)h/);
-  const minutes = str.match(/(\d+)m/);
-  if (hours)   ms += parseInt(hours[1]) * 60 * 60 * 1000;
-  if (minutes) ms += parseInt(minutes[1]) * 60 * 1000;
-  if (ms === 0) { const num = parseInt(str); if (!isNaN(num) && num > 0) ms = num * 60 * 1000; }
-  return ms > 0 ? ms : null;
-}
-
 async function startRaffle(interaction) {
-  const endsRaw    = interaction.options.getString('duration');
+  const endsRaw    = interaction.options.getString('ends');
   const amount     = interaction.options.getInteger('amount') || null;
   const customName = interaction.options.getString('custom_prize') || null;
 
-  const durationMs = parseDuration(endsRaw);
-  if (!durationMs) return interaction.reply({ content: `${e('wrong')} Invalid duration. Use formats like: 2h, 30m, 1h30m, 24h`, ephemeral: true });
-  const endsAt = new Date(Date.now() + durationMs);
+  const unixMatch = endsRaw.match(/<t:(\d+)/);
+  const unix = unixMatch ? parseInt(unixMatch[1]) : parseInt(endsRaw);
+  if (isNaN(unix)) return interaction.reply({ content: `${e('wrong')} Invalid timestamp. Use <t:UNIX:F> or a raw unix number.`, ephemeral: true });
+  const endsAt = new Date(unix * 1000);
+  if (endsAt <= new Date()) return interaction.reply({ content: `${e('wrong')} End time must be in the future.`, ephemeral: true });
 
   const selectMenu = new StringSelectMenuBuilder()
     .setCustomId('raffle_prize_select')

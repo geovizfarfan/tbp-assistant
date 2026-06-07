@@ -13,6 +13,15 @@ module.exports = {
       .setDescription('Log a game you are hosting now')
       .addStringOption(o => o.setName('game').setDescription('Game name').setRequired(true))
       .addStringOption(o => o.setName('link').setDescription('Message link to the game post').setRequired(true))
+      .addStringOption(o => o.setName('prize').setDescription('Prize description').setRequired(false))
+      .addIntegerOption(o => o.setName('amount').setDescription('Prize amount').setRequired(false))
+      .addStringOption(o => o.setName('currency').setDescription('Currency').setRequired(false)
+        .addChoices(
+          { name: 'Goos (Ghosty)',        value: 'Goos'   },
+          { name: 'Sins (Play & Regret)', value: 'Sins'   },
+          { name: 'Crowns (MEE6)',        value: 'Crowns' },
+        ))
+      .addStringOption(o => o.setName('start_time').setDescription('Start time e.g. 8PM or <t:UNIX:F>').setRequired(false))
     )
     .addSubcommand(sub => sub
       .setName('end')
@@ -53,16 +62,6 @@ async function logGame(interaction) {
     const unixMatch = startRaw.match(/<t:(\d+)/);
     if (unixMatch) startedAt = new Date(parseInt(unixMatch[1]) * 1000);
     else { const parsed = new Date(startRaw); if (!isNaN(parsed)) startedAt = parsed; }
-  } else if (link) {
-    try {
-      const parts = link.match(/channels\/([^/]+)\/([^/]+)\/([^/]+)/);
-      if (parts) {
-        const msgId = parts[3];
-        const fetchedChannel = await interaction.client.channels.fetch(parts[2]);
-        const fetchedMsg = await fetchedChannel.messages.fetch(msgId);
-        startedAt = fetchedMsg.createdAt;
-      }
-    } catch {}
   }
 
   await interaction.deferReply({ ephemeral: true });

@@ -66,21 +66,21 @@ async function payroll(interaction) {
   if (!staffRes.rows.length) return interaction.editReply({ content: 'No active staff.' });
 
   const embed = baseEmbed(`${e('payday')} TBP Payroll`, COLORS.tbppurple, interaction.guild?.name);
-  let totalCrowns = 0, totalSins = 0, totalGoos = 0;
+  let totalMEE6 = 0, totalSINS = 0, totalOOS = 0;
 
   for (const s of staffRes.rows) {
     const overdue = s.next_pay_due_at && new Date(s.next_pay_due_at) < new Date();
     const status = overdue ? `${e('atention')} OVERDUE` : `${e('checkmark')}`;
-    if (s.pay_currency === 'Crowns') totalCrowns += s.pay_amount;
-    if (s.pay_currency === 'Sins')   totalSins   += s.pay_amount;
-    if (s.pay_currency === 'Goos')   totalGoos   += s.pay_amount;
+    if (s.pay_currency === 'MEE6') totalMEE6 += s.pay_amount;
+    if (s.pay_currency === 'SINS') totalSINS += s.pay_amount;
+    if (s.pay_currency === 'OOS')  totalOOS  += s.pay_amount;
     embed.addFields({
-      name: `${status} ${s.username} [${s.role === 'staff' ? 'mod' : s.role}]`,
-      value: `<@${s.user_id}> | ${s.pay_amount} ${s.pay_currency} | Due: ${s.next_pay_due_at ? tsF(s.next_pay_due_at) : 'N/A'} | Last paid: ${s.last_paid_at ? tsF(s.last_paid_at) : 'Never'}`,
+      name: `${status} <@${s.user_id}> [${s.role}]`,
+      value: `${s.pay_amount} ${s.pay_currency} | Due: ${s.next_pay_due_at ? tsF(s.next_pay_due_at) : 'N/A'} | Last paid: ${s.last_paid_at ? tsF(s.last_paid_at) : 'Never'}`,
     });
   }
 
-  embed.addFields({ name: `${e('payout')} Totals This Period`, value: `Crowns: ${totalCrowns} | Sins: ${totalSins} | Goos: ${totalGoos}` });
+  embed.addFields({ name: `${e('payout')} Totals This Period`, value: `MEE6: ${totalMEE6} | SINS: ${totalSINS} | OOS: ${totalOOS}` });
   await interaction.editReply({ embeds: [embed] });
 }
 
