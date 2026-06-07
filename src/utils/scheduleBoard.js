@@ -15,7 +15,7 @@ async function refreshScheduleBoard(client, guildId) {
     [guildId]
   );
 
-  const embed = baseEmbed(`${e('controller')} Live Game Schedule`, COLORS.lightpurple)
+  const embed = baseEmbed(`${e('controller')} Live Game Schedule`, COLORS.lightpurple, 'placeholder')
     .setDescription(
       gamesRes.rows.length
         ? 'Active games happening right now. Click the link to jump in!'
