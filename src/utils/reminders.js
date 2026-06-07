@@ -10,16 +10,11 @@ const REMINDER_INTERVALS = [
 
 async function runPayoutReminders(client) {
   const now = new Date();
-
-  const res = await query(
-    `SELECT * FROM payout_reminders WHERE resolved = false`,
-    []
-  );
+  const res = await query(`SELECT * FROM payout_reminders WHERE resolved = false`, []);
 
   for (const reminder of res.rows) {
     const created = new Date(reminder.created_at);
     const minutesElapsed = (now - created) / 60000;
-
     const tier = REMINDER_INTERVALS.slice().reverse().find(t => minutesElapsed >= t.minutes);
     if (!tier) continue;
     if (reminder.escalation_level >= tier.level && reminder.last_reminded_at) continue;
@@ -31,8 +26,7 @@ async function runPayoutReminders(client) {
       let adminMention = '';
       if (tier.tagAdmin) {
         const adminStaff = await query(
-          `SELECT user_id FROM staff WHERE role IN ('admin','owner') AND active = true`,
-          []
+          `SELECT user_id FROM staff WHERE role IN ('admin','owner') AND active = true`, []
         );
         adminMention = adminStaff.rows.map(r => `<@${r.user_id}>`).join(' ');
       }

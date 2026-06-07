@@ -16,6 +16,11 @@ module.exports = {
     const now            = new Date();
     await interaction.deferReply({ ephemeral: true });
 
+    const staffRes = await query(`SELECT role FROM staff WHERE user_id=$1 AND active=true`, [interaction.user.id]);
+    if (!staffRes.rows.length || !['admin','owner'].includes(staffRes.rows[0].role)) {
+      return interaction.editReply({ content: `Only admins and owners can confirm payouts.` });
+    }
+
     const tables = [
       { table: 'raffles',   type: 'raffle'   },
       { table: 'giveaways', type: 'giveaway' },
