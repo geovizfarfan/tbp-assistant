@@ -45,6 +45,7 @@ module.exports = {
     if (sub === 'log')       await logGame(interaction);
     if (sub === 'end')       await endGame(interaction);
     if (sub === 'list')      await listGames(interaction);
+    if (sub === 'list')      await listGames(interaction);
     if (sub === 'payout')    await payoutGame(interaction);
     if (sub === 'set-board') await setBoard(interaction);
   },
