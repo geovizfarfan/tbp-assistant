@@ -39,8 +39,8 @@ async function runPayoutReminders(client) {
 
       const lateTag  = tier.markLate ? ' **LATE PAYOUT**' : '';
       const mention  = adminMention ? '\n' + adminMention : '';
-      const clock    = e('RojasClock') || '⏰';
-      const alert    = tier.markLate ? (e('atention') || '🚨') : '';
+      const clock    = e('RojasClock') || '<a:RojasClock:1512912822613446787>';
+      const alert    = tier.markLate ? (e('atention') || '<a:atention:1512916995543273642>') : '';
 
       await channel.send(
         `${clock}${alert}${lateTag} <@${reminder.host_id}> reminder: <@${reminder.winner_id}> is waiting for **${reminder.prize}**.${mention}`
