@@ -25,7 +25,7 @@ async function refreshScheduleBoard(client, guildId) {
   for (const game of gamesRes.rows) {
     const prizeText = game.prize_amount ? `${game.prize_amount} ${game.currency}` : game.prize || 'No prize';
     embed.addFields({
-      name: `${e('controller')} ${game.game_name}`,
+      name: `${e('bullet')} ${game.game_name}`,
       value: [
         `**Host:** <@${game.host_id}>`,
         `**Prize:** ${prizeText}`,
