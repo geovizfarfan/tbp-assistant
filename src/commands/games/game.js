@@ -126,7 +126,7 @@ async function endGame(interaction) {
   const link   = interaction.options.getString('link');
   const winner = interaction.options.getUser('winner');
   const now    = new Date();
-  await interaction.deferReply();
+  await interaction.deferReply({ ephemeral: true });
 
   const gameRes = await query(
     `SELECT * FROM game_logs WHERE guild_id=$1 AND message_link=$2 AND status='active' LIMIT 1`,
