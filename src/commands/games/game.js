@@ -28,6 +28,14 @@ module.exports = {
       .addBooleanOption(o => o.setName('all').setDescription('Show all staff games, not just yours').setRequired(false))
     )
     .addSubcommand(sub => sub
+      .setName('edit')
+      .setDescription('Fix a logged game — update name, link or prize')
+      .addIntegerOption(o => o.setName('id').setDescription('Game ID').setRequired(true))
+      .addStringOption(o => o.setName('game').setDescription('New game name').setRequired(false))
+      .addStringOption(o => o.setName('link').setDescription('New message link').setRequired(false))
+      .addStringOption(o => o.setName('prize').setDescription('New prize e.g. 500 Goos').setRequired(false))
+    )
+    .addSubcommand(sub => sub
       .setName('set-board')
       .setDescription('[Admin] Set the #game-schedule channel for the live board')
       .addChannelOption(o => o.setName('channel').setDescription('The channel').setRequired(true))
@@ -38,6 +46,7 @@ module.exports = {
     if (sub === 'log')       await logGame(interaction);
     if (sub === 'end')       await endGame(interaction);
     if (sub === 'list')      await listGames(interaction);
+    if (sub === 'edit')      await editGame(interaction);
     if (sub === 'set-board') await setBoard(interaction);
   },
 };
@@ -243,6 +252,42 @@ async function listGames(interaction) {
   }
 
   await interaction.editReply({ embeds: [embed] });
+}
+
+
+async function editGame(interaction) {
+  const id       = interaction.options.getInteger('id');
+  const gameName = interaction.options.getString('game');
+  const link     = interaction.options.getString('link');
+  const prize    = interaction.options.getString('prize');
+  await interaction.deferReply({ ephemeral: true });
+
+  if (!gameName && !link && !prize) {
+    return interaction.editReply({ content: `${e('wrong')} Please provide at least one field to update.` });
+  }
+
+  const setClauses = [];
+  const vals = [];
+  let idx = 1;
+  if (gameName) { setClauses.push(`game_name=$${idx++}`); vals.push(gameName); }
+  if (link)     { setClauses.push(`message_link=$${idx++}`); vals.push(link); }
+  if (prize)    { setClauses.push(`prize=$${idx++}`); vals.push(prize); }
+  vals.push(id, interaction.guildId);
+
+  const res = await query(
+    `UPDATE game_logs SET ${setClauses.join(', ')} WHERE id=$${idx} AND guild_id=$${idx+1} RETURNING *`,
+    vals
+  );
+
+  if (!res.rows.length) return interaction.editReply({ content: `${e('wrong')} Game #${id} not found.` });
+
+  const lines = [`${e('checkmark')} Game #${id} updated:`];
+  if (gameName) lines.push(`${e('controller')} Name → **${gameName}**`);
+  if (link)     lines.push(`${e('purplesparkle')} Link → updated`);
+  if (prize)    lines.push(`${e('trophies')} Prize → **${prize}**`);
+
+  await interaction.editReply({ content: lines.join('\n') });
+  await refreshScheduleBoard(interaction.client, interaction.guildId);
 }
 
 async function setBoard(interaction) {
