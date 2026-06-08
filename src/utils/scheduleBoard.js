@@ -23,7 +23,7 @@ async function refreshScheduleBoard(client, guildId) {
     [guildId]
   );
 
-  const embed = baseEmbed(`${e('controller')} Live Game Schedule`, COLORS.lightpurple, guild.name)
+  const embed = baseEmbed(`${e('controller')} Live Game Schedule`, COLORS.lightpurple)
     .setDescription(
       gamesRes.rows.length
         ? 'Active games happening right now. Click the link to jump in!'
@@ -43,11 +43,12 @@ async function refreshScheduleBoard(client, guildId) {
     });
   }
 
-  embed.setFooter({ text: `${guild.name} • Last updated` }).setTimestamp();
+  embed.setTimestamp();
 
   try {
     const guild   = await client.guilds.fetch(guildId);
     const channel = await guild.channels.fetch(board.channel_id);
+    embed.setFooter({ text: `${guild.name} • Last updated` }).setTimestamp();
 
     if (board.message_id) {
       try {
