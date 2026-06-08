@@ -4,7 +4,7 @@ const path = require('path');
 const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord.js');
 const { initDB } = require('./utils/database');
 const { startReminderLoop } = require('./utils/reminders');
-const { handleTicketMessage, handleChannelDelete } = require('./events/ticketTracker');
+const { handleTicketMessage, handleThreadCreate, handleChannelDelete } = require('./events/ticketTracker');
 const { loadAppEmojis } = require('./utils/appEmojis');
 
 const client = new Client({
@@ -79,5 +79,6 @@ client.on('interactionCreate', async (interaction) => {
 // Ticket tracking
 client.on('messageCreate', handleTicketMessage);
 client.on('channelDelete', handleChannelDelete);
+client.on('threadCreate', handleThreadCreate);
 
 client.login(process.env.DISCORD_TOKEN);
