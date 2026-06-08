@@ -22,29 +22,44 @@ async function ticketSetup(interaction) {
 }
 
 async function setChannels(interaction) {
-  const winnerChannel = interaction.options.getChannel('winner_channel');
-  const ticketChannel = interaction.options.getChannel('ticket_channel');
+  const scheduleChannel  = interaction.options.getChannel('schedule_channel');
+  const winnerChannel    = interaction.options.getChannel('winner_channel');
+  const ticketChannel    = interaction.options.getChannel('ticket_channel');
+  const staffNotifChannel    = interaction.options.getChannel('staff_notif_channel');
+  const transcriptChannel    = interaction.options.getChannel('transcript_channel');
   await interaction.deferReply({ ephemeral: true });
 
-  if (!winnerChannel && !ticketChannel) {
+  if (!scheduleChannel && !winnerChannel && !ticketChannel && !staffNotifChannel && !transcriptChannel) {
     return interaction.editReply({ content: `${e('wrong')} Please provide at least one channel.` });
   }
 
   await query(
-    `INSERT INTO guild_config (guild_id, winner_channel_id, ticket_channel_id)
-     VALUES ($1, $2, $3)
+    `INSERT INTO guild_config (guild_id, schedule_channel_id, winner_channel_id, ticket_channel_id, staff_notif_channel_id, game_transcript_channel_id)
+     VALUES ($1,$2,$3,$4,$5,$6)
      ON CONFLICT (guild_id) DO UPDATE SET
-       winner_channel_id = COALESCE($2, guild_config.winner_channel_id),
-       ticket_channel_id = COALESCE($3, guild_config.ticket_channel_id),
+       schedule_channel_id        = COALESCE($2, guild_config.schedule_channel_id),
+       winner_channel_id          = COALESCE($3, guild_config.winner_channel_id),
+       ticket_channel_id          = COALESCE($4, guild_config.ticket_channel_id),
+       staff_notif_channel_id     = COALESCE($5, guild_config.staff_notif_channel_id),
+       game_transcript_channel_id = COALESCE($6, guild_config.game_transcript_channel_id),
        updated_at = NOW()`,
-    [interaction.guildId, winnerChannel?.id || null, ticketChannel?.id || null]
+    [interaction.guildId, scheduleChannel?.id || null, winnerChannel?.id || null, ticketChannel?.id || null, staffNotifChannel?.id || null, transcriptChannel?.id || null]
   );
 
   const lines = [];
-  if (winnerChannel) lines.push(`${e('checkmark')} Winner announcements → <#${winnerChannel.id}>`);
-  if (ticketChannel) lines.push(`${e('checkmark')} Ticket channel set → <#${ticketChannel.id}>`);
+  if (scheduleChannel)   lines.push(`${e('checkmark')} Game schedule board → <#${scheduleChannel.id}>`);
+  if (winnerChannel)     lines.push(`${e('checkmark')} Winner announcements → <#${winnerChannel.id}>`);
+  if (ticketChannel)     lines.push(`${e('checkmark')} Ticket channel → <#${ticketChannel.id}>`);
+  if (staffNotifChannel)  lines.push(`${e('checkmark')} Staff notifications → <#${staffNotifChannel.id}>`);
+  if (transcriptChannel)  lines.push(`${e('checkmark')} Game transcripts → <#${transcriptChannel.id}>`);
 
   await interaction.editReply({ content: lines.join('\n') });
+
+  // If schedule channel set, activate the board
+  if (scheduleChannel) {
+    const { refreshScheduleBoard } = require('../../utils/scheduleBoard');
+    await refreshScheduleBoard(interaction.client, interaction.guildId);
+  }
 }
 
 async function stopReminder(interaction) {
@@ -97,9 +112,12 @@ module.exports = {
     )
     .addSubcommand(sub => sub
       .setName('set-channels')
-      .setDescription('Set winner announcement and ticket channels')
+      .setDescription('Set all bot channels in one command')
+      .addChannelOption(o => o.setName('schedule_channel').setDescription('Live game schedule board channel').setRequired(false))
       .addChannelOption(o => o.setName('winner_channel').setDescription('Channel to post game winners in').setRequired(false))
       .addChannelOption(o => o.setName('ticket_channel').setDescription('Support ticket channel to direct winners to').setRequired(false))
+      .addChannelOption(o => o.setName('staff_notif_channel').setDescription('Staff notifications channel e.g. #tbp-staff-notifications').setRequired(false))
+      .addChannelOption(o => o.setName('transcript_channel').setDescription('Admin-only channel for game transcripts').setRequired(false))
     )
     .addSubcommand(sub => sub
       .setName('stop-reminder')

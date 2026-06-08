@@ -3,12 +3,20 @@ const { e } = require('./appEmojis');
 const { baseEmbed, tsF, tsR, COLORS } = require('./embeds');
 
 async function refreshScheduleBoard(client, guildId) {
-  const boardRes = await query(
-    `SELECT * FROM game_schedule_board WHERE guild_id=$1`,
-    [guildId]
-  );
-  if (!boardRes.rows.length) return;
-  const board = boardRes.rows[0];
+  // Check guild_config first, fall back to game_schedule_board
+  let channelId, messageId;
+  const configRes = await query(`SELECT schedule_channel_id FROM guild_config WHERE guild_id=$1`, [guildId]);
+  if (configRes.rows.length && configRes.rows[0].schedule_channel_id) {
+    channelId = configRes.rows[0].schedule_channel_id;
+    const boardRes = await query(`SELECT message_id FROM game_schedule_board WHERE guild_id=$1`, [guildId]);
+    messageId = boardRes.rows[0]?.message_id;
+  } else {
+    const boardRes = await query(`SELECT * FROM game_schedule_board WHERE guild_id=$1`, [guildId]);
+    if (!boardRes.rows.length) return;
+    channelId = boardRes.rows[0].channel_id;
+    messageId = boardRes.rows[0].message_id;
+  }
+  const board = { channel_id: channelId, message_id: messageId };
 
   const gamesRes = await query(
     `SELECT * FROM game_logs WHERE guild_id=$1 AND status='active' ORDER BY started_at ASC`,

@@ -13,8 +13,6 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessageReactions,
-    GatewayIntentBits.MessageContent,
   ],
 });
 
@@ -81,6 +79,6 @@ client.on('interactionCreate', async (interaction) => {
 // Ticket tracking
 client.on('messageCreate', handleTicketMessage);
 client.on('channelDelete', handleChannelDelete);
-client.on('threadCreate', handleThreadCreate);
+client.on('threadCreate', (thread) => handleThreadCreate(thread, client));
 
 client.login(process.env.DISCORD_TOKEN);

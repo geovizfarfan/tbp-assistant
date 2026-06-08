@@ -234,5 +234,8 @@ CREATE TABLE IF NOT EXISTS guild_config (
   guild_id TEXT PRIMARY KEY,
   winner_channel_id TEXT,
   ticket_channel_id TEXT,
+  schedule_channel_id TEXT,
+  staff_notif_channel_id TEXT,
+  game_transcript_channel_id TEXT,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
