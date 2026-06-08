@@ -26,7 +26,7 @@ module.exports = {
     .addSubcommand(sub => sub
       .setName('list')
       .setDescription('View your hosted games')
-      .addBooleanOption(o => o.setName('all').setDescription('Show all staff games, not just yours').setRequired(false))
+      .addUserOption(o => o.setName('user').setDescription('View a specific staff member\'s active games').setRequired(false))
     )
     .addSubcommand(sub => sub
       .setName('edit')
@@ -250,33 +250,28 @@ async function endGame(interaction) {
 
 
 async function listGames(interaction) {
-  const showAll = interaction.options.getBoolean('all') || false;
+  const targetUser = interaction.options.getUser('user');
   await interaction.deferReply({ ephemeral: true });
 
-  const res = showAll
-    ? await query(
-        `SELECT * FROM game_logs WHERE guild_id=$1 ORDER BY started_at DESC LIMIT 20`,
-        [interaction.guildId]
-      )
-    : await query(
-        `SELECT * FROM game_logs WHERE guild_id=$1 AND host_id=$2 ORDER BY started_at DESC LIMIT 20`,
-        [interaction.guildId, interaction.user.id]
-      );
-
-  if (!res.rows.length) return interaction.editReply({ content: 'No games found.' });
-
-  const embed = baseEmbed(
-    showAll ? `${e('controller')} All Games` : `${e('controller')} Your Games`,
-    COLORS.lightpurple, interaction.guild?.name
+  const hostId = targetUser ? targetUser.id : interaction.user.id;
+  const res = await query(
+    `SELECT * FROM game_logs WHERE guild_id=$1 AND host_id=$2 AND status='active' ORDER BY started_at DESC LIMIT 20`,
+    [interaction.guildId, hostId]
   );
 
+  if (!res.rows.length) {
+    const who = targetUser ? `<@${targetUser.id}>` : 'You';
+    return interaction.editReply({ content: `${who} has no active games.` });
+  }
+
+  const title = targetUser ? `${e('controller')} ${targetUser.username}'s Active Games` : `${e('controller')} Your Active Games`;
+  const embed = baseEmbed(title, COLORS.lightpurple, interaction.guild?.name);
+
   for (const g of res.rows) {
-    const status  = g.status === 'active' ? `${e('greendot')} Active` : `${e('reddot')} Ended`;
-    const payout  = g.payout_status === 'paid' ? `${e('checkmark')} Paid` : g.payout_status === 'late' ? `${e('atention')} Late` : `${e('Loading')} Pending`;
-    const winner  = g.winner_id ? `<@${g.winner_id}>` : 'No winner yet';
+    const payout = g.payout_status === 'paid' ? `${e('checkmark')} Paid` : g.payout_status === 'late' ? `${e('atention')} Late` : `${e('Loading')} Pending`;
     embed.addFields({
       name: `#${g.id} — ${g.game_name}`,
-      value: `${status} | Host: <@${g.host_id}> | Winner: ${winner} | Payout: ${payout}${g.message_link ? ` | [Jump](${g.message_link})` : ''}`,
+      value: `${e('purplesparkle')} Prize: ${g.prize || 'N/A'} | Payout: ${payout}${g.message_link ? ` | [Jump](${g.message_link})` : ''}`,
     });
   }
 
