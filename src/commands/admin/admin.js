@@ -105,12 +105,6 @@ module.exports = {
       .addIntegerOption(o => o.setName('max_late_payouts').setDescription('Max late payouts allowed').setRequired(false))
       .addIntegerOption(o => o.setName('bonus_per_game').setDescription('Bonus per game hosted e.g. 400').setRequired(false))
     )
-      .addIntegerOption(o => o.setName('min_giveaways').setDescription('Min giveaways').setRequired(false))
-      .addIntegerOption(o => o.setName('min_raffles').setDescription('Min raffles').setRequired(false))
-      .addIntegerOption(o => o.setName('max_late_payouts').setDescription('Max late payouts').setRequired(false))
-      .addIntegerOption(o => o.setName('max_missed_shifts').setDescription('Max missed shifts').setRequired(false))
-      .addIntegerOption(o => o.setName('ticket_limit_minutes').setDescription('Ticket response limit (minutes)').setRequired(false))
-      .addIntegerOption(o => o.setName('pay_period_days').setDescription('Pay period length (days)').setRequired(false))
     )
     .addSubcommand(sub => sub
       .setName('ticket-setup')
