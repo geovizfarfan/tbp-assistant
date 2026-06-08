@@ -74,6 +74,28 @@ module.exports = {
       [foundType, id]
     );
 
+    // Update winner announcement to Claimed
+    try {
+      const { e } = require('../../utils/appEmojis');
+      const { EmbedBuilder } = require('discord.js');
+      const annRes = await query(`SELECT * FROM winner_announcements WHERE game_id=$1 AND guild_id=$2 AND status='pending'`, [id, interaction.guildId]);
+      if (annRes.rows.length) {
+        const ann = annRes.rows[0];
+        await query(`UPDATE winner_announcements SET status='claimed' WHERE id=$1`, [ann.id]);
+        const winnerCh = await interaction.client.channels.fetch(ann.channel_id);
+        const msg = await winnerCh.messages.fetch(ann.message_id);
+        if (msg.embeds[0]) {
+          const claimedEmbed = EmbedBuilder.from(msg.embeds[0])
+            .spliceFields(3, 1, {
+              name: e('payout') + ' Status',
+              value: e('checkmark') + ' Claimed — confirmed by <@' + interaction.user.id + '>',
+              inline: false
+            });
+          await msg.edit({ embeds: [claimedEmbed] });
+        }
+      }
+    } catch (err) { console.error('[Payout] Winner message update failed:', err.message); }
+
     const typeLabel = foundType.charAt(0).toUpperCase() + foundType.slice(1);
     const prize = found.prize_amount ? `${found.prize_amount} ${found.currency}` : found.prize || 'N/A';
     const winner = finalWinnerId ? `<@${finalWinnerId}>` : 'N/A';
