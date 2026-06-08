@@ -44,8 +44,18 @@ async function runPayoutReminders(client) {
       const lateTag = tier.markLate ? ' **LATE PAYOUT**' : '';
       const suffix  = adminMention ? '\n' + adminMention : '';
       const msg     = clock + alert + lateTag + ' <@' + reminder.host_id + '> reminder: <@' + reminder.winner_id + '> is waiting for **' + reminder.prize + '**.' + suffix;
-      try { const host = await client.users.fetch(reminder.host_id); await host.send(msg); }
-      catch { await channel.send(msg); }
+      // Post to staff notif channel if configured, otherwise fall back to game channel
+      try {
+        const configRes = await query(`SELECT staff_notif_channel_id FROM guild_config WHERE guild_id=$1`, [reminder.guild_id]);
+        if (configRes.rows.length && configRes.rows[0].staff_notif_channel_id) {
+          const notifChannel = await client.channels.fetch(configRes.rows[0].staff_notif_channel_id);
+          await notifChannel.send(msg);
+        } else {
+          await channel.send(msg);
+        }
+      } catch {
+        await channel.send(msg);
+      }
 
       // If first time hitting markLate, update DB record
       if (tier.markLate) {
