@@ -132,6 +132,44 @@ async function endGame(interaction) {
 
   await interaction.editReply({ embeds: [embed] });
   await refreshScheduleBoard(interaction.client, interaction.guildId);
+
+  try {
+    const configRes = await query(`SELECT winner_channel_id, ticket_channel_id, game_transcript_channel_id FROM guild_config WHERE guild_id=$1`, [interaction.guildId]);
+    if (configRes.rows.length) {
+      const cfg = configRes.rows[0];
+      const ticketMention = cfg.ticket_channel_id ? `<#${cfg.ticket_channel_id}>` : 'our support channel';
+      if (cfg.winner_channel_id) {
+        const winnerCh = await interaction.client.channels.fetch(cfg.winner_channel_id);
+        const winEmbed = baseEmbed(`${e('confetti')} Game Winner — ${game.game_name}`, 0x7F36F5, interaction.guild?.name)
+          .addFields(
+            { name: `${e('trophies')} Winner`,    value: `<@${winner.id}>`, inline: true },
+            { name: `${e('purplesparkle')} Prize`, value: game.prize_amount ? `${game.prize_amount} ${game.currency}` : (game.prize || 'N/A'), inline: true },
+            { name: `${e('members')} Host`,        value: `<@${game.host_id}>`, inline: true },
+            { name: `${e('payout')} Payout`,       value: `${e('Loading')} Pending — please open a ticket in ${ticketMention} to claim your prize!`, inline: false },
+          );
+        await winnerCh.send({ content: `${e('confetti')} Congratulations <@${winner.id}>!`, embeds: [winEmbed] });
+      }
+      if (cfg.game_transcript_channel_id) {
+        const transcriptCh = await interaction.client.channels.fetch(cfg.game_transcript_channel_id);
+        const transcriptEmbed = baseEmbed(`${e('receipt')} Game Transcript — ${game.game_name}`, 0xCBC3E3, interaction.guild?.name)
+          .addFields(
+            { name: `${e('controller')} Game`,        value: game.game_name, inline: true },
+            { name: `${e('members')} Host`,            value: `<@${game.host_id}>`, inline: true },
+            { name: `${e('trophies')} Winner`,         value: `<@${winner.id}>`, inline: true },
+            { name: `${e('purplesparkle')} Prize`,     value: game.prize_amount ? `${game.prize_amount} ${game.currency}` : (game.prize || 'N/A'), inline: true },
+            { name: `${e('RojasClock')} Started`,      value: tsF(game.started_at), inline: true },
+            { name: `${e('confetti')} Ended`,          value: tsF(now), inline: true },
+            { name: `${e('RojasClock')} Duration`,     value: durationStr, inline: true },
+            { name: `${e('payout')} Payout`,           value: `${e('Loading')} Pending`, inline: true },
+            { name: `${e('members')} Logged by`,       value: `<@${interaction.user.id}>`, inline: true },
+            { name: `${e('purplesparkle')} Jump Link`, value: game.message_link ? `[View Game](${game.message_link})` : 'N/A', inline: true },
+          );
+        await transcriptCh.send({ embeds: [transcriptEmbed] });
+      }
+    }
+  } catch (err) {
+    console.error('[GameEnd] Channel post failed:', err.message);
+  }
 }
 
 
