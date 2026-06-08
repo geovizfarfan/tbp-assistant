@@ -95,10 +95,16 @@ module.exports = {
       .setName('ticket-report')
       .setDescription('Ticket response time report')
     )
-    .addSubcommand(sub => sub
+        .addSubcommand(sub => sub
       .setName('set-requirements')
-      .setDescription('Set pay requirements')
-      .addIntegerOption(o => o.setName('min_games').setDescription('Min games hosted').setRequired(false))
+      .setDescription('Set staff pay requirements')
+      .addIntegerOption(o => o.setName('min_games').setDescription('Min total games per period').setRequired(false))
+      .addIntegerOption(o => o.setName('min_auto_games').setDescription('Min Auto-Games (Rumble, Regret, Dice Attack) per period').setRequired(false))
+      .addIntegerOption(o => o.setName('min_raffles').setDescription('Min raffles per period').setRequired(false))
+      .addIntegerOption(o => o.setName('min_giveaways').setDescription('Min giveaways per period').setRequired(false))
+      .addIntegerOption(o => o.setName('max_late_payouts').setDescription('Max late payouts allowed').setRequired(false))
+      .addIntegerOption(o => o.setName('bonus_per_game').setDescription('Bonus per game hosted e.g. 400').setRequired(false))
+    )
       .addIntegerOption(o => o.setName('min_giveaways').setDescription('Min giveaways').setRequired(false))
       .addIntegerOption(o => o.setName('min_raffles').setDescription('Min raffles').setRequired(false))
       .addIntegerOption(o => o.setName('max_late_payouts').setDescription('Max late payouts').setRequired(false))
@@ -267,32 +273,42 @@ async function ticketReport(interaction) {
 
 async function setRequirements(interaction) {
   await interaction.deferReply({ ephemeral: true });
+
   const fields = {
-    min_games_hosted:           interaction.options.getInteger('min_games'),
-    min_giveaways_hosted:       interaction.options.getInteger('min_giveaways'),
-    min_raffles_hosted:         interaction.options.getInteger('min_raffles'),
-    max_late_payouts:           interaction.options.getInteger('max_late_payouts'),
-    max_missed_shifts:          interaction.options.getInteger('max_missed_shifts'),
-    ticket_response_limit_minutes: interaction.options.getInteger('ticket_limit_minutes'),
-    pay_period_days:            interaction.options.getInteger('pay_period_days'),
+    min_games:      interaction.options.getInteger('min_games'),
+    min_rumble:     interaction.options.getInteger('min_auto_games'),
+    min_raffles:    interaction.options.getInteger('min_raffles'),
+    min_giveaways:  interaction.options.getInteger('min_giveaways'),
+    max_late_payouts: interaction.options.getInteger('max_late_payouts'),
+    bonus_per_game: interaction.options.getInteger('bonus_per_game'),
+    pay_period_days: 30,
   };
 
   const setClauses = [];
   const vals = [interaction.guildId];
-  let i = 2;
+  let idx = 2;
   for (const [k, v] of Object.entries(fields)) {
-    if (v !== null) { setClauses.push(`${k}=$${i++}`); vals.push(v); }
+    if (v !== null) { setClauses.push(`${k}=$${idx++}`); vals.push(v); }
   }
 
-  if (!setClauses.length) return interaction.editReply({ content: `${e('moneyfly')} No fields provided.` });
+  if (setClauses.length <= 1) return interaction.editReply({ content: `${e('wrong')} No fields provided.` });
 
   await query(
     `INSERT INTO pay_requirements (guild_id) VALUES ($1)
-     ON CONFLICT (guild_id) DO UPDATE SET ${setClauses.join(', ')}, updated_at=NOW()`,
+     ON CONFLICT (guild_id) DO UPDATE SET ${setClauses.join(', ')}`,
     vals
   );
 
-  await interaction.editReply({ content: `${e('checkmark')} Pay requirements updated.` });
+  const lines = [`${e('checkmark')} Requirements updated:`];
+  if (fields.min_games !== null)      lines.push(`${e('controller')} Min Games: **${fields.min_games}**`);
+  if (fields.min_rumble !== null)     lines.push(`${e('bullet')} Min Auto-Games: **${fields.min_rumble}**`);
+  if (fields.min_raffles !== null)    lines.push(`${e('raffle')} Min Raffles: **${fields.min_raffles}**`);
+  if (fields.min_giveaways !== null)  lines.push(`${e('gift')} Min Giveaways: **${fields.min_giveaways}**`);
+  if (fields.max_late_payouts !== null) lines.push(`${e('atention')} Max Late Payouts: **${fields.max_late_payouts}**`);
+  if (fields.bonus_per_game !== null) lines.push(`${e('payout')} Bonus per game: **${fields.bonus_per_game}**`);
+  lines.push(`${e('RojasClock')} Pay period: **30 days** (fixed)`);
+
+  await interaction.editReply({ content: lines.join('\n') });
 }
 
 async function markPaid(interaction) {
