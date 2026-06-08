@@ -228,3 +228,11 @@ CREATE TABLE IF NOT EXISTS boosters (
 );
 
 CREATE INDEX IF NOT EXISTS idx_boosters_guild ON boosters(guild_id, active);
+
+-- Guild config (winner channel, ticket channel, etc.)
+CREATE TABLE IF NOT EXISTS guild_config (
+  guild_id TEXT PRIMARY KEY,
+  winner_channel_id TEXT,
+  ticket_channel_id TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);

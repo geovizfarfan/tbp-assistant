@@ -25,7 +25,7 @@ async function refreshScheduleBoard(client, guildId) {
   for (const game of gamesRes.rows) {
     const prizeText = game.prize_amount ? `${game.prize_amount} ${game.currency}` : game.prize || 'No prize';
     embed.addFields({
-      name: `${e('controller')} ${game.game_name}`,
+      name: `${e('bullet')} ${game.game_name}`,
       value: [
         `**Host:** <@${game.host_id}>`,
         `**Prize:** ${prizeText}`,
@@ -56,7 +56,7 @@ async function refreshScheduleBoard(client, guildId) {
       `UPDATE game_schedule_board SET message_id=$1, updated_at=NOW() WHERE guild_id=$2`,
       [msg.id, guildId]
     );
-  } catch (err) {
+    } catch (err) {
     console.error('[ScheduleBoard] Failed to refresh:', err.message);
   }
 }

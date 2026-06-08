@@ -26,9 +26,22 @@ module.exports = {
     .addSubcommand(sub => sub
       .setName('start')
       .setDescription('Start a new raffle')
-      .addStringOption(o => o.setName('ends').setDescription('End timestamp <t:UNIX:F> or unix').setRequired(true))
+      .addStringOption(o => o.setName('prize').setDescription('Prize type').setRequired(true)
+        .addChoices(
+          { name: 'Discord Profile Accessory', value: 'accessory'   },
+          { name: 'Discord Nitro Basic',        value: 'nitro_basic' },
+          { name: 'Discord Nitro',              value: 'nitro_premium'},
+          { name: 'Partner Carry',              value: 'carry'       },
+          { name: 'Goos',                       value: 'goos'        },
+          { name: 'Sins',                       value: 'sins'        },
+          { name: 'Crowns',                     value: 'crowns'      },
+          { name: 'Gift Card',                  value: 'gift_card'   },
+          { name: 'Sticker Pack',               value: 'sticker'     },
+          { name: 'Other Gift',                 value: 'gift'        },
+        ))
+      .addStringOption(o => o.setName('duration').setDescription('How long the raffle runs e.g. 2h, 30m, 1h30m, 24h').setRequired(true))
       .addIntegerOption(o => o.setName('amount').setDescription('Prize amount (if currency-based)').setRequired(false))
-      .addStringOption(o => o.setName('custom_prize').setDescription('Custom prize name (use when selecting Other Gift)').setRequired(false))
+      .addStringOption(o => o.setName('custom_prize').setDescription('Custom prize name (only for Other Gift)').setRequired(false))
     )
     .addSubcommand(sub => sub
       .setName('end')
@@ -38,77 +51,51 @@ module.exports = {
     .addSubcommand(sub => sub
       .setName('list')
       .setDescription('List active raffles')
+    )
+    .addSubcommand(sub => sub
+      .setName('cancel')
+      .setDescription('Cancel an active raffle — no winner selected')
+      .addIntegerOption(o => o.setName('id').setDescription('Raffle ID').setRequired(true))
+      .addStringOption(o => o.setName('reason').setDescription('Reason for cancellation').setRequired(false))
     ),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     if (sub === 'start') await startRaffle(interaction);
     if (sub === 'end')   await endRaffle(interaction);
-    if (sub === 'list')  await listRaffles(interaction);
+    if (sub === 'list')   await listRaffles(interaction);
+    if (sub === 'cancel') await cancelRaffle(interaction);
   },
 };
 
+
+function parseDuration(str) {
+  if (!str) return null;
+  str = str.trim().toLowerCase();
+  let ms = 0;
+  const hours   = str.match(/(\d+)h/);
+  const minutes = str.match(/(\d+)m/);
+  if (hours)   ms += parseInt(hours[1])   * 60 * 60 * 1000;
+  if (minutes) ms += parseInt(minutes[1]) * 60 * 1000;
+  if (ms === 0) {
+    // Try plain number as minutes
+    const num = parseInt(str);
+    if (!isNaN(num) && num > 0) ms = num * 60 * 1000;
+  }
+  return ms > 0 ? ms : null;
+}
+
 async function startRaffle(interaction) {
-  const endsRaw    = interaction.options.getString('ends');
+  const prizeKey   = interaction.options.getString('prize');
+  const endsRaw    = interaction.options.getString('duration');
   const amount     = interaction.options.getInteger('amount') || null;
   const customName = interaction.options.getString('custom_prize') || null;
 
-  const unixMatch = endsRaw.match(/<t:(\d+)/);
-  const unix = unixMatch ? parseInt(unixMatch[1]) : parseInt(endsRaw);
-  if (isNaN(unix)) return interaction.reply({ content: `${e('wrong')} Invalid timestamp. Use <t:UNIX:F> or a raw unix number.`, ephemeral: true });
-  const endsAt = new Date(unix * 1000);
-  if (endsAt <= new Date()) return interaction.reply({ content: `${e('wrong')} End time must be in the future.`, ephemeral: true });
+  const durationMs = parseDuration(endsRaw);
+  if (!durationMs) return interaction.reply({ content: `${e('wrong')} Invalid duration. Use formats like: \`2h\`, \`30m\`, \`1h30m\`, \`24h\`, \`90m\`.`, ephemeral: true });
+  const endsAt = new Date(Date.now() + durationMs);
 
-  const selectMenu = new StringSelectMenuBuilder()
-    .setCustomId('raffle_prize_select')
-    .setPlaceholder('Choose the prize type...')
-    .addOptions(PRIZE_CHOICES.map(c =>
-      new StringSelectMenuOptionBuilder().setLabel(c.label).setValue(c.value).setEmoji(c.emoji)
-    ));
-
-  const row = new ActionRowBuilder().addComponents(selectMenu);
-  await interaction.reply({ content: '👑 **Select the prize type for this raffle:**', components: [row], ephemeral: true });
-
-  let prizeKey;
-  try {
-    const collected = await interaction.channel.awaitMessageComponent({
-      filter: i => i.customId === 'raffle_prize_select' && i.user.id === interaction.user.id,
-      componentType: ComponentType.StringSelect,
-      time: 60_000,
-    });
-    prizeKey = collected.values[0];
-    await collected.deferUpdate();
-  } catch {
-    return interaction.editReply({ content: 'Prize selection timed out.', components: [] });
-  }
-
-  // If Nitro selected, ask Basic or Premium
-  if (prizeKey === 'nitro') {
-    const nitroMenu = new StringSelectMenuBuilder()
-      .setCustomId('raffle_nitro_tier')
-      .setPlaceholder('Choose Nitro tier...')
-      .addOptions([
-        new StringSelectMenuOptionBuilder().setLabel('Discord Nitro Basic').setValue('nitro_basic').setEmoji('🌟'),
-        new StringSelectMenuOptionBuilder().setLabel('Discord Nitro (Premium)').setValue('nitro_premium').setEmoji('✨'),
-      ]);
-
-    const nitroRow = new ActionRowBuilder().addComponents(nitroMenu);
-    await interaction.editReply({ content: '✨ **Which Nitro tier?**', components: [nitroRow] });
-
-    try {
-      const nitroCollected = await interaction.channel.awaitMessageComponent({
-        filter: i => i.customId === 'raffle_nitro_tier' && i.user.id === interaction.user.id,
-        componentType: ComponentType.StringSelect,
-        time: 60_000,
-      });
-      prizeKey = nitroCollected.values[0];
-      await nitroCollected.deferUpdate();
-    } catch {
-      return interaction.editReply({ content: 'Nitro tier selection timed out.', components: [] });
-    }
-  }
-
-  await interaction.editReply({ content: 'Starting raffle...', components: [] });
+  await interaction.deferReply({ ephemeral: true });
 
   const prizeLabel   = getPrizeLabel(prizeKey, customName);
   const displayPrize = amount ? `${amount} ${prizeLabel}` : prizeLabel;
@@ -137,6 +124,7 @@ async function startRaffle(interaction) {
     embed.setThumbnail(imageData.url);
   }
 
+  await interaction.editReply({ content: `${e('checkmark')} Raffle started!` });
   const msg = await interaction.channel.send(msgPayload);
 
   const res = await query(
@@ -148,7 +136,12 @@ async function startRaffle(interaction) {
   const raffleId = res.rows[0].id;
 
   const msUntilEnd = endsAt.getTime() - Date.now();
-  setTimeout(() => autoEndRaffle(interaction.client, raffleId, interaction.guildId, interaction.channelId, msg.id), msUntilEnd);
+  if (msUntilEnd > 0) {
+    setTimeout(() => autoEndRaffle(interaction.client, raffleId, interaction.guildId, interaction.channelId, msg.id), msUntilEnd);
+  } else {
+    // Already expired during setup, end immediately
+    await autoEndRaffle(interaction.client, raffleId, interaction.guildId, interaction.channelId, msg.id);
+  }
 
   const collector = msg.createMessageComponentCollector({ componentType: ComponentType.Button, time: msUntilEnd });
   collector.on('collect', async (btn) => {
@@ -232,6 +225,30 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
   } catch (err) {
     console.error('[Raffle autoEnd]', err);
   }
+}
+
+
+async function cancelRaffle(interaction) {
+  const id     = interaction.options.getInteger('id');
+  const reason = interaction.options.getString('reason') || 'No reason provided';
+  await interaction.deferReply({ ephemeral: true });
+
+  const raffleRes = await query(`SELECT * FROM raffles WHERE id=$1 AND guild_id=$2 AND status='active'`, [id, interaction.guildId]);
+  if (!raffleRes.rows.length) return interaction.editReply({ content: `${e('wrong')} Active raffle #${id} not found.` });
+  const raffle = raffleRes.rows[0];
+
+  await query(`UPDATE raffles SET status='cancelled', ended_at=NOW() WHERE id=$1`, [id]);
+
+  // Edit original raffle message if possible
+  try {
+    const channel = await interaction.client.channels.fetch(raffle.channel_id);
+    const msg     = await channel.messages.fetch(raffle.message_id);
+    const cancelEmbed = baseEmbed(`${e('raffle')} RAFFLE CANCELLED`, COLORS.grey, interaction.guild?.name)
+      .setDescription(`This raffle was cancelled.\n**Reason:** ${reason}\n**Cancelled by:** <@${interaction.user.id}>`);
+    await msg.edit({ embeds: [cancelEmbed], components: [] });
+  } catch {}
+
+  await interaction.editReply({ content: `${e('checkmark')} Raffle #${id} cancelled. No winner selected.` });
 }
 
 async function endRaffle(interaction) {

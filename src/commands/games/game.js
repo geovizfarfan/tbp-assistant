@@ -11,17 +11,8 @@ module.exports = {
     .addSubcommand(sub => sub
       .setName('log')
       .setDescription('Log a game you are hosting now')
-      .addStringOption(o => o.setName('game').setDescription('Game name').setRequired(true))
+      .addStringOption(o => o.setName('game').setDescription('Game name e.g. Ghosty Trivia').setRequired(true))
       .addStringOption(o => o.setName('link').setDescription('Message link to the game post').setRequired(true))
-      .addStringOption(o => o.setName('prize').setDescription('Prize description').setRequired(false))
-      .addIntegerOption(o => o.setName('amount').setDescription('Prize amount').setRequired(false))
-      .addStringOption(o => o.setName('currency').setDescription('Currency').setRequired(false)
-        .addChoices(
-          { name: 'Goos (Ghosty)',        value: 'Goos'   },
-          { name: 'Sins (Play & Regret)', value: 'Sins'   },
-          { name: 'Crowns (MEE6)',        value: 'Crowns' },
-        ))
-      .addStringOption(o => o.setName('start_time').setDescription('Start time e.g. 8PM or <t:UNIX:F>').setRequired(false))
     )
     .addSubcommand(sub => sub
       .setName('end')
@@ -29,10 +20,11 @@ module.exports = {
       .addStringOption(o => o.setName('link').setDescription('Message link of the game').setRequired(true))
       .addUserOption(o => o.setName('winner').setDescription('The winner').setRequired(true))
     )
+
     .addSubcommand(sub => sub
-      .setName('payout')
-      .setDescription('Confirm payout was sent')
-      .addIntegerOption(o => o.setName('id').setDescription('Game log ID').setRequired(true))
+      .setName('list')
+      .setDescription('View your hosted games')
+      .addBooleanOption(o => o.setName('all').setDescription('Show all staff games, not just yours').setRequired(false))
     )
     .addSubcommand(sub => sub
       .setName('set-board')
@@ -44,7 +36,7 @@ module.exports = {
     const sub = interaction.options.getSubcommand();
     if (sub === 'log')       await logGame(interaction);
     if (sub === 'end')       await endGame(interaction);
-    if (sub === 'payout')    await payoutGame(interaction);
+    if (sub === 'list')      await listGames(interaction);
     if (sub === 'set-board') await setBoard(interaction);
   },
 };
@@ -120,7 +112,13 @@ async function endGame(interaction) {
     );
   }
 
-  const duration = Math.round((now - new Date(game.started_at)) / 60000);
+  const durationMs = now - new Date(game.started_at);
+  const durationMins = Math.round(durationMs / 60000);
+  const durationHrs  = Math.floor(durationMins / 60);
+  const durationRem  = durationMins % 60;
+  const durationStr  = durationHrs > 0
+    ? (durationRem > 0 ? `${durationHrs}h ${durationRem}m` : `${durationHrs}h`)
+    : `${durationMins}m`;
   const embed = baseEmbed(`${e('confetti')} Game Ended — ${game.game_name}`, COLORS.tbppurple, interaction.guild?.name)
     .addFields(
       { name: `${e('trophies')} Winner`,    value: `<@${winner.id}>`, inline: true },
@@ -128,7 +126,7 @@ async function endGame(interaction) {
       { name: `${e('purplesparkle')} Prize`,value: game.prize_amount ? `${game.prize_amount} ${game.currency}` : (game.prize || 'N/A'), inline: true },
       { name: `${e('RojasClock')} Started`, value: tsF(game.started_at), inline: true },
       { name: `${e('confetti')} Ended`,     value: tsF(now), inline: true },
-      { name: `${e('RojasClock')} Duration`,value: `${duration} minutes`, inline: true },
+      { name: `${e('RojasClock')} Duration`,value: durationStr, inline: true },
       { name: `${e('payout')} Payout`,      value: game.prize ? `${e('Loading')} Pending — host will reach out` : 'N/A', inline: false },
     );
 
@@ -136,20 +134,39 @@ async function endGame(interaction) {
   await refreshScheduleBoard(interaction.client, interaction.guildId);
 }
 
-async function payoutGame(interaction) {
-  const id  = interaction.options.getInteger('id');
-  const now = new Date();
+
+async function listGames(interaction) {
+  const showAll = interaction.options.getBoolean('all') || false;
   await interaction.deferReply({ ephemeral: true });
 
-  const res = await query(
-    `UPDATE game_logs SET payout_status='paid', payout_confirmed_at=$1 WHERE id=$2 AND guild_id=$3 RETURNING *`,
-    [now, id, interaction.guildId]
-  );
-  if (!res.rows.length) return interaction.editReply({ content: `${e('wrong')} Game not found.` });
+  const res = showAll
+    ? await query(
+        `SELECT * FROM game_logs WHERE guild_id=$1 ORDER BY started_at DESC LIMIT 20`,
+        [interaction.guildId]
+      )
+    : await query(
+        `SELECT * FROM game_logs WHERE guild_id=$1 AND host_id=$2 ORDER BY started_at DESC LIMIT 20`,
+        [interaction.guildId, interaction.user.id]
+      );
 
-  await query(`UPDATE member_wins SET payout_status='paid', paid_at=$1 WHERE ref_id=$2 AND type='game'`, [now, id]);
-  await query(`UPDATE payout_reminders SET resolved=true WHERE type='game' AND ref_id=$1`, [id]);
-  await interaction.editReply({ content: `${e('checkmark')} Game #${id} payout confirmed at ${tsF(now)}` });
+  if (!res.rows.length) return interaction.editReply({ content: 'No games found.' });
+
+  const embed = baseEmbed(
+    showAll ? `${e('controller')} All Games` : `${e('controller')} Your Games`,
+    COLORS.lightpurple, interaction.guild?.name
+  );
+
+  for (const g of res.rows) {
+    const status  = g.status === 'active' ? `${e('greendot')} Active` : `${e('reddot')} Ended`;
+    const payout  = g.payout_status === 'paid' ? `${e('checkmark')} Paid` : g.payout_status === 'late' ? `${e('atention')} Late` : `${e('Loading')} Pending`;
+    const winner  = g.winner_id ? `<@${g.winner_id}>` : 'No winner yet';
+    embed.addFields({
+      name: `#${g.id} — ${g.game_name}`,
+      value: `${status} | Host: <@${g.host_id}> | Winner: ${winner} | Payout: ${payout}${g.message_link ? ` | [Jump](${g.message_link})` : ''}`,
+    });
+  }
+
+  await interaction.editReply({ embeds: [embed] });
 }
 
 async function setBoard(interaction) {

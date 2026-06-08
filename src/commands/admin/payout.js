@@ -11,16 +11,12 @@ module.exports = {
     .addUserOption(o => o.setName('winner').setDescription('Who received the prize').setRequired(true)),
 
   async execute(interaction) {
-    const id             = interaction.options.getInteger('id');
-    const winnerOverride = interaction.options.getUser('winner');
-    const now            = new Date();
+    const id     = interaction.options.getInteger('id');
+    const winnerOverride = interaction.options.getUser('winner') || null;
+    const now = new Date();
     await interaction.deferReply({ ephemeral: true });
 
-    const staffRes = await query(`SELECT role FROM staff WHERE user_id=$1 AND active=true`, [interaction.user.id]);
-    if (!staffRes.rows.length || !['admin','owner'].includes(staffRes.rows[0].role)) {
-      return interaction.editReply({ content: `Only admins and owners can confirm payouts.` });
-    }
-
+    // Try all three tables
     const tables = [
       { table: 'raffles',   type: 'raffle'   },
       { table: 'giveaways', type: 'giveaway' },
@@ -31,44 +27,65 @@ module.exports = {
     let foundType = null;
 
     for (const { table, type } of tables) {
-      const res = await query(`SELECT * FROM ${table} WHERE id=$1 AND guild_id=$2`, [id, interaction.guildId]);
-      if (res.rows.length) { found = res.rows[0]; foundType = type; break; }
+      const res = await query(
+        `SELECT * FROM ${table} WHERE id=$1 AND guild_id=$2`,
+        [id, interaction.guildId]
+      );
+      if (res.rows.length) {
+        found = res.rows[0];
+        foundType = type;
+        break;
+      }
     }
 
-    if (!found) return interaction.editReply({ content: `${e('wrong')} No raffle, giveaway, or game found with ID #${id}.` });
-    if (found.payout_status === 'paid') return interaction.editReply({ content: `${e('wrong')} #${id} is already marked as paid.` });
+    if (!found) {
+      return interaction.editReply({ content: `${e('wrong')} No raffle, giveaway, or game found with ID #${id}.` });
+    }
 
-    const finalWinnerId = found.winner_id || winnerOverride.id;
+    if (found.payout_status === 'paid') {
+      return interaction.editReply({ content: `${e('wrong')} #${id} is already marked as paid.` });
+    }
+
+    // Use override winner if provided
+    const finalWinnerId = winnerOverride ? winnerOverride.id : found.winner_id;
+
+    // Mark paid in the right table
     const tableMap = { raffle: 'raffles', giveaway: 'giveaways', game: 'game_logs' };
-
     await query(
       `UPDATE ${tableMap[foundType]} SET payout_status='paid', payout_confirmed_at=$1, winner_id=CASE WHEN winner_id IS NULL THEN $2 ELSE winner_id END WHERE id=$3`,
-      [now, winnerOverride.id, id]
+      [now, finalWinnerId, id]
     );
-    await query(`UPDATE member_wins SET payout_status='paid', paid_at=$1 WHERE ref_id=$2 AND type=$3`, [now, id, foundType]);
-
-    if (!found.winner_id) {
+    await query(
+      `UPDATE member_wins SET payout_status='paid', paid_at=$1 WHERE ref_id=$2 AND type=$3`,
+      [now, id, foundType]
+    );
+    // If new winner provided and not already in member_wins, add them
+    if (winnerOverride && !found.winner_id) {
       await query(
         `INSERT INTO member_wins (guild_id, user_id, username, type, ref_id, prize, prize_amount, currency, host_id, won_at, payout_status, paid_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),'paid',$10) ON CONFLICT DO NOTHING`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),'paid',$10)
+         ON CONFLICT DO NOTHING`,
         [interaction.guildId, winnerOverride.id, winnerOverride.username, foundType, id,
          found.prize, found.prize_amount, found.currency, found.host_id, now]
       );
     }
-
-    await query(`UPDATE payout_reminders SET resolved=true WHERE type=$1 AND ref_id=$2`, [foundType, id]);
+    await query(
+      `UPDATE payout_reminders SET resolved=true WHERE type=$1 AND ref_id=$2`,
+      [foundType, id]
+    );
 
     const typeLabel = foundType.charAt(0).toUpperCase() + foundType.slice(1);
-    const prize     = found.prize_amount ? `${found.prize_amount} ${found.currency}` : found.prize || 'N/A';
+    const prize = found.prize_amount ? `${found.prize_amount} ${found.currency}` : found.prize || 'N/A';
+    const winner = finalWinnerId ? `<@${finalWinnerId}>` : 'N/A';
 
     const embed = baseEmbed(`${e('payout')} Payout Confirmed`, COLORS.softgreen, interaction.guild?.name)
       .addFields(
-        { name: `Type`,                          value: typeLabel, inline: true },
-        { name: `ID`,                            value: `#${id}`, inline: true },
-        { name: `${e('trophies')} Winner`,       value: `<@${finalWinnerId}>`, inline: true },
-        { name: `${e('purplesparkle')} Prize`,   value: prize, inline: true },
-        { name: `${e('RojasClock')} Confirmed`,  value: tsF(now), inline: true },
-        { name: `${e('members')} Confirmed by`,  value: `<@${interaction.user.id}>`, inline: true },
+        { name: `Type`,                            value: typeLabel, inline: true },
+        { name: `ID`,                              value: `#${id}`, inline: true },
+        { name: `${e('trophies')} Winner`,         value: winner, inline: true },
+        { name: `${e('purplesparkle')} Prize`,     value: prize, inline: true },
+        { name: `${e('RojasClock')} Confirmed`,    value: tsF(now), inline: true },
+        { name: `${e('members')} Confirmed by`,    value: `<@${interaction.user.id}>`, inline: true },
       );
 
     await interaction.editReply({ embeds: [embed] });

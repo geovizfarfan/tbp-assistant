@@ -27,11 +27,7 @@ module.exports = {
       .addIntegerOption(o => o.setName('id').setDescription('Giveaway ID').setRequired(true))
       .addUserOption(o => o.setName('winner').setDescription('Winner').setRequired(true))
     )
-    .addSubcommand(sub => sub
-      .setName('payout')
-      .setDescription('Mark giveaway payout as paid')
-      .addIntegerOption(o => o.setName('id').setDescription('Giveaway ID').setRequired(true))
-    )
+
     .addSubcommand(sub => sub
       .setName('list')
       .setDescription('List recent giveaways')
@@ -41,7 +37,6 @@ module.exports = {
     const sub = interaction.options.getSubcommand();
     if (sub === 'log')    await logGiveaway(interaction);
     if (sub === 'end')    await endGiveaway(interaction);
-    if (sub === 'payout') await payoutGiveaway(interaction);
     if (sub === 'list')   await listGiveaways(interaction);
   },
 };
@@ -81,7 +76,7 @@ async function endGiveaway(interaction) {
   if (!gwRes.rows.length) return interaction.editReply({ content: `${e('wrong')} Giveaway not found.` });
   const gw = gwRes.rows[0];
 
-  await query(`UPDATE giveaways SET status='ended', ended_at=$1, winner_id=$2 WHERE id=$3`, [now, winner.id, id]);
+  const endRes = await query(`UPDATE giveaways SET status='ended', ended_at=$1, winner_id=$2 WHERE id=$3 RETURNING id`, [now, winner.id, id]);
 
   await query(
     `INSERT INTO member_wins (guild_id, user_id, username, type, ref_id, prize, prize_amount, currency, host_id, won_at)
@@ -105,17 +100,6 @@ async function endGiveaway(interaction) {
     );
 
   await interaction.editReply({ embeds: [embed] });
-}
-
-async function payoutGiveaway(interaction) {
-  const id  = interaction.options.getInteger('id');
-  const now = new Date();
-  await interaction.deferReply({ ephemeral: true });
-
-  await query(`UPDATE giveaways SET payout_status='paid', payout_confirmed_at=$1, payout_confirmed_by=$2 WHERE id=$3`, [now, interaction.user.id, id]);
-  await query(`UPDATE member_wins SET payout_status='paid', paid_at=$1 WHERE ref_id=$2 AND type='giveaway'`, [now, id]);
-  await query(`UPDATE payout_reminders SET resolved=true WHERE type='giveaway' AND ref_id=$1`, [id]);
-  await interaction.editReply({ content: `${e('checkmark')} Giveaway #${id} marked as paid. ${tsF(now)}` });
 }
 
 async function listGiveaways(interaction) {

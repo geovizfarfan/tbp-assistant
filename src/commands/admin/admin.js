@@ -5,6 +5,56 @@ const { baseEmbed, tsF, tsR, COLORS } = require('../../utils/embeds');
 const { checkEligibility } = require('../../utils/eligibility');
 const { eligibilityEmbed } = require('../../utils/embeds');
 
+
+
+async function ticketSetup(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+  const embed = baseEmbed(`${e('rules')} Ticket Tracking Setup`, COLORS.lightpurple, interaction.guild?.name)
+    .setDescription('The bot automatically tracks ticket response times. Here is how it works:')
+    .addFields(
+      { name: '1. Channel Detection', value: 'The bot watches any channel with **"ticket"** in its name automatically. No setup needed.', inline: false },
+      { name: '2. What it tracks', value: 'When a ticket opens, the bot logs the time. When a staff member replies, it records the response time and flags it as late if over the limit.', inline: false },
+      { name: '3. Set response limit', value: 'Use `/admin set-requirements ticket_limit_minutes:30` to set how long staff have before a reply is marked late.', inline: false },
+      { name: '4. View reports', value: 'Use `/admin ticket-report` to see response times per staff member.', inline: false },
+      { name: '5. Make sure', value: 'The bot has **Read Messages** and **Read Message History** permissions in your ticket channels.', inline: false },
+    );
+  await interaction.editReply({ embeds: [embed] });
+}
+
+async function setChannels(interaction) {
+  const winnerChannel = interaction.options.getChannel('winner_channel');
+  const ticketChannel = interaction.options.getChannel('ticket_channel');
+  await interaction.deferReply({ ephemeral: true });
+
+  if (!winnerChannel && !ticketChannel) {
+    return interaction.editReply({ content: `${e('wrong')} Please provide at least one channel.` });
+  }
+
+  await query(
+    `INSERT INTO guild_config (guild_id, winner_channel_id, ticket_channel_id)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (guild_id) DO UPDATE SET
+       winner_channel_id = COALESCE($2, guild_config.winner_channel_id),
+       ticket_channel_id = COALESCE($3, guild_config.ticket_channel_id),
+       updated_at = NOW()`,
+    [interaction.guildId, winnerChannel?.id || null, ticketChannel?.id || null]
+  );
+
+  const lines = [];
+  if (winnerChannel) lines.push(`${e('checkmark')} Winner announcements → <#${winnerChannel.id}>`);
+  if (ticketChannel) lines.push(`${e('checkmark')} Ticket channel set → <#${ticketChannel.id}>`);
+
+  await interaction.editReply({ content: lines.join('\n') });
+}
+
+async function stopReminder(interaction) {
+  const id  = interaction.options.getInteger('id');
+  await interaction.deferReply({ ephemeral: true });
+  const res = await query(`UPDATE payout_reminders SET resolved=true WHERE id=$1 AND guild_id=$2 RETURNING *`, [id, interaction.guildId]);
+  if (!res.rows.length) return interaction.editReply({ content: `${e('wrong')} Reminder #${id} not found.` });
+  await interaction.editReply({ content: `${e('checkmark')} Reminder #${id} stopped.` });
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('admin')
@@ -42,6 +92,21 @@ module.exports = {
       .addIntegerOption(o => o.setName('pay_period_days').setDescription('Pay period length (days)').setRequired(false))
     )
     .addSubcommand(sub => sub
+      .setName('ticket-setup')
+      .setDescription('How to set up ticket tracking for this bot')
+    )
+    .addSubcommand(sub => sub
+      .setName('set-channels')
+      .setDescription('Set winner announcement and ticket channels')
+      .addChannelOption(o => o.setName('winner_channel').setDescription('Channel to post game winners in').setRequired(false))
+      .addChannelOption(o => o.setName('ticket_channel').setDescription('Support ticket channel to direct winners to').setRequired(false))
+    )
+    .addSubcommand(sub => sub
+      .setName('stop-reminder')
+      .setDescription('Stop a payout reminder')
+      .addIntegerOption(o => o.setName('id').setDescription('Reminder ID (from /admin late-payouts)').setRequired(true))
+    )
+    .addSubcommand(sub => sub
       .setName('mark-paid')
       .setDescription('Mark a staff member as paid')
       .addUserOption(o => o.setName('user').setDescription('Staff member').setRequired(true))
@@ -56,6 +121,9 @@ module.exports = {
     if (sub === 'missed-schedules')await missedSchedules(interaction);
     if (sub === 'ticket-report')   await ticketReport(interaction);
     if (sub === 'set-requirements')await setRequirements(interaction);
+    if (sub === 'ticket-setup')    await ticketSetup(interaction);
+    if (sub === 'set-channels')    await setChannels(interaction);
+    if (sub === 'stop-reminder')   await stopReminder(interaction);
     if (sub === 'mark-paid')       await markPaid(interaction);
   },
 };
@@ -66,21 +134,21 @@ async function payroll(interaction) {
   if (!staffRes.rows.length) return interaction.editReply({ content: 'No active staff.' });
 
   const embed = baseEmbed(`${e('payday')} TBP Payroll`, COLORS.tbppurple, interaction.guild?.name);
-  let totalMEE6 = 0, totalSINS = 0, totalOOS = 0;
+  let totalCrowns = 0, totalSins = 0, totalGoos = 0;
 
   for (const s of staffRes.rows) {
     const overdue = s.next_pay_due_at && new Date(s.next_pay_due_at) < new Date();
     const status = overdue ? `${e('atention')} OVERDUE` : `${e('checkmark')}`;
-    if (s.pay_currency === 'MEE6') totalMEE6 += s.pay_amount;
-    if (s.pay_currency === 'SINS') totalSINS += s.pay_amount;
-    if (s.pay_currency === 'OOS')  totalOOS  += s.pay_amount;
+    if (s.pay_currency === 'Crowns') totalCrowns += s.pay_amount;
+    if (s.pay_currency === 'Sins')   totalSins += s.pay_amount;
+    if (s.pay_currency === 'Goos')   totalGoos += s.pay_amount;
     embed.addFields({
       name: `${status} <@${s.user_id}> [${s.role}]`,
       value: `${s.pay_amount} ${s.pay_currency} | Due: ${s.next_pay_due_at ? tsF(s.next_pay_due_at) : 'N/A'} | Last paid: ${s.last_paid_at ? tsF(s.last_paid_at) : 'Never'}`,
     });
   }
 
-  embed.addFields({ name: `${e('payout')} Totals This Period`, value: `MEE6: ${totalMEE6} | SINS: ${totalSINS} | OOS: ${totalOOS}` });
+  embed.addFields({ name: `${e('payout')} Totals This Period`, value: `Crowns: ${totalCrowns} | Sins: ${totalSins} | Goos: ${totalGoos}` });
   await interaction.editReply({ embeds: [embed] });
 }
 
