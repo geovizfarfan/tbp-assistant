@@ -13,6 +13,7 @@ module.exports = {
       .setDescription('Log a game you are hosting now')
       .addStringOption(o => o.setName('game').setDescription('Game name e.g. Ghosty Trivia').setRequired(true))
       .addStringOption(o => o.setName('link').setDescription('Message link to the game post').setRequired(true))
+      .addStringOption(o => o.setName('prize').setDescription('Prize e.g. 500 Goos or Discord Nitro').setRequired(true))
     )
     .addSubcommand(sub => sub
       .setName('end')
@@ -44,9 +45,9 @@ module.exports = {
 async function logGame(interaction) {
   const gameName = interaction.options.getString('game');
   const link     = interaction.options.getString('link');
-  const prize    = interaction.options.getString('prize') || null;
-  const amount   = interaction.options.getInteger('amount') || null;
-  const currency = interaction.options.getString('currency') || 'Goos';
+  const prize    = interaction.options.getString('prize');
+  const amount   = null;
+  const currency = 'Goos';
   const startRaw = interaction.options.getString('start_time') || null;
 
   let startedAt = new Date();
@@ -64,7 +65,7 @@ async function logGame(interaction) {
     [interaction.guildId, interaction.channelId, link, interaction.user.id, gameName, prize, amount, currency, startedAt]
   );
   const gameId = res.rows[0].id;
-  const prizeDisplay = amount ? `${amount} ${currency}` : (prize || 'No prize listed');
+  const prizeDisplay = prize || 'No prize listed';
 
   const embed = baseEmbed(`${e('controller')} Game Logged — ${gameName}`, COLORS.lightpurple, interaction.guild?.name)
     .setDescription('A new game is live! Click the link below to jump in.')
