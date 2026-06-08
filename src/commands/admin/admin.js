@@ -148,25 +148,44 @@ module.exports = {
 
 async function payroll(interaction) {
   await interaction.deferReply({ ephemeral: true });
-  const staffRes = await query(`SELECT * FROM staff WHERE active=true ORDER BY role`, []);
+
+  const reqRes = await query(`SELECT * FROM pay_requirements WHERE guild_id=$1`, [interaction.guildId]);
+  const req = reqRes.rows[0] || { bonus_per_game: 400, pay_period_days: 30 };
+  const bonusPerGame = req.bonus_per_game || 400;
+  const periodDays   = req.pay_period_days || 30;
+  const periodStart  = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
+
+  const staffRes = await query(`SELECT * FROM staff WHERE guild_id=$1 AND active=true ORDER BY role`, [interaction.guildId]);
   if (!staffRes.rows.length) return interaction.editReply({ content: 'No active staff.' });
 
   const embed = baseEmbed(`${e('payday')} TBP Payroll`, COLORS.tbppurple, interaction.guild?.name);
   let totalCrowns = 0, totalSins = 0, totalGoos = 0;
 
   for (const s of staffRes.rows) {
-    const overdue = s.next_pay_due_at && new Date(s.next_pay_due_at) < new Date();
-    const status = overdue ? `${e('atention')} OVERDUE` : `${e('checkmark')}`;
-    if (s.pay_currency === 'Crowns') totalCrowns += s.pay_amount;
-    if (s.pay_currency === 'Sins')   totalSins += s.pay_amount;
-    if (s.pay_currency === 'Goos')   totalGoos += s.pay_amount;
+    const gamesRes = await query(
+      `SELECT COUNT(*) FROM game_logs WHERE guild_id=$1 AND host_id=$2 AND started_at > $3`,
+      [interaction.guildId, s.user_id, periodStart]
+    );
+    const gamesHosted = parseInt(gamesRes.rows[0].count);
+    const gameBonus   = gamesHosted * bonusPerGame;
+    const totalPay    = (s.pay_amount || 0) + gameBonus;
+    const overdue     = s.next_pay_due_at && new Date(s.next_pay_due_at) < new Date();
+    const status      = overdue ? `${e('atention')} OVERDUE` : `${e('checkmark')}`;
+
+    if (s.pay_currency === 'Crowns') totalCrowns += totalPay;
+    if (s.pay_currency === 'Sins')   totalSins   += totalPay;
+    if (s.pay_currency === 'Goos')   totalGoos   += totalPay;
+
     embed.addFields({
-      name: `${status} <@${s.user_id}> [${s.role}]`,
-      value: `${s.pay_amount} ${s.pay_currency} | Due: ${s.next_pay_due_at ? tsF(s.next_pay_due_at) : 'N/A'} | Last paid: ${s.last_paid_at ? tsF(s.last_paid_at) : 'Never'}`,
+      name: `${status} ${s.username} [${s.role}]`,
+      value: `<@${s.user_id}> | Base: ${s.pay_amount} | Games: ${gamesHosted} × ${bonusPerGame} = ${gameBonus} | **Total: ${totalPay} ${s.pay_currency}**`,
     });
   }
 
-  embed.addFields({ name: `${e('payout')} Totals This Period`, value: `Crowns: ${totalCrowns} | Sins: ${totalSins} | Goos: ${totalGoos}` });
+  embed.addFields({
+    name: `${e('payout')} Total Owed This Period`,
+    value: `Crowns: ${totalCrowns} | Sins: ${totalSins} | Goos: ${totalGoos}\nBonus rate: ${bonusPerGame} per game`
+  });
   await interaction.editReply({ embeds: [embed] });
 }
 
