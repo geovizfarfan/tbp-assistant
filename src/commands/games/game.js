@@ -14,6 +14,7 @@ module.exports = {
       .addStringOption(o => o.setName('game').setDescription('Game name e.g. Ghosty Trivia').setRequired(true))
       .addStringOption(o => o.setName('link').setDescription('Message link to the game post').setRequired(true))
       .addStringOption(o => o.setName('prize').setDescription('Prize e.g. 500 Goos or Discord Nitro').setRequired(true))
+      .addUserOption(o => o.setName('host').setDescription('Who actually hosted (leave blank if you are the host)').setRequired(false))
     )
     .addSubcommand(sub => sub
       .setName('end')
@@ -52,11 +53,13 @@ module.exports = {
 };
 
 async function logGame(interaction) {
-  const gameName = interaction.options.getString('game');
-  const link     = interaction.options.getString('link');
-  const prize    = interaction.options.getString('prize');
-  const amount   = null;
-  const currency = 'Goos';
+  const gameName   = interaction.options.getString('game');
+  const link       = interaction.options.getString('link');
+  const prize      = interaction.options.getString('prize');
+  const hostOverride = interaction.options.getUser('host');
+  const hostId     = hostOverride ? hostOverride.id : interaction.user.id;
+  const amount     = null;
+  const currency   = 'Goos';
   const startRaw = interaction.options.getString('start_time') || null;
 
   let startedAt = new Date();
@@ -71,7 +74,7 @@ async function logGame(interaction) {
   const res = await query(
     `INSERT INTO game_logs (guild_id, channel_id, message_link, host_id, game_name, prize, prize_amount, currency, started_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
-    [interaction.guildId, interaction.channelId, link, interaction.user.id, gameName, prize, amount, currency, startedAt]
+    [interaction.guildId, interaction.channelId, link, hostId, gameName, prize, amount, currency, startedAt]
   );
   const gameId = res.rows[0].id;
   const prizeDisplay = prize || 'No prize listed';
@@ -80,7 +83,7 @@ async function logGame(interaction) {
     .setDescription('A new game is live! Click the link below to jump in.')
     .addFields(
       { name: `${e('controller')} Game`,    value: gameName, inline: true },
-      { name: `${e('members')} Host`,       value: `<@${interaction.user.id}>`, inline: true },
+      { name: `${e('members')} Host`,       value: `<@${hostId}>`, inline: true },
       { name: `${e('trophies')} Prize`,     value: prizeDisplay, inline: true },
       { name: `${e('RojasClock')} Started`, value: tsF(startedAt), inline: true },
       { name: `${e('announce')} Status`,    value: `${e('greendot')} Active`, inline: true },
