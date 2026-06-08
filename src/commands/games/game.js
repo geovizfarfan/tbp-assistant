@@ -36,6 +36,7 @@ module.exports = {
       .addStringOption(o => o.setName('link').setDescription('New message link').setRequired(false))
       .addStringOption(o => o.setName('prize').setDescription('New prize e.g. 500 Goos').setRequired(false))
       .addUserOption(o => o.setName('host').setDescription('Correct host').setRequired(false))
+      .addStringOption(o => o.setName('start_time').setDescription('Correct start time e.g. <t:UNIX:F> or unix timestamp').setRequired(false))
     )
     .addSubcommand(sub => sub
       .setName('set-board')
@@ -264,10 +265,11 @@ async function editGame(interaction) {
   const gameName = interaction.options.getString('game');
   const link     = interaction.options.getString('link');
   const prize    = interaction.options.getString('prize');
-  const host     = interaction.options.getUser('host');
+  const host      = interaction.options.getUser('host');
+  const startRaw  = interaction.options.getString('start_time');
   await interaction.deferReply({ ephemeral: true });
 
-  if (!gameName && !link && !prize && !host) {
+  if (!gameName && !link && !prize && !host && !startRaw) {
     return interaction.editReply({ content: `${e('wrong')} Please provide at least one field to update.` });
   }
 
@@ -278,6 +280,11 @@ async function editGame(interaction) {
   if (link)     { setClauses.push(`message_link=$${idx++}`); vals.push(link); }
   if (prize)    { setClauses.push(`prize=$${idx++}`); vals.push(prize); }
   if (host)     { setClauses.push(`host_id=$${idx++}`); vals.push(host.id); }
+  if (startRaw) {
+    const unixMatch = startRaw.match(/<t:(\d+)/);
+    const unix = unixMatch ? parseInt(unixMatch[1]) : parseInt(startRaw);
+    if (!isNaN(unix)) { setClauses.push(`started_at=$${idx++}`); vals.push(new Date(unix * 1000)); }
+  }
   vals.push(id, interaction.guildId);
 
   const res = await query(
@@ -292,6 +299,7 @@ async function editGame(interaction) {
   if (link)     lines.push(`${e('purplesparkle')} Link → updated`);
   if (prize)    lines.push(`${e('trophies')} Prize → **${prize}**`);
   if (host)     lines.push(`${e('members')} Host → <@${host.id}>`);
+  if (startRaw) lines.push(`${e('RojasClock')} Start time → updated`);
 
   await interaction.editReply({ content: lines.join('\n') });
   await refreshScheduleBoard(interaction.client, interaction.guildId);
