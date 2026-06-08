@@ -6,6 +6,7 @@ const { e } = require('../../utils/appEmojis');
 const { query } = require('../../utils/database');
 const { baseEmbed, tsF, tsR, COLORS } = require('../../utils/embeds');
 const { getPrizeImage, getPrizeLabel } = require('../../utils/prizeImages');
+const { refreshScheduleBoard } = require('../../utils/scheduleBoard');
 
 const PRIZE_CHOICES = [
   { label: 'Discord Profile Accessory', value: 'accessory',   emoji: '💎' },
@@ -19,7 +20,7 @@ const PRIZE_CHOICES = [
   { label: 'Other Gift (specify below)',value: 'gift',        emoji: '🎀' },
 ];
 
-module.exports = {
+module.exports = { autoEndRaffle,
   data: new SlashCommandBuilder()
     .setName('raffle')
     .setDescription('Raffle management')
@@ -135,6 +136,9 @@ async function startRaffle(interaction) {
   );
   const raffleId = res.rows[0].id;
 
+  // Refresh schedule board to show new raffle
+  await refreshScheduleBoard(interaction.client, interaction.guildId);
+
   const msUntilEnd = endsAt.getTime() - Date.now();
   if (msUntilEnd > 0) {
     setTimeout(() => autoEndRaffle(interaction.client, raffleId, interaction.guildId, interaction.channelId, msg.id), msUntilEnd);
@@ -214,6 +218,7 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
       );
 
     await channel.send({ content: `${e('raffle')} <@${winner.user_id}> Congratulations!`, embeds: [winEmbed] });
+    await refreshScheduleBoard(client, guildId);
 
     try {
       const origMsg = await channel.messages.fetch(messageId);

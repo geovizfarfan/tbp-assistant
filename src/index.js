@@ -37,9 +37,40 @@ function loadCommands(dir) {
 
 loadCommands(path.join(__dirname, 'commands'));
 
+
+async function restoreRaffles(client) {
+  try {
+    const { query } = require('./utils/database');
+    const now = new Date();
+    const res = await query(
+      `SELECT * FROM raffles WHERE status='active'`,
+      []
+    );
+    console.log(`[Raffles] Restoring ${res.rows.length} active raffles...`);
+    for (const raffle of res.rows) {
+      const endsAt = new Date(raffle.ends_at);
+      const msLeft = endsAt.getTime() - now.getTime();
+      const { default: autoEnd } = await import('./commands/raffle/autoEndRaffle.js').catch(() => ({ default: null }));
+      if (msLeft <= 0) {
+        // Already expired - end it now
+        const { autoEndRaffle } = require('./commands/raffle/raffle.js');
+        if (autoEndRaffle) await autoEndRaffle(client, raffle.id, raffle.guild_id, raffle.channel_id, raffle.message_id);
+      } else {
+        // Reschedule
+        const { autoEndRaffle } = require('./commands/raffle/raffle.js');
+        if (autoEndRaffle) setTimeout(() => autoEndRaffle(client, raffle.id, raffle.guild_id, raffle.channel_id, raffle.message_id), msLeft);
+        console.log(`[Raffles] Raffle #${raffle.id} rescheduled, ends in ${Math.round(msLeft/60000)}min`);
+      }
+    }
+  } catch (err) {
+    console.error('[Raffles] Restore failed:', err.message);
+  }
+}
+
 client.once('ready', async () => {
   console.log(`[Bot] Logged in as ${client.user.tag}`);
   await loadAppEmojis(client.user.id, process.env.DISCORD_TOKEN);
+  await restoreRaffles(client);
   await initDB();
   startReminderLoop(client);
 

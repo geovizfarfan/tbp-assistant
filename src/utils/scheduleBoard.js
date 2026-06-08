@@ -23,11 +23,18 @@ async function refreshScheduleBoard(client, guildId) {
     [guildId]
   );
 
+  const rafflesRes = await query(
+    `SELECT * FROM raffles WHERE guild_id=$1 AND status='active' ORDER BY created_at ASC`,
+    [guildId]
+  );
+
+  const totalItems = gamesRes.rows.length + rafflesRes.rows.length;
+
   const embed = baseEmbed(`${e('controller')} Live Game Schedule`, COLORS.lightpurple)
     .setDescription(
-      gamesRes.rows.length
-        ? 'Active games happening right now. Click the link to jump in!'
-        : '*No active games right now. Check back soon!*'
+      totalItems > 0
+        ? 'Active games and raffles happening right now!'
+        : '*No active games or raffles right now. Check back soon!*'
     );
 
   for (const game of gamesRes.rows) {
@@ -40,6 +47,18 @@ async function refreshScheduleBoard(client, guildId) {
         `**Started:** ${tsF(game.started_at)} (${tsR(game.started_at)})`,
         game.message_link ? `**[Jump to Game](${game.message_link})**` : '',
       ].filter(Boolean).join('\n'),
+    });
+  }
+
+  for (const raffle of rafflesRes.rows) {
+    const prizeText = raffle.prize_amount ? `${raffle.prize_amount} ${raffle.currency}` : raffle.prize || 'No prize';
+    embed.addFields({
+      name: `${e('raffle')} ${prizeText} Raffle`,
+      value: [
+        `**Host:** <@${raffle.host_id}>`,
+        `**Prize:** ${prizeText}`,
+        `**Ends:** ${tsF(raffle.ends_at)} (${tsR(raffle.ends_at)})`,
+      ].join('\n'),
     });
   }
 
