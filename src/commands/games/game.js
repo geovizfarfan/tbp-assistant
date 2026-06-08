@@ -77,6 +77,18 @@ async function logGame(interaction) {
   } catch (err) {
     console.error(`[GameLog] Could not fetch message time: ${err.message}`);
   }
+  // Try to fetch message timestamp from link
+  try {
+    const parts = link.match(/channels\/([^/]+)\/([^/]+)\/([^/]+)/);
+    if (parts) {
+      const fetchedChannel = await interaction.client.channels.fetch(parts[2]);
+      const fetchedMsg = await fetchedChannel.messages.fetch(parts[3]);
+      startedAt = fetchedMsg.createdAt;
+      console.log(`[GameLog] Got message time: ${startedAt}`);
+    }
+  } catch (err) {
+    console.error(`[GameLog] Could not fetch message time: ${err.message}`);
+  }
   if (startRaw) {
     const unixMatch = startRaw.match(/<t:(\d+)/);
     if (unixMatch) startedAt = new Date(parseInt(unixMatch[1]) * 1000);
