@@ -40,7 +40,13 @@ async function handleTicketMessage(message) {
 
   if (isSenderStaff) {
     if (!ticket.first_staff_reply_at) {
-      const responseMinutes = Math.floor((message.createdAt - new Date(ticket.opened_at)) / 60000);
+      const responseMs = message.createdAt - new Date(ticket.opened_at);
+    const responseMinutes = Math.floor(responseMs / 60000);
+    const responseHrs = Math.floor(responseMinutes / 60);
+    const responseRem = responseMinutes % 60;
+    const responseStr = responseHrs > 0
+      ? (responseRem > 0 ? `${responseHrs}h ${responseRem}m` : `${responseHrs}h`)
+      : `${responseMinutes}m`;
       const reqRes = await query(`SELECT ticket_response_limit_minutes FROM pay_requirements WHERE guild_id=$1`, [guildId]);
       const limit = reqRes.rows[0]?.ticket_response_limit_minutes || 30;
       const isLate = responseMinutes > limit;
@@ -50,7 +56,7 @@ async function handleTicketMessage(message) {
           const cfg = await query(`SELECT staff_notif_channel_id FROM guild_config WHERE guild_id=$1`, [guildId]);
           if (cfg.rows.length && cfg.rows[0].staff_notif_channel_id) {
             const notifCh = await message.client.channels.fetch(cfg.rows[0].staff_notif_channel_id);
-            await notifCh.send(`<a:atention:1512916995543273642> <@${message.author.id}> took **${responseMinutes} min** to respond in <#${channelId}> (limit: ${limit} min).`);
+            await notifCh.send(`<a:atention:1512916995543273642> <@${message.author.id}> took **${responseStr}** to respond in <#${channelId}> (limit: ${limit} min).`);
           }
         } catch {}
       }
