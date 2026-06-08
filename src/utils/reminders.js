@@ -39,10 +39,13 @@ async function runPayoutReminders(client) {
         adminMention = adminStaff.rows.map(r => `<@${r.user_id}>`).join(' ');
       }
 
-      const lateTag = tier.markLate ? ` ${e('atention')} **LATE PAYOUT**` : '';
-      await channel.send(
-        `${e('RojasClock')}${lateTag} <@${reminder.host_id}> reminder: <@${reminder.winner_id}> is waiting for **${reminder.prize}**.${adminMention ? `\n${adminMention}` : `'}'
-      );
+      const clock   = e('RojasClock') || '<a:RojasClock:1512912822613446787>';
+      const alert   = tier.markLate ? (e('atention') || '<a:atention:1512916995543273642>') : '';
+      const lateTag = tier.markLate ? ' **LATE PAYOUT**' : '';
+      const suffix  = adminMention ? '\n' + adminMention : '';
+      const msg     = clock + alert + lateTag + ' <@' + reminder.host_id + '> reminder: <@' + reminder.winner_id + '> is waiting for **' + reminder.prize + '**.' + suffix;
+      try { const host = await client.users.fetch(reminder.host_id); await host.send(msg); }
+      catch { await channel.send(msg); }
 
       // If first time hitting markLate, update DB record
       if (tier.markLate) {
