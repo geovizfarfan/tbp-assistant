@@ -147,7 +147,44 @@ async function endGame(interaction) {
             { name: `${e('members')} Host`,        value: `<@${game.host_id}>`, inline: true },
             { name: `${e('payout')} Payout`,       value: `${e('Loading')} Pending — please open a ticket in ${ticketMention} to claim your prize!`, inline: false },
           );
-        await winnerCh.send({ content: `${e('confetti')} Congratulations <@${winner.id}>!`, embeds: [winEmbed] });
+        const winnerMsg = await winnerCh.send({ content: `${e('confetti')} Congratulations <@${winner.id}>!`, embeds: [winEmbed] });
+
+        const boosterRes = await query(`SELECT id FROM boosters WHERE guild_id=$1 AND user_id=$2 AND active=true`, [interaction.guildId, winner.id]);
+        const isBooster = boosterRes.rows.length > 0;
+        const claimHours = isBooster ? 12 : 6;
+
+        const annRes = await query(
+          `INSERT INTO winner_announcements (guild_id, game_id, channel_id, message_id, winner_id, prize, is_booster)
+           VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+          [interaction.guildId, game.id, cfg.winner_channel_id, winnerMsg.id, winner.id,
+           game.prize_amount ? `${game.prize_amount} ${game.currency}` : (game.prize || 'N/A'), isBooster]
+        );
+        const annId = annRes.rows[0].id;
+
+        setTimeout(async () => {
+          try {
+            const ann = await query(`SELECT * FROM winner_announcements WHERE id=$1`, [annId]);
+            if (!ann.rows.length || ann.rows[0].status !== 'pending') return;
+            const ticketRes = await query(
+              `SELECT id FROM ticket_logs WHERE guild_id=$1 AND opened_by=$2 AND opened_at > $3`,
+              [interaction.guildId, winner.id, now]
+            );
+            if (!ticketRes.rows.length) {
+              await query(`UPDATE winner_announcements SET status='not_claimed' WHERE id=$1`, [annId]);
+              try {
+                const msg = await winnerCh.messages.fetch(winnerMsg.id);
+                const notClaimedEmbed = baseEmbed(`${e('confetti')} Game Winner — ${game.game_name}`, 0x7F36F5, interaction.guild?.name)
+                  .addFields(
+                    { name: `${e('trophies')} Winner`,    value: `<@${winner.id}>`, inline: true },
+                    { name: `${e('purplesparkle')} Prize`, value: game.prize_amount ? `${game.prize_amount} ${game.currency}` : (game.prize || 'N/A'), inline: true },
+                    { name: `${e('members')} Host`,        value: `<@${game.host_id}>`, inline: true },
+                    { name: `${e('payout')} Status`,       value: `${e('wrong')} Not Claimed — winner did not open a ticket within ${claimHours}hrs`, inline: false },
+                  );
+                await msg.edit({ embeds: [notClaimedEmbed] });
+              } catch {}
+            }
+          } catch (err) { console.error('[Winners] Not-claimed check failed:', err.message); }
+        }, claimHours * 60 * 60 * 1000);
       }
       if (cfg.game_transcript_channel_id) {
         const transcriptCh = await interaction.client.channels.fetch(cfg.game_transcript_channel_id);
