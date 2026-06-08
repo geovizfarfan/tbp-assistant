@@ -1,109 +1,66 @@
 const { query } = require('./database');
 
-/**
- * Returns full eligibility result for a staff member in the current pay period.
- */
-async function checkEligibility(guildId, userId) {
-  // Load requirements
-  const reqRes = await query(
-    `SELECT * FROM pay_requirements WHERE guild_id = $1`,
-    [guildId]
-  );
+async function checkEligibility(guildId, userId, periodDays) {
+  const now = new Date();
+  const periodStart = new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000);
+
+  const reqRes = await query(`SELECT * FROM pay_requirements WHERE guild_id=$1`, [guildId]);
   const req = reqRes.rows[0] || {
-    min_games_hosted: 10,
-    min_giveaways_hosted: 2,
-    min_raffles_hosted: 2,
-    max_late_payouts: 3,
-    max_missed_shifts: 1,
-    ticket_response_limit_minutes: 30,
-    pay_period_days: 30,
+    min_games: 20, min_rumble: 4, min_raffles: 3, min_giveaways: 2,
+    max_late_payouts: 3, max_missed_shifts: 0, pay_period_days: 30
   };
 
-  const periodStart = new Date();
-  periodStart.setDate(periodStart.getDate() - req.pay_period_days);
-
-  // Games hosted
   const gamesRes = await query(
-    `SELECT COUNT(*) FROM game_logs WHERE guild_id=$1 AND host_id=$2 AND started_at >= $3`,
+    `SELECT COUNT(*) FROM game_logs WHERE guild_id=$1 AND host_id=$2 AND started_at > $3 AND status != 'cancelled'`,
     [guildId, userId, periodStart]
   );
-  const gamesHosted = parseInt(gamesRes.rows[0].count);
-
-  // Giveaways hosted
-  const gwRes = await query(
-    `SELECT COUNT(*) FROM giveaways WHERE guild_id=$1 AND host_id=$2 AND started_at >= $3`,
+  const rumbleRes = await query(
+    `SELECT COUNT(*) FROM game_logs WHERE guild_id=$1 AND host_id=$2 AND started_at > $3 AND LOWER(game_name) LIKE '%rumble%'`,
     [guildId, userId, periodStart]
   );
-  const giveawaysHosted = parseInt(gwRes.rows[0].count);
-
-  // Raffles hosted
-  const rfRes = await query(
-    `SELECT COUNT(*) FROM raffles WHERE guild_id=$1 AND host_id=$2 AND created_at >= $3`,
+  const rafflesRes = await query(
+    `SELECT COUNT(*) FROM raffles WHERE guild_id=$1 AND host_id=$2 AND created_at > $3`,
     [guildId, userId, periodStart]
   );
-  const rafflesHosted = parseInt(rfRes.rows[0].count);
-
-  // Late payouts
-  const lpRes = await query(
-    `SELECT COUNT(*) FROM (
-      SELECT payout_status FROM raffles WHERE host_id=$1 AND guild_id=$2 AND payout_status='late' AND created_at >= $3
-      UNION ALL
-      SELECT payout_status FROM giveaways WHERE host_id=$1 AND guild_id=$2 AND payout_status='late' AND started_at >= $3
-      UNION ALL
-      SELECT payout_status FROM game_logs WHERE host_id=$1 AND guild_id=$2 AND payout_status='late' AND started_at >= $3
-    ) sub`,
-    [userId, guildId, periodStart]
-  );
-  const latePayouts = parseInt(lpRes.rows[0].count);
-
-  // Missed shifts
-  const msRes = await query(
-    `SELECT COUNT(*) FROM schedules WHERE guild_id=$1 AND staff_id=$2 AND status='missed' AND scheduled_date >= $3`,
+  const giveawaysRes = await query(
+    `SELECT COUNT(*) FROM giveaways WHERE guild_id=$1 AND host_id=$2 AND created_at > $3`,
     [guildId, userId, periodStart]
   );
-  const missedShifts = parseInt(msRes.rows[0].count);
-
-  // Late tickets
-  const ltRes = await query(
-    `SELECT COUNT(*) FROM ticket_logs WHERE guild_id=$1 AND first_staff_responder=$2 AND late_response=true AND opened_at >= $3`,
+  const lateRes = await query(
+    `SELECT COUNT(*) FROM payout_reminders WHERE guild_id=$1 AND host_id=$2 AND created_at > $3 AND escalation_level >= 2`,
     [guildId, userId, periodStart]
   );
-  const lateTickets = parseInt(ltRes.rows[0].count);
+  const missedRes = await query(
+    `SELECT COUNT(*) FROM schedules WHERE guild_id=$1 AND host_id=$2 AND scheduled_at > $3 AND status='missed'`,
+    [guildId, userId, periodStart]
+  );
+  const totalScheduled = parseInt((await query(
+    `SELECT COUNT(*) FROM schedules WHERE guild_id=$1 AND host_id=$2 AND scheduled_at > $3`,
+    [guildId, userId, periodStart]
+  )).rows[0].count);
 
-  const notes = [];
-  let eligible = 'full';
+  const totalGames     = parseInt(gamesRes.rows[0].count);
+  const rumbleGames    = parseInt(rumbleRes.rows[0].count);
+  const totalRaffles   = parseInt(rafflesRes.rows[0].count);
+  const totalGiveaways = parseInt(giveawaysRes.rows[0].count);
+  const latePayouts    = parseInt(lateRes.rows[0].count);
+  const missedShifts   = parseInt(missedRes.rows[0].count);
+  const grandTotal     = totalGames + totalRaffles + totalGiveaways;
 
-  if (gamesHosted < req.min_games_hosted) {
-    notes.push(`❌ Games short by ${req.min_games_hosted - gamesHosted}`);
-    eligible = 'partial';
-  }
-  if (giveawaysHosted < req.min_giveaways_hosted) {
-    notes.push(`❌ Giveaways short by ${req.min_giveaways_hosted - giveawaysHosted}`);
-    eligible = 'partial';
-  }
-  if (rafflesHosted < req.min_raffles_hosted) {
-    notes.push(`❌ Raffles short by ${req.min_raffles_hosted - rafflesHosted}`);
-    eligible = 'partial';
-  }
-  if (latePayouts > req.max_late_payouts) {
-    notes.push(`⚠️ Too many late payouts (${latePayouts})`);
-    if (eligible === 'full') eligible = 'review';
-  }
-  if (missedShifts > req.max_missed_shifts) {
-    notes.push(`⚠️ Missed shifts exceed limit (${missedShifts})`);
-    if (eligible === 'full') eligible = 'review';
-  }
-  if (gamesHosted === 0 && giveawaysHosted === 0 && rafflesHosted === 0) {
-    eligible = 'not_eligible';
-    notes.push('❌ No hosting activity this period');
+  const checks = [
+    { name: 'Games',        actual: grandTotal,      required: req.min_games,        pass: grandTotal >= req.min_games },
+    { name: 'Rumble',       actual: rumbleGames,      required: req.min_rumble || 4,  pass: rumbleGames >= (req.min_rumble || 4) },
+    { name: 'Raffles',      actual: totalRaffles,     required: req.min_raffles,      pass: totalRaffles >= req.min_raffles },
+    { name: 'Giveaways',    actual: totalGiveaways,   required: req.min_giveaways,    pass: totalGiveaways >= req.min_giveaways },
+    { name: 'Late payouts', actual: latePayouts,      required: req.max_late_payouts, pass: latePayouts <= req.max_late_payouts, inverse: true },
+  ];
+
+  if (totalScheduled > 0) {
+    checks.push({ name: 'Missed shifts', actual: missedShifts, required: req.max_missed_shifts, pass: missedShifts <= req.max_missed_shifts, inverse: true });
   }
 
-  return {
-    eligible,
-    gamesHosted, giveawaysHosted, rafflesHosted,
-    latePayouts, missedShifts, lateTickets,
-    req, notes,
-  };
+  const eligible = checks.every(c => c.pass);
+  return { checks, eligible, grandTotal, rumbleGames, totalRaffles, totalGiveaways, latePayouts, missedShifts };
 }
 
 module.exports = { checkEligibility };
