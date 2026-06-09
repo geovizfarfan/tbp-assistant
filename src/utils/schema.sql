@@ -237,5 +237,8 @@ CREATE TABLE IF NOT EXISTS guild_config (
   schedule_channel_id TEXT,
   staff_notif_channel_id TEXT,
   game_transcript_channel_id TEXT,
+  mod_role_id TEXT,
+  admin_role_id TEXT,
+  game_ping_role_id TEXT,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

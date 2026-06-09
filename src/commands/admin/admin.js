@@ -21,6 +21,36 @@ async function ticketSetup(interaction) {
   await interaction.editReply({ embeds: [embed] });
 }
 
+
+async function setRoles(interaction) {
+  const modRole      = interaction.options.getRole('mod_role');
+  const adminRole    = interaction.options.getRole('admin_role');
+  const gamePingRole = interaction.options.getRole('game_ping_role');
+  await interaction.deferReply({ ephemeral: true });
+
+  if (!modRole && !adminRole && !gamePingRole) {
+    return interaction.editReply({ content: `${e('wrong')} Please provide at least one role.` });
+  }
+
+  await query(
+    `INSERT INTO guild_config (guild_id, mod_role_id, admin_role_id, game_ping_role_id)
+     VALUES ($1,$2,$3,$4)
+     ON CONFLICT (guild_id) DO UPDATE SET
+       mod_role_id       = COALESCE($2, guild_config.mod_role_id),
+       admin_role_id     = COALESCE($3, guild_config.admin_role_id),
+       game_ping_role_id = COALESCE($4, guild_config.game_ping_role_id),
+       updated_at = NOW()`,
+    [interaction.guildId, modRole?.id || null, adminRole?.id || null, gamePingRole?.id || null]
+  );
+
+  const lines = [];
+  if (modRole)      lines.push(`${e('checkmark')} Mod role → <@&${modRole.id}> (ticket 1hr/3hr pings)`);
+  if (adminRole)    lines.push(`${e('checkmark')} Admin role → <@&${adminRole.id}> (ticket 6hr/12hr pings)`);
+  if (gamePingRole) lines.push(`${e('checkmark')} Game ping role → <@&${gamePingRole.id}> (new game/raffle alerts)`);
+
+  await interaction.editReply({ content: lines.join('\n') });
+}
+
 async function setChannels(interaction) {
   const scheduleChannel  = interaction.options.getChannel('schedule_channel');
   const winnerChannel    = interaction.options.getChannel('winner_channel');
@@ -173,6 +203,13 @@ module.exports = {
       .setDescription('How to set up ticket tracking for this bot')
     )
     .addSubcommand(sub => sub
+      .setName('set-roles')
+      .setDescription('Set roles for ticket notifications and game pings')
+      .addRoleOption(o => o.setName('mod_role').setDescription('Mod role — pinged for unclaimed tickets at 1hr and 3hr').setRequired(false))
+      .addRoleOption(o => o.setName('admin_role').setDescription('Admin role — pinged for unclaimed tickets at 6hr and 12hr').setRequired(false))
+      .addRoleOption(o => o.setName('game_ping_role').setDescription('Role pinged when a new game or raffle goes live').setRequired(false))
+    )
+    .addSubcommand(sub => sub
       .setName('set-channels')
       .setDescription('Set all bot channels in one command')
       .addChannelOption(o => o.setName('schedule_channel').setDescription('Live game schedule board channel').setRequired(false))
@@ -208,6 +245,7 @@ module.exports = {
     if (sub === 'ticket-report')   await ticketReport(interaction);
     if (sub === 'set-requirements')await setRequirements(interaction);
     if (sub === 'ticket-setup')    await ticketSetup(interaction);
+    if (sub === 'set-roles')       await setRoles(interaction);
     if (sub === 'set-channels')    await setChannels(interaction);
     if (sub === 'fix-payout')      await fixPayout(interaction);
     if (sub === 'stop-reminder')   await stopReminder(interaction);
