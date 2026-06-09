@@ -26,7 +26,8 @@ module.exports = {
     .addSubcommand(sub => sub
       .setName('list')
       .setDescription('View your hosted games')
-      .addUserOption(o => o.setName('user').setDescription('View a specific staff member\'s active games').setRequired(false))
+      .addUserOption(o => o.setName('user').setDescription('View a specific staff member\'s games').setRequired(false))
+      .addBooleanOption(o => o.setName('ended').setDescription('Show ended games instead of active').setRequired(false))
     )
     .addSubcommand(sub => sub
       .setName('edit')
@@ -254,17 +255,22 @@ async function listGames(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
   const hostId = targetUser ? targetUser.id : interaction.user.id;
+  const showEnded = interaction.options.getBoolean('ended') || false;
+  const statusFilter = showEnded ? 'ended' : 'active';
+
   const res = await query(
-    `SELECT * FROM game_logs WHERE guild_id=$1 AND host_id=$2 AND status='active' ORDER BY started_at DESC LIMIT 20`,
-    [interaction.guildId, hostId]
+    `SELECT * FROM game_logs WHERE guild_id=$1 AND host_id=$2 AND status=$3 ORDER BY started_at DESC LIMIT 20`,
+    [interaction.guildId, hostId, statusFilter]
   );
 
   if (!res.rows.length) {
     const who = targetUser ? `<@${targetUser.id}>` : 'You';
-    return interaction.editReply({ content: `${who} has no active games.` });
+    return interaction.editReply({ content: `${who} has no ${statusFilter} games.` });
   }
 
-  const title = targetUser ? `${e('controller')} ${targetUser.username}'s Active Games` : `${e('controller')} Your Active Games`;
+  const title = targetUser
+    ? `${e('controller')} ${targetUser.username}'s ${showEnded ? 'Ended' : 'Active'} Games`
+    : `${e('controller')} Your ${showEnded ? 'Ended' : 'Active'} Games`;
   const embed = baseEmbed(title, COLORS.lightpurple, interaction.guild?.name);
 
   for (const g of res.rows) {
