@@ -226,23 +226,7 @@ async function endGame(interaction) {
           } catch (err) { console.error('[Winners] Not-claimed check failed:', err.message); }
         }, claimHours * 60 * 60 * 1000);
       }
-      if (cfg.game_transcript_channel_id) {
-        const transcriptCh = await interaction.client.channels.fetch(cfg.game_transcript_channel_id);
-        const transcriptEmbed = baseEmbed(`${e('receipt')} Game Transcript — ${game.game_name}`, 0xCBC3E3, interaction.guild?.name)
-          .addFields(
-            { name: `${e('controller')} Game`,        value: game.game_name, inline: true },
-            { name: `${e('members')} Host`,            value: `<@${game.host_id}>`, inline: true },
-            { name: `${e('trophies')} Winner`,         value: `<@${winner.id}>`, inline: true },
-            { name: `${e('purplesparkle')} Prize`,     value: game.prize_amount ? `${game.prize_amount} ${game.currency}` : (game.prize || 'N/A'), inline: true },
-            { name: `${e('RojasClock')} Started`,      value: tsF(game.started_at), inline: true },
-            { name: `${e('confetti')} Ended`,          value: tsF(now), inline: true },
-            { name: `${e('RojasClock')} Duration`,     value: durationStr, inline: true },
-            { name: `${e('payout')} Payout`,           value: `${e('Loading')} Pending`, inline: true },
-            { name: `${e('members')} Logged by`,       value: `<@${interaction.user.id}>`, inline: true },
-            { name: `${e('purplesparkle')} Jump Link`, value: game.message_link ? `[View Game](${game.message_link})` : 'N/A', inline: true },
-          );
-        await transcriptCh.send({ embeds: [transcriptEmbed] });
-      }
+
     }
   } catch (err) {
     console.error('[GameEnd] Channel post failed:', err.message);

@@ -96,6 +96,35 @@ module.exports = {
       }
     } catch (err) { console.error('[Payout] Winner message update failed:', err.message); }
 
+    // Post transcript to admin channel after payout confirmed
+    try {
+      const { e } = require('../../utils/appEmojis');
+      const { baseEmbed, tsF, COLORS } = require('../../utils/embeds');
+      const cfgRes = await query(`SELECT game_transcript_channel_id FROM guild_config WHERE guild_id=$1`, [interaction.guildId]);
+      if (cfgRes.rows.length && cfgRes.rows[0].game_transcript_channel_id && foundType === 'game') {
+        const transcriptCh = await interaction.client.channels.fetch(cfgRes.rows[0].game_transcript_channel_id);
+        const durationMs = now - new Date(found.started_at);
+        const durationMins = Math.round(durationMs / 60000);
+        const durationHrs = Math.floor(durationMins / 60);
+        const durationRem = durationMins % 60;
+        const durationStr = durationHrs > 0 ? (durationRem > 0 ? `${durationHrs}h ${durationRem}m` : `${durationHrs}h`) : `${durationMins}m`;
+        const transcriptEmbed = baseEmbed(`${e('receipt')} Game Transcript — ${found.game_name}`, 0xCBC3E3, interaction.guild?.name)
+          .addFields(
+            { name: `${e('controller')} Game`,         value: found.game_name, inline: true },
+            { name: `${e('members')} Host`,             value: `<@${found.host_id}>`, inline: true },
+            { name: `${e('trophies')} Winner`,          value: `<@${finalWinnerId}>`, inline: true },
+            { name: `${e('purplesparkle')} Prize`,      value: prize, inline: true },
+            { name: `${e('RojasClock')} Started`,       value: tsF(found.started_at), inline: true },
+            { name: `${e('confetti')} Ended`,           value: tsF(found.ended_at), inline: true },
+            { name: `${e('RojasClock')} Duration`,      value: durationStr, inline: true },
+            { name: `${e('payout')} Payout`,            value: `${e('checkmark')} Confirmed by <@${interaction.user.id}>`, inline: true },
+            { name: `${e('members')} Confirmed by`,     value: `<@${interaction.user.id}>`, inline: true },
+            { name: `${e('purplesparkle')} Jump Link`,  value: found.message_link ? `[View Game](${found.message_link})` : 'N/A', inline: true },
+          );
+        await transcriptCh.send({ embeds: [transcriptEmbed] });
+      }
+    } catch (err) { console.error('[Payout] Transcript post failed:', err.message); }
+
     const typeLabel = foundType.charAt(0).toUpperCase() + foundType.slice(1);
     const prize = found.prize_amount ? `${found.prize_amount} ${found.currency}` : found.prize || 'N/A';
     const winner = finalWinnerId ? `<@${finalWinnerId}>` : 'N/A';
