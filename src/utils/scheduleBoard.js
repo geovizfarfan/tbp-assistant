@@ -101,7 +101,7 @@ async function refreshScheduleBoard(client, guildId) {
     }
 
     const msg = await channel.send({ embeds: [embed] });
-    try { await msg.pin(); } catch {}
+
     await query(
       `UPDATE game_schedule_board SET message_id=$1, updated_at=NOW() WHERE guild_id=$2`,
       [msg.id, guildId]
