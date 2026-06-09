@@ -186,7 +186,7 @@ async function endGame(interaction) {
       const ticketMention = cfg.ticket_channel_id ? `<#${cfg.ticket_channel_id}>` : 'our support channel';
       if (cfg.winner_channel_id) {
         const winnerCh = await interaction.client.channels.fetch(cfg.winner_channel_id);
-        const winEmbed = baseEmbed(`${e('confetti')} Game Winner — ${game.game_name}`, 0x7F36F5, interaction.guild?.name)
+        const winEmbed = baseEmbed(`${e('confetti')} Game Winner — ${game.game_name}`, 0xFF00C1, interaction.guild?.name)
           .addFields(
             { name: `${e('trophies')} Winner`,    value: `<@${winner.id}>`, inline: true },
             { name: `${e('purplesparkle')} Prize`, value: game.prize_amount ? `${game.prize_amount} ${game.currency}` : (game.prize || 'N/A'), inline: true },
@@ -219,7 +219,7 @@ async function endGame(interaction) {
               await query(`UPDATE winner_announcements SET status='not_claimed' WHERE id=$1`, [annId]);
               try {
                 const msg = await winnerCh.messages.fetch(winnerMsg.id);
-                const notClaimedEmbed = baseEmbed(`${e('confetti')} Game Winner — ${game.game_name}`, 0x7F36F5, interaction.guild?.name)
+                const notClaimedEmbed = baseEmbed(`${e('confetti')} Game Winner — ${game.game_name}`, 0x00FFF9, interaction.guild?.name)
                   .addFields(
                     { name: `${e('trophies')} Winner`,    value: `<@${winner.id}>`, inline: true },
                     { name: `${e('purplesparkle')} Prize`, value: game.prize_amount ? `${game.prize_amount} ${game.currency}` : (game.prize || 'N/A'), inline: true },
