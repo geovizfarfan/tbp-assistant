@@ -43,7 +43,21 @@ async function runPayoutReminders(client) {
       const alert   = tier.markLate ? (e('atention') || '<a:atention:1512916995543273642>') : '';
       const lateTag = tier.markLate ? ' **LATE PAYOUT**' : '';
       const suffix  = adminMention ? '\n' + adminMention : '';
-      const msg     = clock + alert + lateTag + ' <@' + reminder.host_id + '> reminder: <@' + reminder.winner_id + '> is waiting for **' + reminder.prize + '**.' + suffix;
+      // Get game details for jump link
+      let gameInfo = '';
+      try {
+        const table = reminder.type === 'raffle' ? 'raffles' : reminder.type === 'giveaway' ? 'giveaways' : 'game_logs';
+        const nameCol = reminder.type === 'game' ? 'game_name' : 'prize';
+        const gameRes = await query(`SELECT ${nameCol}, message_link FROM ${table} WHERE id=$1`, [reminder.ref_id]);
+        if (gameRes.rows.length) {
+          const g = gameRes.rows[0];
+          const name = g.game_name || g.prize || reminder.type;
+          const link = g.message_link ? ` — [Jump to Game](${g.message_link})` : '';
+          gameInfo = ' | **' + name + '**' + link;
+        }
+      } catch {}
+
+      const msg = clock + alert + lateTag + ' <@' + reminder.host_id + '> reminder: <@' + reminder.winner_id + '> is waiting for **' + reminder.prize + '**' + gameInfo + '.' + suffix;
       // Post to staff notif channel if configured, otherwise fall back to game channel
       try {
         const configRes = await query(`SELECT staff_notif_channel_id FROM guild_config WHERE guild_id=$1`, [reminder.guild_id]);
