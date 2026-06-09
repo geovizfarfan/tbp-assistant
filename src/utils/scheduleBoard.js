@@ -2,7 +2,7 @@ const { query } = require('./database');
 const { e } = require('./appEmojis');
 const { baseEmbed, tsF, tsR, COLORS } = require('./embeds');
 
-async function refreshScheduleBoard(client, guildId) {
+async function refreshScheduleBoard(client, guildId, pingRole = false) {
   // Check guild_config first, fall back to game_schedule_board
   let channelId, messageId;
   const configRes = await query(`SELECT schedule_channel_id FROM guild_config WHERE guild_id=$1`, [guildId]);
@@ -68,8 +68,8 @@ async function refreshScheduleBoard(client, guildId) {
 
   embed.setTimestamp();
 
-  // Ping game role if new content - delete previous ping first
-  try {
+  // Ping game role only when new game added
+  if (pingRole) try {
     const cfgRes = await query(`SELECT game_ping_role_id, schedule_channel_id, last_ping_message_id FROM guild_config WHERE guild_id=$1`, [guildId]);
     if (cfgRes.rows.length && cfgRes.rows[0].game_ping_role_id && cfgRes.rows[0].schedule_channel_id) {
       const schedCh = await client.channels.fetch(cfgRes.rows[0].schedule_channel_id);

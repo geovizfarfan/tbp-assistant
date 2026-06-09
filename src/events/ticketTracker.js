@@ -231,6 +231,7 @@ async function handleChannelDelete(channel) {
   const parentIsTicket = channel.parent?.name?.toLowerCase().includes('ticket');
   if (!isTicket && !parentIsTicket) return;
   clearMemberIdleTimers(channel.id); clearResponseTimer(channel.id); clearUnclaimedTimers(channel.id);
+  clearMemberIdleTimers(channel.id); clearResponseTimer(channel.id); clearUnclaimedTimers(channel.id);
   await query('UPDATE ticket_logs SET status=\'closed\', closed_at=NOW() WHERE channel_id=$1 AND status=\'open\'', [channel.id]);
 }
 

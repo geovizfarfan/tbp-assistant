@@ -126,7 +126,7 @@ async function logGame(interaction) {
     .setFooter({ text: `${interaction.guild?.name || '👑 Royal Ops'} — Use /game end when finished` });
 
   await interaction.editReply({ embeds: [embed] });
-  await refreshScheduleBoard(interaction.client, interaction.guildId);
+  await refreshScheduleBoard(interaction.client, interaction.guildId, true);
 }
 
 async function endGame(interaction) {
