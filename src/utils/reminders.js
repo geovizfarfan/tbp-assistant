@@ -87,8 +87,34 @@ async function runPayoutReminders(client) {
   }
 }
 
+async function checkNotClaimed(client) {
+  try {
+    const now = new Date();
+    const res = await query(`SELECT wa.*, b.id as booster_id FROM winner_announcements wa LEFT JOIN boosters b ON wa.winner_id = b.user_id AND wa.guild_id = b.guild_id AND b.active = true WHERE wa.status = 'pending'`, []);
+    for (const ann of res.rows) {
+      const claimHours = ann.booster_id ? 12 : 6;
+      const hoursElapsed = (now - new Date(ann.created_at)) / (60 * 60 * 1000);
+      if (hoursElapsed < claimHours) continue;
+      const ticketRes = await query(`SELECT id FROM ticket_logs WHERE guild_id=$1 AND opened_by=$2 AND opened_at > $3`, [ann.guild_id, ann.winner_id, new Date(ann.created_at)]);
+      if (ticketRes.rows.length) continue;
+      await query(`UPDATE winner_announcements SET status='not_claimed' WHERE id=$1`, [ann.id]);
+      try {
+        const { EmbedBuilder } = require('discord.js');
+        const ch = await client.channels.fetch(ann.channel_id);
+        const msg = await ch.messages.fetch(ann.message_id);
+        if (msg.embeds[0]) {
+          const embed = EmbedBuilder.from(msg.embeds[0]).setColor(0x00FFF9).spliceFields(3, 1, { name: 'Status', value: 'Not Claimed — winner did not open a ticket within ' + claimHours + 'hrs', inline: false });
+          await msg.edit({ embeds: [embed] });
+        }
+      } catch {}
+      console.log('[NotClaimed] Marked #' + ann.id + ' as not claimed');
+    }
+  } catch (err) { console.error('[NotClaimed] Check failed:', err.message); }
+}
+
 function startReminderLoop(client) {
-  setInterval(() => runPayoutReminders(client), 5 * 60 * 1000); // check every 5 min
+  setInterval(() => runPayoutReminders(client), 5 * 60 * 1000);
+  setInterval(() => checkNotClaimed(client), 5 * 60 * 1000);
   console.log('[Reminders] Payout reminder loop started.');
 }
 
