@@ -52,13 +52,17 @@ async function refreshScheduleBoard(client, guildId) {
 
   for (const raffle of rafflesRes.rows) {
     const prizeText = raffle.prize_amount ? `${raffle.prize_amount} ${raffle.currency}` : raffle.prize || 'No prize';
+    const jumpLink = raffle.message_id && raffle.channel_id
+      ? `https://discord.com/channels/${raffle.guild_id}/${raffle.channel_id}/${raffle.message_id}`
+      : null;
     embed.addFields({
       name: `${e('raffle')} ${prizeText} Raffle`,
       value: [
         `**Host:** <@${raffle.host_id}>`,
         `**Prize:** ${prizeText}`,
         `**Ends:** ${tsF(raffle.ends_at)} (${tsR(raffle.ends_at)})`,
-      ].join('\n'),
+        jumpLink ? `**[Jump to Raffle](${jumpLink})**` : '',
+      ].filter(Boolean).join('\n'),
     });
   }
 
