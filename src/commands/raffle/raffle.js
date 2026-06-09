@@ -20,7 +20,7 @@ const PRIZE_CHOICES = [
   { label: 'Other Gift (specify below)',value: 'gift',        emoji: '🎀' },
 ];
 
-module.exports = { autoEndRaffle,
+module.exports = {
   data: new SlashCommandBuilder()
     .setName('raffle')
     .setDescription('Raffle management')
@@ -279,3 +279,5 @@ async function listRaffles(interaction) {
   }
   await interaction.editReply({ embeds: [embed] });
 }
+
+module.exports.autoEndRaffle = autoEndRaffle;
