@@ -212,12 +212,25 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
       [raffleId, raffle.host_id, winner.user_id, `${raffle.prize_amount ? raffle.prize_amount + ' ' : ''}${raffle.prize}`, guildId, channelId]
     );
 
-    const winEmbed = baseEmbed(`${e('raffle')} RAFFLE WINNER!`, COLORS.tbppurple, guild.name)
-      .setDescription(
-        `**Winner:** <@${winner.user_id}>\n**Prize:** ${raffle.prize_amount ? `${raffle.prize_amount} ` : ''}${raffle.prize}\n**Host:** <@${raffle.host_id}>\n**Ended:** ${tsF(now)}\n\n*Payout pending — host will reach out shortly.*`
+    // Get ticket channel if configured
+    let ticketMention = 'our support channel';
+    try {
+      const cfgRes = await query(`SELECT ticket_channel_id FROM guild_config WHERE guild_id=$1`, [guildId]);
+      if (cfgRes.rows.length && cfgRes.rows[0].ticket_channel_id) {
+        ticketMention = `<#${cfgRes.rows[0].ticket_channel_id}>`;
+      }
+    } catch {}
+
+    const prizeText = raffle.prize_amount ? `${raffle.prize_amount} ${raffle.prize}` : raffle.prize;
+    const winEmbed = baseEmbed(`${e('confetti')} Raffle Winner — ${prizeText} Raffle`, COLORS.tbppurple, guild.name)
+      .addFields(
+        { name: `${e('trophies')} Winner`,     value: `<@${winner.user_id}>`, inline: true },
+        { name: `${e('purplesparkle')} Prize`,  value: prizeText, inline: true },
+        { name: `${e('members')} Host`,         value: `<@${raffle.host_id}>`, inline: true },
+        { name: `${e('payout')} Payout`,        value: `${e('Loading')} Pending — please open a ticket in ${ticketMention} to claim your prize!`, inline: false },
       );
 
-    await channel.send({ content: `${e('raffle')} <@${winner.user_id}> Congratulations!`, embeds: [winEmbed] });
+    await channel.send({ content: `${e('confetti')} Congratulations <@${winner.user_id}>!`, embeds: [winEmbed] });
     await refreshScheduleBoard(client, guildId);
 
     try {
