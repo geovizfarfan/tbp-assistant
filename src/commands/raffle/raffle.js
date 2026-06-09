@@ -193,7 +193,7 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
 
     if (!entries.length) {
       await query(`UPDATE raffles SET status='ended', ended_at=$1 WHERE id=$2`, [now, raffleId]);
-      await channel.send({ embeds: [baseEmbed(`${e('raffle')} RAFFLE ENDED`, COLORS.grey, interaction.guild?.name).setDescription('No entries — no winner.')] });
+      await channel.send({ embeds: [baseEmbed(`${e('raffle')} RAFFLE ENDED`, COLORS.grey, guild.name).setDescription('No entries — no winner.')] });
       return;
     }
 
@@ -212,7 +212,7 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
       [raffleId, raffle.host_id, winner.user_id, `${raffle.prize_amount ? raffle.prize_amount + ' ' : ''}${raffle.prize}`, guildId, channelId]
     );
 
-    const winEmbed = baseEmbed(`${e('raffle')} RAFFLE WINNER!`, COLORS.tbppurple, interaction.guild?.name)
+    const winEmbed = baseEmbed(`${e('raffle')} RAFFLE WINNER!`, COLORS.tbppurple, guild.name)
       .setDescription(
         `**Winner:** <@${winner.user_id}>\n**Prize:** ${raffle.prize_amount ? `${raffle.prize_amount} ` : ''}${raffle.prize}\n**Host:** <@${raffle.host_id}>\n**Ended:** ${tsF(now)}\n\n*Payout pending — host will reach out shortly.*`
       );
@@ -223,7 +223,7 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
     try {
       const origMsg = await channel.messages.fetch(messageId);
       await origMsg.edit({
-        embeds: [baseEmbed(`${e('raffle')} RAFFLE — ENDED`, COLORS.grey, interaction.guild?.name).setDescription(`**Winner:** <@${winner.user_id}>\n**Ended:** ${tsF(now)}`)],
+        embeds: [baseEmbed(`${e('raffle')} RAFFLE — ENDED`, COLORS.grey, guild.name).setDescription(`**Winner:** <@${winner.user_id}>\n**Ended:** ${tsF(now)}`)],
         components: [],
       });
     } catch {}
