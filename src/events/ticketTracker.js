@@ -16,10 +16,9 @@ async function handleThreadCreate(thread, client) {
   await query('INSERT INTO ticket_logs (guild_id, channel_id, opened_at, opened_by, status) VALUES ($1,$2,$3,$4,\'open\') ON CONFLICT DO NOTHING', [guildId, thread.id, new Date(), 'system']);
   try {
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('ticket_claim_' + thread.id).setLabel('Claim Ticket').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('ticket_payout_' + thread.id).setLabel('Confirm Payout').setStyle(ButtonStyle.Success)
+      new ButtonBuilder().setCustomId('ticket_claim_' + thread.id).setLabel('Claim Ticket').setStyle(ButtonStyle.Primary)
     );
-    await thread.send({ content: '<a:atention:1512916995543273642> This ticket is unclaimed — staff click **Claim Ticket** to take it. If this is a prize claim click **Confirm Payout**.', components: [row] });
+    await thread.send({ content: '<a:atention:1512916995543273642> This ticket is unclaimed — staff click **Claim Ticket** to take it.', components: [row] });
   } catch (err) { console.error('[Tickets] Could not post buttons:', err.message); }
   startUnclaimedTimers(thread.id, guildId, client);
   startMemberIdleTimers(thread, guildId, client);
