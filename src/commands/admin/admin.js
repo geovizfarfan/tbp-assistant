@@ -62,6 +62,69 @@ async function setChannels(interaction) {
   }
 }
 
+
+async function fixPayout(interaction) {
+  const id     = interaction.options.getInteger('id');
+  const winner = interaction.options.getUser('winner');
+  await interaction.deferReply({ ephemeral: true });
+
+  // Admin/owner only
+  const staffRes = await query(`SELECT role FROM staff WHERE user_id=$1 AND active=true`, [interaction.user.id]);
+  if (!staffRes.rows.length || !['admin','owner'].includes(staffRes.rows[0].role)) {
+    return interaction.editReply({ content: `${e('wrong')} Only admins and owners can fix payouts.` });
+  }
+
+  // Find which table
+  const tables = [
+    { table: 'game_logs',  type: 'game'    },
+    { table: 'raffles',    type: 'raffle'  },
+    { table: 'giveaways',  type: 'giveaway'},
+  ];
+  let found = null, foundType = null;
+  for (const { table, type } of tables) {
+    const res = await query(`SELECT * FROM ${table} WHERE id=$1 AND guild_id=$2`, [id, interaction.guildId]);
+    if (res.rows.length) { found = res.rows[0]; foundType = type; break; }
+  }
+
+  if (!found) return interaction.editReply({ content: `${e('wrong')} No game/raffle found with ID #${id}.` });
+
+  const tableMap = { game: 'game_logs', raffle: 'raffles', giveaway: 'giveaways' };
+
+  // Reset payout status and update winner
+  await query(
+    `UPDATE ${tableMap[foundType]} SET payout_status='pending', winner_id=$1 WHERE id=$2`,
+    [winner.id, id]
+  );
+  await query(
+    `UPDATE member_wins SET user_id=$1, username=$2 WHERE ref_id=$3 AND type=$4`,
+    [winner.id, winner.username, id, foundType]
+  );
+  await query(
+    `UPDATE payout_reminders SET resolved=false, winner_id=$1, escalation_level=0, last_reminded_at=NULL WHERE ref_id=$2 AND type=$3`,
+    [winner.id, id, foundType]
+  );
+
+  // Update winner announcement if exists
+  try {
+    const { e: emoji } = require('../../utils/appEmojis');
+    const { EmbedBuilder } = require('discord.js');
+    const annRes = await query(`SELECT * FROM winner_announcements WHERE game_id=$1 AND guild_id=$2`, [id, interaction.guildId]);
+    if (annRes.rows.length) {
+      await query(`UPDATE winner_announcements SET winner_id=$1, status='pending' WHERE game_id=$2 AND guild_id=$3`, [winner.id, id, interaction.guildId]);
+      const ann = annRes.rows[0];
+      const winnerCh = await interaction.client.channels.fetch(ann.channel_id);
+      const msg = await winnerCh.messages.fetch(ann.message_id);
+      if (msg.embeds[0]) {
+        const fixed = EmbedBuilder.from(msg.embeds[0])
+          .spliceFields(0, 1, { name: `${emoji('trophies')} Winner`, value: `<@${winner.id}>`, inline: true });
+        await msg.edit({ embeds: [fixed] });
+      }
+    }
+  } catch {}
+
+  await interaction.editReply({ content: `${e('checkmark')} Payout #${id} fixed. Winner updated to <@${winner.id}>. Reminder restarted.` });
+}
+
 async function stopReminder(interaction) {
   const id  = interaction.options.getInteger('id');
   await interaction.deferReply({ ephemeral: true });
@@ -119,6 +182,12 @@ module.exports = {
       .addChannelOption(o => o.setName('transcript_channel').setDescription('Admin-only channel for game transcripts').setRequired(false))
     )
     .addSubcommand(sub => sub
+      .setName('fix-payout')
+      .setDescription('Fix a payout that was confirmed with the wrong winner (Admin only)')
+      .addIntegerOption(o => o.setName('id').setDescription('Game/raffle ID').setRequired(true))
+      .addUserOption(o => o.setName('winner').setDescription('The correct winner').setRequired(true))
+    )
+    .addSubcommand(sub => sub
       .setName('stop-reminder')
       .setDescription('Stop a payout reminder')
       .addIntegerOption(o => o.setName('id').setDescription('Reminder ID (from /admin late-payouts)').setRequired(true))
@@ -140,6 +209,7 @@ module.exports = {
     if (sub === 'set-requirements')await setRequirements(interaction);
     if (sub === 'ticket-setup')    await ticketSetup(interaction);
     if (sub === 'set-channels')    await setChannels(interaction);
+    if (sub === 'fix-payout')      await fixPayout(interaction);
     if (sub === 'stop-reminder')   await stopReminder(interaction);
     if (sub === 'mark-paid')       await markPaid(interaction);
   },
