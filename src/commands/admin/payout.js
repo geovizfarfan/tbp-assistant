@@ -96,6 +96,8 @@ module.exports = {
       }
     } catch (err) { console.error('[Payout] Winner message update failed:', err.message); }
 
+    const prize = found.prize_amount ? `${found.prize_amount} ${found.currency}` : found.prize || 'N/A';
+
     // Post transcript to admin channel after payout confirmed
     try {
       const { e } = require('../../utils/appEmojis');
@@ -126,7 +128,6 @@ module.exports = {
     } catch (err) { console.error('[Payout] Transcript post failed:', err.message); }
 
     const typeLabel = foundType.charAt(0).toUpperCase() + foundType.slice(1);
-    const prize = found.prize_amount ? `${found.prize_amount} ${found.currency}` : found.prize || 'N/A';
     const winner = finalWinnerId ? `<@${finalWinnerId}>` : 'N/A';
 
     const embed = baseEmbed(`${e('payout')} Payout Confirmed`, COLORS.softgreen, interaction.guild?.name)
