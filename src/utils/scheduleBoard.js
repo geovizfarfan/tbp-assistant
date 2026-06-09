@@ -68,12 +68,21 @@ async function refreshScheduleBoard(client, guildId) {
 
   embed.setTimestamp();
 
-  // Ping game role if new content
+  // Ping game role if new content - delete previous ping first
   try {
-    const cfgRes = await query(`SELECT game_ping_role_id, schedule_channel_id FROM guild_config WHERE guild_id=$1`, [guildId]);
+    const cfgRes = await query(`SELECT game_ping_role_id, schedule_channel_id, last_ping_message_id FROM guild_config WHERE guild_id=$1`, [guildId]);
     if (cfgRes.rows.length && cfgRes.rows[0].game_ping_role_id && cfgRes.rows[0].schedule_channel_id) {
       const schedCh = await client.channels.fetch(cfgRes.rows[0].schedule_channel_id);
-      await schedCh.send(`<@&${cfgRes.rows[0].game_ping_role_id}> A new game or raffle is now live!`);
+      // Delete previous ping message
+      if (cfgRes.rows[0].last_ping_message_id) {
+        try {
+          const oldMsg = await schedCh.messages.fetch(cfgRes.rows[0].last_ping_message_id);
+          await oldMsg.delete();
+        } catch {}
+      }
+      // Send new ping and save message ID
+      const pingMsg = await schedCh.send(`<@&${cfgRes.rows[0].game_ping_role_id}> A new game or raffle is now live!`);
+      await query(`UPDATE guild_config SET last_ping_message_id=$1 WHERE guild_id=$2`, [pingMsg.id, guildId]);
     }
   } catch {}
 
