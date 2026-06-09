@@ -30,6 +30,11 @@ module.exports = {
       .addBooleanOption(o => o.setName('ended').setDescription('Show ended games instead of active').setRequired(false))
     )
     .addSubcommand(sub => sub
+      .setName('delete')
+      .setDescription('Delete a logged game (Admin only)')
+      .addIntegerOption(o => o.setName('id').setDescription('Game ID').setRequired(true))
+    )
+    .addSubcommand(sub => sub
       .setName('edit')
       .setDescription('Fix a logged game — update name, link or prize')
       .addIntegerOption(o => o.setName('id').setDescription('Game ID').setRequired(true))
@@ -50,6 +55,7 @@ module.exports = {
     if (sub === 'log')       await logGame(interaction);
     if (sub === 'end')       await endGame(interaction);
     if (sub === 'list')      await listGames(interaction);
+    if (sub === 'delete')    await deleteGame(interaction);
     if (sub === 'edit')      await editGame(interaction);
     if (sub === 'set-board') await setBoard(interaction);
   },
@@ -268,6 +274,28 @@ async function listGames(interaction) {
   await interaction.editReply({ embeds: [embed] });
 }
 
+
+
+async function deleteGame(interaction) {
+  const id = interaction.options.getInteger('id');
+  await interaction.deferReply({ ephemeral: true });
+
+  // Admin/owner only
+  const staffRes = await query(`SELECT role FROM staff WHERE user_id=$1 AND active=true`, [interaction.user.id]);
+  if (!staffRes.rows.length || !['admin','owner'].includes(staffRes.rows[0].role)) {
+    return interaction.editReply({ content: `${e('wrong')} Only admins and owners can delete games.` });
+  }
+
+  const res = await query(`SELECT * FROM game_logs WHERE id=$1 AND guild_id=$2`, [id, interaction.guildId]);
+  if (!res.rows.length) return interaction.editReply({ content: `${e('wrong')} Game #${id} not found.` });
+
+  const game = res.rows[0];
+  await query(`DELETE FROM game_logs WHERE id=$1`, [id]);
+  await query(`UPDATE payout_reminders SET resolved=true WHERE type='game' AND ref_id=$1`, [id]);
+  await refreshScheduleBoard(interaction.client, interaction.guildId);
+
+  await interaction.editReply({ content: `${e('checkmark')} Game #${id} (**${game.game_name}**) deleted. Any active reminders stopped.` });
+}
 
 async function editGame(interaction) {
   const id       = interaction.options.getInteger('id');
