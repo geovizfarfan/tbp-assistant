@@ -101,6 +101,7 @@ module.exports = {
         const msg = await winnerCh.messages.fetch(ann.message_id);
         if (msg.embeds[0]) {
           const claimedEmbed = EmbedBuilder.from(msg.embeds[0])
+            .setColor(0x7F36F5)
             .spliceFields(3, 1, {
               name: e('payout') + ' Status',
               value: e('checkmark') + ' Claimed — confirmed by <@' + interaction.user.id + '>',
