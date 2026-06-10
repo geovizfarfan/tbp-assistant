@@ -151,7 +151,8 @@ async function endGame(interaction) {
     [interaction.guildId, winner.id, winner.username, game.id, game.prize || game.game_name, game.prize_amount, game.currency, game.host_id, now]
   );
 
-  if (game.prize || game.prize_amount) {
+  // Skip payout reminder if host is the winner
+  if ((game.prize || game.prize_amount) && game.host_id !== winner.id) {
     await query(
       `INSERT INTO payout_reminders (type, ref_id, host_id, winner_id, prize, guild_id, channel_id)
        VALUES ('game',$1,$2,$3,$4,$5,$6)`,
