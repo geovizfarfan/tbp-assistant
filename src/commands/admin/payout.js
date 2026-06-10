@@ -15,32 +15,32 @@ module.exports = {
     const now = new Date();
     await interaction.deferReply({ ephemeral: true });
 
-    // Get unpaid ended games/raffles hosted by this staff member
+    // Get unpaid ended games/raffles where winner is the selected user
     const unpaidGames = await query(
       `SELECT id, game_name, prize, prize_amount, currency, 'game' as type FROM game_logs
-       WHERE guild_id=$1 AND host_id=$2 AND payout_status != 'paid' AND status='ended'
+       WHERE guild_id=$1 AND winner_id=$2 AND payout_status != 'paid' AND status='ended'
        ORDER BY ended_at DESC`,
-      [interaction.guildId, interaction.user.id]
+      [interaction.guildId, winnerOverride.id]
     );
     const unpaidRaffles = await query(
       `SELECT id, prize, prize_amount, currency, 'raffle' as type FROM raffles
-       WHERE guild_id=$1 AND host_id=$2 AND payout_status != 'paid' AND status='ended'
+       WHERE guild_id=$1 AND winner_id=$2 AND payout_status != 'paid' AND status='ended'
        ORDER BY ended_at DESC`,
-      [interaction.guildId, interaction.user.id]
+      [interaction.guildId, winnerOverride.id]
     );
 
     const allUnpaid = [...unpaidGames.rows, ...unpaidRaffles.rows];
-    if (!allUnpaid.length) return interaction.editReply({ content: `${e('checkmark')} You have no unpaid games or raffles!` });
+    if (!allUnpaid.length) return interaction.editReply({ content: `${e('checkmark')} No unpaid games found for <@${winnerOverride.id}>.` });
 
     const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ComponentType } = require('discord.js');
     const options = allUnpaid.map(g => {
       const name  = g.game_name || `Raffle #${g.id}`;
-      const prize = g.prize || (g.prize_amount ? `${g.prize_amount} ${g.currency}` : 'No prize');
+      const prize = (g.prize || (g.prize_amount ? `${g.prize_amount} ${g.currency}` : 'No prize')).replace(/<[^>]+>/g, '').replace(/:[^:]+:/g, '').trim();
       return new StringSelectMenuOptionBuilder().setLabel(`${name} — ${prize}`.slice(0, 100)).setValue(`${g.type}:${g.id}`);
     });
 
     const select = new StringSelectMenuBuilder().setCustomId('payout_select').setPlaceholder('Select the game to confirm payout for...').addOptions(options);
-    await interaction.editReply({ content: `${e('payout')} Select the game:`, components: [new ActionRowBuilder().addComponents(select)] });
+    await interaction.editReply({ content: `${e('payout')} Select which game <@${winnerOverride.id}> won:`, components: [new ActionRowBuilder().addComponents(select)] });
 
     let collected;
     try {
