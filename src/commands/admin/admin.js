@@ -292,10 +292,7 @@ module.exports = {
       .setName('missed-schedules')
       .setDescription('List missed/no-show schedules')
     )
-    .addSubcommand(sub => sub
-      .setName('ticket-report')
-      .setDescription('Ticket response time report')
-    )
+
         .addSubcommand(sub => sub
       .setName('set-requirements')
       .setDescription('Set staff pay requirements')
@@ -396,7 +393,6 @@ module.exports = {
     if (sub === 'paycheck-check')  await paycheckCheck(interaction);
     if (sub === 'late-payouts')    await latePayouts(interaction);
     if (sub === 'missed-schedules')await missedSchedules(interaction);
-    if (sub === 'ticket-report')   await ticketReport(interaction);
     if (sub === 'set-requirements')await setRequirements(interaction);
     if (sub === 'ticket-setup')    await ticketSetup(interaction);
     if (sub === 'daily-report')    await dailyReport(interaction);
@@ -502,28 +498,6 @@ async function missedSchedules(interaction) {
     embed.addFields({
       name: `${s.scheduled_date} — ${s.type}`,
       value: `Staff: <@${s.staff_id}> | Time: ${s.time_start}–${s.time_end} | Notes: ${s.notes || 'None'}`,
-    });
-  }
-  await interaction.editReply({ embeds: [embed] });
-}
-
-async function ticketReport(interaction) {
-  await interaction.deferReply({ ephemeral: true });
-  const res = await query(
-    `SELECT first_staff_responder, COUNT(*) as total, 
-     SUM(CASE WHEN late_response THEN 1 ELSE 0 END) as late,
-     AVG(response_time_minutes) as avg_response
-     FROM ticket_logs WHERE guild_id=$1 AND first_staff_responder IS NOT NULL
-     GROUP BY first_staff_responder ORDER BY late DESC`,
-    [interaction.guildId]
-  );
-  if (!res.rows.length) return interaction.editReply({ content: 'No ticket data.' });
-
-  const embed = baseEmbed(`${e('rules')} Ticket Response Report`, COLORS.lightpurple, interaction.guild?.name);
-  for (const r of res.rows) {
-    embed.addFields({
-      name: `<@${r.first_staff_responder}>`,
-      value: `Tickets: ${r.total} | Late: ${r.late} | Avg response: ${Math.round(r.avg_response || 0)}min`,
     });
   }
   await interaction.editReply({ embeds: [embed] });
