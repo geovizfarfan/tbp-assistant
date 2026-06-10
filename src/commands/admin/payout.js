@@ -8,7 +8,6 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('payout')
     .setDescription('Confirm a prize was paid out')
-    .addIntegerOption(o => o.setName('id').setDescription('The raffle, giveaway, or game ID').setRequired(true))
     .addUserOption(o => o.setName('winner').setDescription('Who received the prize').setRequired(true)),
 
   async execute(interaction) {
@@ -141,6 +140,6 @@ module.exports = {
         { name: `${e('members')} Confirmed by`,    value: `<@${interaction.user.id}>`, inline: true },
       );
 
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({ embeds: [embed], components: [] });
   },
 };
