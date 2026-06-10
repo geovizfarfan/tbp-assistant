@@ -158,6 +158,7 @@ async function endGame(interaction) {
        VALUES ('game',$1,$2,$3,$4,$5,$6)`,
       [game.id, game.host_id, winner.id, game.prize || `${game.prize_amount ? game.prize_amount + ' ' : ''}${game.currency}`.trim() || 'Prize', interaction.guildId, interaction.channelId]
     );
+    }
   }
 
   const durationMs = now - new Date(game.started_at);
