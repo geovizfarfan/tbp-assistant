@@ -43,6 +43,18 @@ async function setDailyGoals(interaction) {
   await interaction.editReply({ content: lines.join('\n') });
 }
 
+
+async function setTimezone(interaction) {
+  const timezone = interaction.options.getString('timezone');
+  await interaction.deferReply({ ephemeral: true });
+  await query(
+    `INSERT INTO guild_config (guild_id, timezone) VALUES ($1,$2)
+     ON CONFLICT (guild_id) DO UPDATE SET timezone=$2, updated_at=NOW()`,
+    [interaction.guildId, timezone]
+  );
+  await interaction.editReply({ content: `${e('checkmark')} Timezone set to **${timezone}**. Daily goals will reset at midnight in this timezone.` });
+}
+
 async function setRoles(interaction) {
   const modRole      = interaction.options.getRole('mod_role');
   const adminRole    = interaction.options.getRole('admin_role');
@@ -238,6 +250,19 @@ module.exports = {
       .addIntegerOption(o => o.setName('payouts').setDescription('Daily payouts goal').setRequired(false))
     )
     .addSubcommand(sub => sub
+      .setName('set-timezone')
+      .setDescription('Set server timezone for daily goal reset')
+      .addStringOption(o => o.setName('timezone').setDescription('Server timezone').setRequired(true)
+        .addChoices(
+          { name: 'ET — Eastern',           value: 'America/New_York'    },
+          { name: 'CT — Central',           value: 'America/Chicago'     },
+          { name: 'MT — Mountain',          value: 'America/Denver'      },
+          { name: 'PT — Pacific',           value: 'America/Los_Angeles' },
+          { name: 'GMT',                    value: 'Europe/London'       },
+          { name: 'CET — Central European', value: 'Europe/Paris'        },
+        ))
+    )
+    .addSubcommand(sub => sub
       .setName('set-roles')
       .setDescription('Set roles for ticket notifications and game pings')
       .addRoleOption(o => o.setName('mod_role').setDescription('Mod role — pinged for unclaimed tickets at 1hr and 3hr').setRequired(false))
@@ -252,15 +277,6 @@ module.exports = {
       .addChannelOption(o => o.setName('ticket_channel').setDescription('Support ticket channel to direct winners to').setRequired(false))
       .addChannelOption(o => o.setName('staff_notif_channel').setDescription('Staff notifications channel e.g. #tbp-staff-notifications').setRequired(false))
       .addChannelOption(o => o.setName('transcript_channel').setDescription('Admin-only channel for game transcripts').setRequired(false))
-      .addStringOption(o => o.setName('timezone').setDescription('Server timezone for daily goal reset').setRequired(false)
-        .addChoices(
-          { name: 'ET — Eastern',  value: 'America/New_York'    },
-          { name: 'CT — Central',  value: 'America/Chicago'     },
-          { name: 'MT — Mountain', value: 'America/Denver'      },
-          { name: 'PT — Pacific',  value: 'America/Los_Angeles' },
-          { name: 'GMT',           value: 'Europe/London'       },
-          { name: 'CET — Central European', value: 'Europe/Paris' },
-        ))
     )
     .addSubcommand(sub => sub
       .setName('fix-payout')
@@ -290,6 +306,7 @@ module.exports = {
     if (sub === 'set-requirements')await setRequirements(interaction);
     if (sub === 'ticket-setup')    await ticketSetup(interaction);
     if (sub === 'set-daily-goals') await setDailyGoals(interaction);
+    if (sub === 'set-timezone')    await setTimezone(interaction);
     if (sub === 'set-roles')       await setRoles(interaction);
     if (sub === 'set-channels')    await setChannels(interaction);
     if (sub === 'fix-payout')      await fixPayout(interaction);
