@@ -1,6 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { e } = require('../../utils/appEmojis');
 const { query } = require('../../utils/database');
+const { updateDailyProgress, sendCongratsIfGoalMet } = require('../../utils/dailyGoals');
 const { baseEmbed, tsF, COLORS } = require('../../utils/embeds');
 
 module.exports = {

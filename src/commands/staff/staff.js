@@ -24,7 +24,8 @@ module.exports = {
           { name: 'Owner', value: 'owner' },
           { name: 'Admin', value: 'admin' },
           { name: 'Mod',   value: 'staff' },
-          { name: 'Host',  value: 'host'  },
+          { name: 'Host',         value: 'host'        },
+          { name: 'Rumble Host', value: 'rumble_host' },
         ))
       .addStringOption(o => o.setName('currency').setDescription('Pay currency').setRequired(false)
         .addChoices(

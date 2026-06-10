@@ -22,6 +22,27 @@ async function ticketSetup(interaction) {
 }
 
 
+
+async function setDailyGoals(interaction) {
+  const role      = interaction.options.getString('role');
+  const games     = interaction.options.getInteger('games');
+  const autogames = interaction.options.getInteger('autogames');
+  const payouts   = interaction.options.getInteger('payouts');
+  await interaction.deferReply({ ephemeral: true });
+  if (games === null && autogames === null && payouts === null) return interaction.editReply({ content: `${e('wrong')} Please provide at least one goal.` });
+  await query(
+    `INSERT INTO daily_goals (guild_id, role, games, autogames, payouts) VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (guild_id, role) DO UPDATE SET games=COALESCE($3,daily_goals.games), autogames=COALESCE($4,daily_goals.autogames), payouts=COALESCE($5,daily_goals.payouts), updated_at=NOW()`,
+    [interaction.guildId, role, games, autogames, payouts]
+  );
+  const roleLabel = { admin:'Admin', staff:'Mod', host:'Host', rumble_host:'Rumble Host' }[role];
+  const lines = [`${e('checkmark')} Daily goals set for **${roleLabel}**:`];
+  if (games !== null)     lines.push(`${e('controller')} Games: **${games}**/day`);
+  if (autogames !== null) lines.push(`${e('bullet')} Auto-Games: **${autogames}**/day`);
+  if (payouts !== null)   lines.push(`${e('payout')} Payouts: **${payouts}**/day`);
+  await interaction.editReply({ content: lines.join('\n') });
+}
+
 async function setRoles(interaction) {
   const modRole      = interaction.options.getRole('mod_role');
   const adminRole    = interaction.options.getRole('admin_role');
@@ -203,6 +224,20 @@ module.exports = {
       .setDescription('How to set up ticket tracking for this bot')
     )
     .addSubcommand(sub => sub
+      .setName('set-daily-goals')
+      .setDescription('Set daily goals per staff role')
+      .addStringOption(o => o.setName('role').setDescription('Staff role').setRequired(true)
+        .addChoices(
+          { name: 'Admin',       value: 'admin'       },
+          { name: 'Mod',         value: 'staff'       },
+          { name: 'Host',        value: 'host'        },
+          { name: 'Rumble Host', value: 'rumble_host' },
+        ))
+      .addIntegerOption(o => o.setName('games').setDescription('Daily games goal').setRequired(false))
+      .addIntegerOption(o => o.setName('autogames').setDescription('Daily auto-games goal').setRequired(false))
+      .addIntegerOption(o => o.setName('payouts').setDescription('Daily payouts goal').setRequired(false))
+    )
+    .addSubcommand(sub => sub
       .setName('set-roles')
       .setDescription('Set roles for ticket notifications and game pings')
       .addRoleOption(o => o.setName('mod_role').setDescription('Mod role — pinged for unclaimed tickets at 1hr and 3hr').setRequired(false))
@@ -217,6 +252,15 @@ module.exports = {
       .addChannelOption(o => o.setName('ticket_channel').setDescription('Support ticket channel to direct winners to').setRequired(false))
       .addChannelOption(o => o.setName('staff_notif_channel').setDescription('Staff notifications channel e.g. #tbp-staff-notifications').setRequired(false))
       .addChannelOption(o => o.setName('transcript_channel').setDescription('Admin-only channel for game transcripts').setRequired(false))
+      .addStringOption(o => o.setName('timezone').setDescription('Server timezone for daily goal reset').setRequired(false)
+        .addChoices(
+          { name: 'ET — Eastern',  value: 'America/New_York'    },
+          { name: 'CT — Central',  value: 'America/Chicago'     },
+          { name: 'MT — Mountain', value: 'America/Denver'      },
+          { name: 'PT — Pacific',  value: 'America/Los_Angeles' },
+          { name: 'GMT',           value: 'Europe/London'       },
+          { name: 'CET — Central European', value: 'Europe/Paris' },
+        ))
     )
     .addSubcommand(sub => sub
       .setName('fix-payout')
@@ -245,6 +289,7 @@ module.exports = {
     if (sub === 'ticket-report')   await ticketReport(interaction);
     if (sub === 'set-requirements')await setRequirements(interaction);
     if (sub === 'ticket-setup')    await ticketSetup(interaction);
+    if (sub === 'set-daily-goals') await setDailyGoals(interaction);
     if (sub === 'set-roles')       await setRoles(interaction);
     if (sub === 'set-channels')    await setChannels(interaction);
     if (sub === 'fix-payout')      await fixPayout(interaction);
