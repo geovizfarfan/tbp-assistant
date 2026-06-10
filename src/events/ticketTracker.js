@@ -33,7 +33,8 @@ async function handleThreadCreate(thread, client) {
 
       const notifCh = await client.channels.fetch(cfg.rows[0].staff_notif_channel_id);
       const modMention = cfg.rows[0].mod_role_id ? `<@&${cfg.rows[0].mod_role_id}>` : '';
-      await notifCh.send(`<a:atention:1512916995543273642> Ticket <#${thread.id}> has had no staff response for **1 hour**.${modMention ? ' ' + modMention : ''}`);
+      const jumpLink = `https://discord.com/channels/${guildId}/${thread.id}`;
+      await notifCh.send(`<a:atention:1512916995543273642> Ticket <#${thread.id}> has had no staff response for **1 hour**. [Jump to ticket](${jumpLink})${modMention ? ' ' + modMention : ''} `);
     } catch (err) {
       console.error('[Tickets] 1hr reminder failed:', err.message);
     }
