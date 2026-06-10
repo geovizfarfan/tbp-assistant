@@ -4,7 +4,7 @@ const path = require('path');
 const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord.js');
 const { initDB } = require('./utils/database');
 const { startReminderLoop } = require('./utils/reminders');
-const { handleTicketMessage, handleThreadCreate, handleChannelDelete, handleTicketClaim, handleTicketPayout } = require('./events/ticketTracker');
+const { handleTicketMessage, handleThreadCreate, handleChannelDelete } = require('./events/ticketTracker');
 const { loadAppEmojis } = require('./utils/appEmojis');
 
 const client = new Client({
@@ -111,12 +111,6 @@ client.on('interactionCreate', async (interaction) => {
 client.on('messageCreate', handleTicketMessage);
 client.on('channelDelete', handleChannelDelete);
 client.on('threadCreate', (thread) => handleThreadCreate(thread, client));
-
-client.on('interactionCreate', async interaction => {
-  if (!interaction.isButton()) return;
-  if (interaction.customId.startsWith('ticket_claim_')) await handleTicketClaim(interaction, client);
-  if (interaction.customId.startsWith('ticket_payout_')) await handleTicketPayout(interaction, client);
-});
 
 client.login(process.env.DISCORD_TOKEN);
 
