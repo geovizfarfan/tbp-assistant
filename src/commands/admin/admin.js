@@ -7,23 +7,6 @@ const { eligibilityEmbed } = require('../../utils/embeds');
 
 
 
-async function ticketSetup(interaction) {
-  await interaction.deferReply({ ephemeral: true });
-  const embed = baseEmbed(`${e('rules')} Ticket Tracking Setup`, COLORS.lightpurple, interaction.guild?.name)
-    .setDescription('The bot automatically tracks ticket response times. Here is how it works:')
-    .addFields(
-      { name: '1. Channel Detection', value: 'The bot watches any channel with **"ticket"** in its name automatically. No setup needed.', inline: false },
-      { name: '2. What it tracks', value: 'When a ticket opens, the bot logs the time. When a staff member replies, it records the response time and flags it as late if over the limit.', inline: false },
-      { name: '3. Set response limit', value: 'Use `/admin set-requirements ticket_limit_minutes:30` to set how long staff have before a reply is marked late.', inline: false },
-      { name: '4. View reports', value: 'Use `/admin ticket-report` to see response times per staff member.', inline: false },
-      { name: '5. Make sure', value: 'The bot has **Read Messages** and **Read Message History** permissions in your ticket channels.', inline: false },
-    );
-  await interaction.editReply({ embeds: [embed] });
-}
-
-
-
-
 async function dailyReport(interaction) {
   const period     = interaction.options.getString('period');
   const roleFilter = interaction.options.getString('role') || 'all';
@@ -303,10 +286,7 @@ module.exports = {
       .addIntegerOption(o => o.setName('max_late_payouts').setDescription('Max late payouts allowed').setRequired(false))
       .addIntegerOption(o => o.setName('bonus_per_game').setDescription('Bonus per game hosted e.g. 400').setRequired(false))
     )
-    .addSubcommand(sub => sub
-      .setName('ticket-setup')
-      .setDescription('How to set up ticket tracking for this bot')
-    )
+
     .addSubcommand(sub => sub
       .setName('daily-report')
       .setDescription('View staff progress toward daily/weekly/monthly goals')
@@ -394,7 +374,6 @@ module.exports = {
     if (sub === 'late-payouts')    await latePayouts(interaction);
     if (sub === 'missed-schedules')await missedSchedules(interaction);
     if (sub === 'set-requirements')await setRequirements(interaction);
-    if (sub === 'ticket-setup')    await ticketSetup(interaction);
     if (sub === 'daily-report')    await dailyReport(interaction);
     if (sub === 'set-daily-goals') await setDailyGoals(interaction);
     if (sub === 'set-timezone')    await setTimezone(interaction);
