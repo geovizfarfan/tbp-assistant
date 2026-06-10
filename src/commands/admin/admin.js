@@ -23,6 +23,81 @@ async function ticketSetup(interaction) {
 
 
 
+
+async function dailyReport(interaction) {
+  const period     = interaction.options.getString('period');
+  const roleFilter = interaction.options.getString('role') || 'all';
+  const userFilter = interaction.options.getUser('user');
+  await interaction.deferReply({ ephemeral: true });
+
+  const tzRes = await query(`SELECT timezone FROM guild_config WHERE guild_id=$1`, [interaction.guildId]);
+  const tz = tzRes.rows[0]?.timezone || 'America/New_York';
+  const now = new Date();
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(now);
+
+  let dateFilter, periodLabel;
+  if (period === 'today') {
+    dateFilter = `date = '${today}'`;
+    periodLabel = `Today — ${today}`;
+  } else if (period === 'weekly') {
+    const weekAgo = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date(now.getTime() - 7*24*60*60*1000));
+    dateFilter = `date >= '${weekAgo}'`;
+    periodLabel = `This Week`;
+  } else {
+    const monthAgo = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date(now.getTime() - 30*24*60*60*1000));
+    dateFilter = `date >= '${monthAgo}'`;
+    periodLabel = `This Month`;
+  }
+
+  let staffQuery, staffParams;
+  if (userFilter) {
+    staffQuery = `SELECT user_id, username, role FROM staff WHERE guild_id=$1 AND user_id=$2 AND active=true`;
+    staffParams = [interaction.guildId, userFilter.id];
+  } else if (roleFilter === 'all') {
+    staffQuery = `SELECT user_id, username, role FROM staff WHERE guild_id=$1 AND active=true ORDER BY role, username`;
+    staffParams = [interaction.guildId];
+  } else {
+    staffQuery = `SELECT user_id, username, role FROM staff WHERE guild_id=$1 AND active=true AND role=$2 ORDER BY username`;
+    staffParams = [interaction.guildId, roleFilter];
+  }
+
+  const staffRes = await query(staffQuery, staffParams);
+  if (!staffRes.rows.length) return interaction.editReply({ content: `${e('wrong')} No staff found.` });
+
+  const { baseEmbed } = require('../../utils/embeds');
+  const embed = baseEmbed(`${e('receipt')} Staff Progress — ${periodLabel}`, 0xCBC3E3, interaction.guild?.name);
+
+  const multiplier = period === 'today' ? 1 : period === 'weekly' ? 7 : 30;
+
+  for (const s of staffRes.rows) {
+    const progressRes = await query(
+      `SELECT COALESCE(SUM(games),0) as games, COALESCE(SUM(autogames),0) as autogames, COALESCE(SUM(payouts),0) as payouts FROM daily_progress WHERE guild_id=$1 AND user_id=$2 AND ${dateFilter}`,
+      [interaction.guildId, s.user_id]
+    );
+    const p = progressRes.rows[0];
+    const games     = parseInt(p.games);
+    const autogames = parseInt(p.autogames);
+    const payouts   = parseInt(p.payouts);
+
+    const goalRes = await query(`SELECT * FROM daily_goals WHERE guild_id=$1 AND role=$2`, [interaction.guildId, s.role]);
+    const goal = goalRes.rows[0];
+    const gGoal = goal ? goal.games * multiplier : '?';
+    const aGoal = goal ? goal.autogames * multiplier : '?';
+    const pGoal = goal ? goal.payouts * multiplier : '?';
+
+    const allMet = goal && games >= gGoal && autogames >= aGoal && payouts >= pGoal;
+    const status = allMet ? e('checkmark') : e('Loading');
+    const roleLabel = { admin:'Admin', staff:'Mod', host:'Host', rumble_host:'Rumble Host', owner:'Owner' }[s.role] || s.role;
+
+    embed.addFields({
+      name: `${status} ${s.username} [${roleLabel}]`,
+      value: `${e('controller')} ${games}/${gGoal} · ${e('bullet')} ${autogames}/${aGoal} · ${e('payout')} ${payouts}/${pGoal}`,
+    });
+  }
+
+  await interaction.editReply({ embeds: [embed] });
+}
+
 async function setDailyGoals(interaction) {
   const role      = interaction.options.getString('role');
   const games     = interaction.options.getInteger('games');
@@ -236,6 +311,25 @@ module.exports = {
       .setDescription('How to set up ticket tracking for this bot')
     )
     .addSubcommand(sub => sub
+      .setName('daily-report')
+      .setDescription('View staff progress toward daily/weekly/monthly goals')
+      .addStringOption(o => o.setName('period').setDescription('Time period').setRequired(true)
+        .addChoices(
+          { name: 'Today',   value: 'today'   },
+          { name: 'Weekly',  value: 'weekly'  },
+          { name: 'Monthly', value: 'monthly' },
+        ))
+      .addUserOption(o => o.setName('user').setDescription('View a specific staff member').setRequired(false))
+      .addStringOption(o => o.setName('role').setDescription('Filter by role').setRequired(false)
+        .addChoices(
+          { name: 'All Roles',   value: 'all'         },
+          { name: 'Admin',       value: 'admin'       },
+          { name: 'Mod',         value: 'staff'       },
+          { name: 'Host',        value: 'host'        },
+          { name: 'Rumble Host', value: 'rumble_host' },
+        ))
+    )
+    .addSubcommand(sub => sub
       .setName('set-daily-goals')
       .setDescription('Set daily goals per staff role')
       .addStringOption(o => o.setName('role').setDescription('Staff role').setRequired(true)
@@ -305,6 +399,7 @@ module.exports = {
     if (sub === 'ticket-report')   await ticketReport(interaction);
     if (sub === 'set-requirements')await setRequirements(interaction);
     if (sub === 'ticket-setup')    await ticketSetup(interaction);
+    if (sub === 'daily-report')    await dailyReport(interaction);
     if (sub === 'set-daily-goals') await setDailyGoals(interaction);
     if (sub === 'set-timezone')    await setTimezone(interaction);
     if (sub === 'set-roles')       await setRoles(interaction);
