@@ -11,46 +11,61 @@ module.exports = {
     .addUserOption(o => o.setName('winner').setDescription('Who received the prize').setRequired(true)),
 
   async execute(interaction) {
-    const id     = interaction.options.getInteger('id');
-    const winnerOverride = interaction.options.getUser('winner') || null;
+    const winnerOverride = interaction.options.getUser('winner');
     const now = new Date();
     await interaction.deferReply({ ephemeral: true });
 
-    // Try all three tables
-    const tables = [
-      { table: 'raffles',   type: 'raffle'   },
-      { table: 'giveaways', type: 'giveaway' },
-      { table: 'game_logs', type: 'game'     },
-    ];
+    // Get unpaid ended games/raffles hosted by this staff member
+    const unpaidGames = await query(
+      `SELECT id, game_name, prize, prize_amount, currency, 'game' as type FROM game_logs
+       WHERE guild_id=$1 AND host_id=$2 AND payout_status != 'paid' AND status='ended'
+       ORDER BY ended_at DESC`,
+      [interaction.guildId, interaction.user.id]
+    );
+    const unpaidRaffles = await query(
+      `SELECT id, prize, prize_amount, currency, 'raffle' as type FROM raffles
+       WHERE guild_id=$1 AND host_id=$2 AND payout_status != 'paid' AND status='ended'
+       ORDER BY ended_at DESC`,
+      [interaction.guildId, interaction.user.id]
+    );
 
-    let found = null;
-    let foundType = null;
+    const allUnpaid = [...unpaidGames.rows, ...unpaidRaffles.rows];
+    if (!allUnpaid.length) return interaction.editReply({ content: `${e('checkmark')} You have no unpaid games or raffles!` });
 
-    for (const { table, type } of tables) {
-      const res = await query(
-        `SELECT * FROM ${table} WHERE id=$1 AND guild_id=$2`,
-        [id, interaction.guildId]
-      );
-      if (res.rows.length) {
-        found = res.rows[0];
-        foundType = type;
-        break;
-      }
+    const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ComponentType } = require('discord.js');
+    const options = allUnpaid.map(g => {
+      const name  = g.game_name || `Raffle #${g.id}`;
+      const prize = g.prize || (g.prize_amount ? `${g.prize_amount} ${g.currency}` : 'No prize');
+      return new StringSelectMenuOptionBuilder().setLabel(`${name} — ${prize}`.slice(0, 100)).setValue(`${g.type}:${g.id}`);
+    });
+
+    const select = new StringSelectMenuBuilder().setCustomId('payout_select').setPlaceholder('Select the game to confirm payout for...').addOptions(options);
+    await interaction.editReply({ content: `${e('payout')} Select the game:`, components: [new ActionRowBuilder().addComponents(select)] });
+
+    let collected;
+    try {
+      collected = await interaction.channel.awaitMessageComponent({
+        filter: i => i.customId === 'payout_select' && i.user.id === interaction.user.id,
+        componentType: ComponentType.StringSelect,
+        time: 60_000,
+      });
+    } catch {
+      return interaction.editReply({ content: `${e('wrong')} Timed out.`, components: [] });
     }
 
-    if (!found) {
-      return interaction.editReply({ content: `${e('wrong')} No raffle, giveaway, or game found with ID #${id}.` });
-    }
+    const [foundType, foundIdStr] = collected.values[0].split(':');
+    const id = parseInt(foundIdStr);
+    await collected.deferUpdate();
 
-    if (found.payout_status === 'paid') {
-      return interaction.editReply({ content: `${e('wrong')} #${id} is already marked as paid.` });
-    }
+    const tableMap = { game: 'game_logs', raffle: 'raffles', giveaway: 'giveaways' };
+    const foundRes = await query(`SELECT * FROM ${tableMap[foundType]} WHERE id=$1 AND guild_id=$2`, [id, interaction.guildId]);
+    if (!foundRes.rows.length) return interaction.editReply({ content: `${e('wrong')} Not found.`, components: [] });
+    const found = foundRes.rows[0];
+    if (found.payout_status === 'paid') return interaction.editReply({ content: `${e('wrong')} Already marked as paid.`, components: [] });
 
-    // Use override winner if provided
-    const finalWinnerId = winnerOverride ? winnerOverride.id : found.winner_id;
+    const finalWinnerId = found.winner_id || winnerOverride.id;
 
     // Mark paid in the right table
-    const tableMap = { raffle: 'raffles', giveaway: 'giveaways', game: 'game_logs' };
     await query(
       `UPDATE ${tableMap[foundType]} SET payout_status='paid', payout_confirmed_at=$1, winner_id=CASE WHEN winner_id IS NULL THEN $2 ELSE winner_id END WHERE id=$3`,
       [now, finalWinnerId, id]
