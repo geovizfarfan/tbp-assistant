@@ -112,10 +112,11 @@ client.on('messageCreate', handleTicketMessage);
 client.on('channelDelete', handleChannelDelete);
 client.on('threadCreate', (thread) => handleThreadCreate(thread, client));
 
-client.login(process.env.DISCORD_TOKEN);
-
 client.on('interactionCreate', async interaction => {
   if (!interaction.isButton()) return;
   if (interaction.customId.startsWith('ticket_claim_')) await handleTicketClaim(interaction, client);
   if (interaction.customId.startsWith('ticket_payout_')) await handleTicketPayout(interaction, client);
 });
+
+client.login(process.env.DISCORD_TOKEN);
+
