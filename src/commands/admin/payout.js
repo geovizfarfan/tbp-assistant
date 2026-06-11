@@ -72,8 +72,8 @@ module.exports = {
 
     let collected;
     try {
-      collected = await interaction.channel.awaitMessageComponent({
-        filter: i => i.customId === 'payout_select' && i.user.id === interaction.user.id,
+      collected = await interaction.awaitMessageComponent({
+        filter: i => i.customId === 'payout_select',
         componentType: ComponentType.StringSelect,
         time: 60_000,
       });
