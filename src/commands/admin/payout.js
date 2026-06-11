@@ -11,15 +11,20 @@ module.exports = {
 ,
 
   async execute(interaction) {
-    const now = new Date();
+    const now         = new Date();
+    const staffOverride = interaction.options.getUser('staff');
     await interaction.deferReply({ ephemeral: true });
 
-    const staffRes = await query(
-      `SELECT role FROM staff WHERE user_id=$1 AND active=true`,
-      [interaction.user.id]
-    );
+    const staffRes = await query(`SELECT role FROM staff WHERE user_id=$1 AND active=true`, [interaction.user.id]);
     if (!staffRes.rows.length || !['admin','owner','staff','host','rumble_host'].includes(staffRes.rows[0].role)) {
       return interaction.editReply({ content: `Only staff can confirm payouts.` });
+    }
+
+    // Only admin/owner can view other staff's games
+    const isAdmin = ['admin','owner'].includes(staffRes.rows[0].role);
+    const targetId = (staffOverride && isAdmin) ? staffOverride.id : interaction.user.id;
+    if (staffOverride && !isAdmin) {
+      return interaction.editReply({ content: `${e('wrong')} Only admins can view another staff member's payouts.` });
     }
 
     const unpaidGames = await query(
@@ -29,7 +34,7 @@ module.exports = {
        LEFT JOIN member_wins mw ON mw.ref_id = gl.id AND mw.type = 'game'
        WHERE gl.guild_id=$1 AND gl.host_id=$2 AND gl.payout_status NOT IN ('paid','n/a','not_claimed') AND gl.status='ended'
        ORDER BY gl.ended_at DESC`,
-      [interaction.guildId, interaction.user.id]
+      [interaction.guildId, targetId]
     );
     const unpaidRaffles = await query(
       `SELECT r.id, r.prize, r.prize_amount, r.currency, r.winner_id, 'raffle' as type,
@@ -38,11 +43,12 @@ module.exports = {
        LEFT JOIN member_wins mw ON mw.ref_id = r.id AND mw.type = 'raffle'
        WHERE r.guild_id=$1 AND r.host_id=$2 AND r.payout_status != 'paid' AND r.status='ended'
        ORDER BY r.ended_at DESC`,
-      [interaction.guildId, interaction.user.id]
+      [interaction.guildId, targetId]
     );
 
     const allUnpaid = [...unpaidGames.rows, ...unpaidRaffles.rows];
-    if (!allUnpaid.length) return interaction.editReply({ content: `${e('checkmark')} You have no unpaid games or raffles!` });
+    const targetName = (staffOverride && isAdmin) ? staffOverride.username : 'You';
+    if (!allUnpaid.length) return interaction.editReply({ content: `${e('checkmark')} ${targetName} has no unpaid games or raffles!` });
 
     const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ComponentType } = require('discord.js');
     const options = allUnpaid.map(g => {
@@ -61,7 +67,8 @@ module.exports = {
       .setCustomId('payout_select')
       .setPlaceholder('Select the game to confirm payout for...')
       .addOptions(options);
-    await interaction.editReply({ content: `${e('payout')} Select which game to confirm payout for:`, components: [new ActionRowBuilder().addComponents(select)] });
+    const forLabel = (staffOverride && isAdmin) ? ` for ${staffOverride.username}` : '';
+    await interaction.editReply({ content: `${e('payout')} Select which game to confirm payout${forLabel}:`, components: [new ActionRowBuilder().addComponents(select)] });
 
     let collected;
     try {
