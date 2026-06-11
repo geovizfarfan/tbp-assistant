@@ -112,5 +112,27 @@ client.on('messageCreate', handleTicketMessage);
 client.on('channelDelete', handleChannelDelete);
 client.on('threadCreate', (thread) => handleThreadCreate(thread, client));
 
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isButton()) return;
+  if (!['game_ping_join', 'game_ping_leave'].includes(interaction.customId)) return;
+  try {
+    const { query } = require('./utils/database');
+    const cfg = await query(`SELECT game_ping_role_id FROM guild_config WHERE guild_id=$1`, [interaction.guildId]);
+    if (!cfg.rows.length || !cfg.rows[0].game_ping_role_id) return interaction.reply({ content: 'Game ping role not configured.', ephemeral: true });
+    const roleId = cfg.rows[0].game_ping_role_id;
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    if (interaction.customId === 'game_ping_join') {
+      await member.roles.add(roleId);
+      await interaction.reply({ content: '🔔 You will now be pinged for new games!', ephemeral: true });
+    } else {
+      await member.roles.remove(roleId);
+      await interaction.reply({ content: '🔕 You will no longer be pinged for new games.', ephemeral: true });
+    }
+  } catch (err) {
+    console.error('[GamePing] Button error:', err.message);
+    await interaction.reply({ content: 'Something went wrong.', ephemeral: true }).catch(() => {});
+  }
+});
+
 client.login(process.env.DISCORD_TOKEN);
 

@@ -1,6 +1,7 @@
 const { query } = require('./database');
 const { e } = require('./appEmojis');
 const { baseEmbed, tsF, tsR, COLORS } = require('./embeds');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 async function refreshScheduleBoard(client, guildId, pingRole = false) {
   // Check guild_config first, fall back to game_schedule_board
@@ -78,7 +79,11 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
         } catch {}
       }
       // Send new ping and save message ID
-      const pingMsg = await schedCh.send(`<@&${cfgRes.rows[0].game_ping_role_id}> A new game or raffle is now live!`);
+      const pingRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('game_ping_join').setLabel('🔔 Get Pings').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('game_ping_leave').setLabel('🔕 Stop Pings').setStyle(ButtonStyle.Danger)
+      );
+      const pingMsg = await schedCh.send({ content: `<@&${cfgRes.rows[0].game_ping_role_id}> 🎮 A new game or raffle is now live!`, components: [pingRow] });
       await query(`UPDATE guild_config SET last_ping_message_id=$1 WHERE guild_id=$2`, [pingMsg.id, guildId]);
     }
   } catch {}
