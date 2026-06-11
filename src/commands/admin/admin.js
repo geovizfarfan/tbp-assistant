@@ -261,6 +261,7 @@ module.exports = {
     .addSubcommand(sub => sub
       .setName('payroll')
       .setDescription('Full payroll overview')
+      .addUserOption(o => o.setName('user').setDescription('View a specific staff member or booster').setRequired(false))
     )
     .addSubcommand(sub => sub
       .setName('pay-summary')
@@ -445,6 +446,7 @@ async function paySummary(interaction) {
 
 async function payroll(interaction) {
   await interaction.deferReply({ ephemeral: true });
+  const userFilter = interaction.options.getUser('user');
 
   const reqRes = await query(`SELECT * FROM pay_requirements WHERE guild_id=$1`, [interaction.guildId]);
   const req = reqRes.rows[0] || { bonus_per_game: 400, pay_period_days: 30 };
@@ -452,10 +454,24 @@ async function payroll(interaction) {
   const periodDays   = req.pay_period_days || 30;
   const periodStart  = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
 
-  const staffRes = await query(`SELECT * FROM staff WHERE guild_id=$1 AND active=true ORDER BY role`, [interaction.guildId]);
-  if (!staffRes.rows.length) return interaction.editReply({ content: 'No active staff.' });
+  const staffQuery  = userFilter
+    ? `SELECT * FROM staff WHERE guild_id=$1 AND user_id=$2 AND active=true`
+    : `SELECT * FROM staff WHERE guild_id=$1 AND active=true ORDER BY role`;
+  const staffParams = userFilter ? [interaction.guildId, userFilter.id] : [interaction.guildId];
+  const staffRes    = await query(staffQuery, staffParams);
 
-  const embed = baseEmbed(`${e('payday')} TBP Payroll`, COLORS.tbppurple, interaction.guild?.name);
+  const boosterQuery  = userFilter
+    ? `SELECT * FROM boosters WHERE guild_id=$1 AND user_id=$2 AND active=true`
+    : `SELECT * FROM boosters WHERE guild_id=$1 AND active=true ORDER BY username`;
+  const boosterParams = userFilter ? [interaction.guildId, userFilter.id] : [interaction.guildId];
+  const boosterRes    = await query(boosterQuery, boosterParams);
+
+  if (!staffRes.rows.length && !boosterRes.rows.length) {
+    return interaction.editReply({ content: `${e('wrong')} No staff or boosters found.` });
+  }
+
+  const title = userFilter ? `${e('payday')} Payroll — ${userFilter.username}` : `${e('payday')} TBP Payroll`;
+  const embed = baseEmbed(title, COLORS.tbppurple, interaction.guild?.name);
   let totalCrowns = 0, totalSins = 0, totalGoos = 0;
 
   for (const s of staffRes.rows) {
@@ -468,21 +484,43 @@ async function payroll(interaction) {
     const totalPay    = (s.pay_amount || 0) + gameBonus;
     const overdue     = s.next_pay_due_at && new Date(s.next_pay_due_at) < new Date();
     const status      = overdue ? `${e('atention')} OVERDUE` : `${e('checkmark')}`;
+    const roleLabel   = { admin:'Admin', staff:'Mod', host:'Host', rumble_host:'Rumble Host', owner:'Owner' }[s.role] || s.role;
+    const due         = s.next_pay_due_at ? tsF(s.next_pay_due_at) : 'N/A';
+    const lastPaid    = s.last_paid_at ? tsF(s.last_paid_at) : 'Never';
 
     if (s.pay_currency === 'Crowns') totalCrowns += totalPay;
     if (s.pay_currency === 'Sins')   totalSins   += totalPay;
     if (s.pay_currency === 'Goos')   totalGoos   += totalPay;
 
     embed.addFields({
-      name: `${status} ${s.username} [${s.role}]`,
-      value: `<@${s.user_id}> | Base: ${s.pay_amount} | Games: ${gamesHosted} × ${bonusPerGame} = ${gameBonus} | **Total: ${totalPay} ${s.pay_currency}**`,
+      name: `${status} ${s.username} [${roleLabel}]`,
+      value: `Base: **${s.pay_amount || 0} ${s.pay_currency}** | Games: ${gamesHosted} × ${bonusPerGame} = ${gameBonus} | Total: **${totalPay} ${s.pay_currency}**\nDue: ${due} | Last Paid: ${lastPaid}`,
     });
   }
 
-  embed.addFields({
-    name: `${e('payout')} Total Owed This Period`,
-    value: `Crowns: ${totalCrowns} | Sins: ${totalSins} | Goos: ${totalGoos}\nBonus rate: ${bonusPerGame} per game`
-  });
+  for (const b of boosterRes.rows) {
+    const overdue  = b.next_pay_due_at && new Date(b.next_pay_due_at) < new Date();
+    const status   = overdue ? `${e('atention')} OVERDUE` : `${e('checkmark')}`;
+    const due      = b.next_pay_due_at ? tsF(b.next_pay_due_at) : 'N/A';
+    const lastPaid = b.last_paid_at ? tsF(b.last_paid_at) : 'Never';
+
+    if (b.currency === 'Crowns') totalCrowns += b.amount_owed;
+    if (b.currency === 'Sins')   totalSins   += b.amount_owed;
+    if (b.currency === 'Goos')   totalGoos   += b.amount_owed;
+
+    embed.addFields({
+      name: `${status} ${b.username} [Booster]`,
+      value: `Base: **${b.amount_owed} ${b.currency}** | Due: ${due} | Last Paid: ${lastPaid}`,
+    });
+  }
+
+  if (!userFilter) {
+    embed.addFields({
+      name: `${e('payout')} Total Owed`,
+      value: `Crowns: ${totalCrowns} | Sins: ${totalSins} | Goos: ${totalGoos}\n${e('bullet')} Bonus: ${bonusPerGame} per game`
+    });
+  }
+
   await interaction.editReply({ embeds: [embed] });
 }
 
