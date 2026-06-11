@@ -1,8 +1,8 @@
-const { SlashCommandBuilder } = require('discord.js');
-const { e } = require('../../utils/appEmojis');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { query } = require('../../utils/database');
-const { updateDailyProgress, sendCongratsIfGoalMet } = require('../../utils/dailyGoals');
+const { e } = require('../../utils/appEmojis');
 const { baseEmbed, tsF, COLORS } = require('../../utils/embeds');
+const { updateDailyProgress, sendCongratsIfGoalMet } = require('../../utils/dailyGoals');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -11,7 +11,7 @@ module.exports = {
     .addUserOption(o => o.setName('staff').setDescription('Admin only: view another staff members unpaid games').setRequired(false)),
 
   async execute(interaction) {
-    const now         = new Date();
+    const now = new Date();
     const staffOverride = interaction.options.getUser('staff');
     await interaction.deferReply({ ephemeral: true });
 
@@ -20,7 +20,6 @@ module.exports = {
       return interaction.editReply({ content: `Only staff can confirm payouts.` });
     }
 
-    // Only admin/owner can view other staff's games
     const isAdmin = ['admin','owner'].includes(staffRes.rows[0].role);
     const targetId = (staffOverride && isAdmin) ? staffOverride.id : interaction.user.id;
     if (staffOverride && !isAdmin) {
@@ -28,7 +27,7 @@ module.exports = {
     }
 
     const unpaidGames = await query(
-      `SELECT gl.id, gl.game_name, gl.prize, gl.prize_amount, gl.currency, gl.winner_id, 'game' as type,
+      `SELECT gl.id, gl.game_name, gl.prize, gl.prize_amount, gl.currency, gl.winner_id, gl.ended_at, 'game' as type,
               mw.username as winner_username
        FROM game_logs gl
        LEFT JOIN member_wins mw ON mw.ref_id = gl.id AND mw.type = 'game'
@@ -37,7 +36,7 @@ module.exports = {
       [interaction.guildId, targetId]
     );
     const unpaidRaffles = await query(
-      `SELECT r.id, r.prize, r.prize_amount, r.currency, r.winner_id, 'raffle' as type,
+      `SELECT r.id, r.prize, r.prize_amount, r.currency, r.winner_id, r.ended_at, 'raffle' as type,
               mw.username as winner_username
        FROM raffles r
        LEFT JOIN member_wins mw ON mw.ref_id = r.id AND mw.type = 'raffle'
@@ -67,6 +66,7 @@ module.exports = {
       .setCustomId('payout_select')
       .setPlaceholder('Select the game to confirm payout for...')
       .addOptions(options);
+
     const forLabel = (staffOverride && isAdmin) ? ` for ${staffOverride.username}` : '';
     await interaction.editReply({ content: `${e('payout')} Select which game to confirm payout${forLabel}:`, components: [new ActionRowBuilder().addComponents(select)] });
 
@@ -92,5 +92,74 @@ module.exports = {
     if (found.payout_status === 'paid') return interaction.editReply({ content: `${e('wrong')} Already marked as paid.`, components: [] });
 
     const finalWinnerId = found.winner_id;
+    const prize = found.prize || (found.prize_amount ? `${found.prize_amount} ${found.currency}` : 'N/A');
+
+    // Mark paid
+    await query(`UPDATE ${tableMap[foundType]} SET payout_status='paid', payout_confirmed_at=$1 WHERE id=$2`, [now, id]);
+    await query(`UPDATE member_wins SET payout_status='paid', paid_at=$1 WHERE ref_id=$2 AND type=$3`, [now, id, foundType]);
+    await query(`UPDATE payout_reminders SET resolved=true WHERE type=$1 AND ref_id=$2`, [foundType, id]);
+
+    // Track daily progress
+    try {
+      await updateDailyProgress(interaction.guildId, found.host_id, 'payout');
+      await sendCongratsIfGoalMet(interaction.client, interaction.guildId, found.host_id);
+    } catch {}
+
+    // Update winner announcement to Claimed
+    try {
+      const annRes = await query(`SELECT * FROM winner_announcements WHERE game_id=$1 AND guild_id=$2 AND status='pending'`, [id, interaction.guildId]);
+      if (annRes.rows.length) {
+        const ann = annRes.rows[0];
+        await query(`UPDATE winner_announcements SET status='claimed' WHERE id=$1`, [ann.id]);
+        const winnerCh = await interaction.client.channels.fetch(ann.channel_id);
+        const msg = await winnerCh.messages.fetch(ann.message_id);
+        if (msg.embeds[0]) {
+          const claimedEmbed = EmbedBuilder.from(msg.embeds[0])
+            .setColor(0x7F36F5)
+            .spliceFields(3, 1, {
+              name: e('payout') + ' Status',
+              value: e('checkmark') + ' Claimed — confirmed by <@' + interaction.user.id + '>',
+              inline: false
+            });
+          await msg.edit({ embeds: [claimedEmbed] });
+        }
+      }
+    } catch (err) { console.error('[Payout] Winner message update failed:', err.message); }
+
+    // Post transcript
+    try {
+      const cfgRes = await query(`SELECT game_transcript_channel_id FROM guild_config WHERE guild_id=$1`, [interaction.guildId]);
+      if (cfgRes.rows.length && cfgRes.rows[0].game_transcript_channel_id && foundType === 'game') {
+        const transcriptCh = await interaction.client.channels.fetch(cfgRes.rows[0].game_transcript_channel_id);
+        const durationMs   = now - new Date(found.started_at);
+        const durationMins = Math.round(durationMs / 60000);
+        const durationHrs  = Math.floor(durationMins / 60);
+        const durationRem  = durationMins % 60;
+        const durationStr  = durationHrs > 0 ? (durationRem > 0 ? `${durationHrs}h ${durationRem}m` : `${durationHrs}h`) : `${durationMins}m`;
+        const transcriptEmbed = baseEmbed(`${e('receipt')} Game Transcript — ${found.game_name}`, 0xCBC3E3, interaction.guild?.name)
+          .addFields(
+            { name: `${e('controller')} Game`,        value: found.game_name, inline: true },
+            { name: `${e('members')} Host`,            value: `<@${found.host_id}>`, inline: true },
+            { name: `${e('trophies')} Winner`,         value: finalWinnerId ? `<@${finalWinnerId}>` : 'N/A', inline: true },
+            { name: `${e('purplesparkle')} Prize`,     value: prize, inline: true },
+            { name: `${e('RojasClock')} Started`,      value: tsF(found.started_at), inline: true },
+            { name: `${e('confetti')} Ended`,          value: tsF(found.ended_at), inline: true },
+            { name: `${e('RojasClock')} Duration`,     value: durationStr, inline: true },
+            { name: `${e('payout')} Payout`,           value: `${e('checkmark')} Confirmed by <@${interaction.user.id}>`, inline: true },
+            { name: `${e('purplesparkle')} Jump Link`, value: found.message_link ? `[View Game](${found.message_link})` : 'N/A', inline: true },
+          );
+        await transcriptCh.send({ embeds: [transcriptEmbed] });
+      }
+    } catch (err) { console.error('[Payout] Transcript post failed:', err.message); }
+
+    const typeLabel = foundType.charAt(0).toUpperCase() + foundType.slice(1);
+    const embed = baseEmbed(`${e('payout')} Payout Confirmed`, COLORS.softgreen, interaction.guild?.name)
+      .addFields(
+        { name: `${e('controller')} Type`,    value: typeLabel, inline: true },
+        { name: `${e('trophies')} Winner`,    value: finalWinnerId ? `<@${finalWinnerId}>` : 'N/A', inline: true },
+        { name: `${e('purplesparkle')} Prize`,value: prize, inline: true },
+      );
+
+    await interaction.editReply({ embeds: [embed], components: [] });
   },
 };
