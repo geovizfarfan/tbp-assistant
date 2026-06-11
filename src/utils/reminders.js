@@ -113,7 +113,8 @@ async function checkNotClaimed(client) {
 }
 
 function startReminderLoop(client) {
-  setInterval(() => runPayoutReminders(client), 5 * 60 * 1000);
+  // Payout reminders disabled
+  // setInterval(() => runPayoutReminders(client), 5 * 60 * 1000);
   setInterval(() => checkNotClaimed(client), 5 * 60 * 1000);
   console.log('[Reminders] Payout reminder loop started.');
 }
