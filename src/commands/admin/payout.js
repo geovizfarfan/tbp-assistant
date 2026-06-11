@@ -46,11 +46,13 @@ module.exports = {
 
     const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ComponentType } = require('discord.js');
     const options = allUnpaid.map(g => {
-      const name   = g.game_name || `Raffle #${g.id}`;
-      const prize  = (g.prize || (g.prize_amount ? `${g.prize_amount} ${g.currency}` : 'No prize')).replace(/<[^>]+>/g, '').replace(/:[^:]+:/g, '').trim();
-      const winner = g.winner_username ? `Winner: ${g.winner_username}` : (g.winner_id ? `Winner: ${g.winner_id}` : 'No winner yet');
+      const name     = g.game_name || `Raffle #${g.id}`;
+      const prize    = (g.prize || (g.prize_amount ? `${g.prize_amount} ${g.currency}` : 'No prize')).replace(/<[^>]+>/g, '').replace(/:[^:]+:/g, '').trim();
+      const winner   = g.winner_username ? `Winner: ${g.winner_username}` : (g.winner_id ? `Winner: ${g.winner_id}` : 'No winner yet');
+      const isAuto   = /rumble|regret|dice attack|auto game/i.test(name);
+      const category = g.type === 'raffle' ? 'Raffle' : g.type === 'giveaway' ? 'Giveaway' : isAuto ? 'Auto-Game' : 'Game';
       return new StringSelectMenuOptionBuilder()
-        .setLabel(`${name} — ${prize}`.slice(0, 100))
+        .setLabel(`[${category}] ${name} — ${prize}`.slice(0, 100))
         .setDescription(winner.slice(0, 100))
         .setValue(`${g.type}:${g.id}`);
     });
