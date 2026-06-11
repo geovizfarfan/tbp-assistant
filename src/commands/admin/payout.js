@@ -8,7 +8,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('payout')
     .setDescription('Confirm a prize was paid out')
-    .addUserOption(o => o.setName('winner').setDescription('Who received the prize').setRequired(true)),
+,
 
   async execute(interaction) {
     const winnerOverride = interaction.options.getUser('winner');
