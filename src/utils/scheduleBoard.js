@@ -30,43 +30,41 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
 
   const totalItems = gamesRes.rows.length + rafflesRes.rows.length;
 
-  const embed = baseEmbed(`${e('controller')} Live Game Schedule`, COLORS.lightpurple)
-    .setDescription(
-      totalItems > 0
-        ? 'Active games and raffles happening right now!'
-        : '*No active games or raffles right now. Check back soon!*'
+  const embeds = [];
+
+  if (totalItems === 0) {
+    embeds.push(
+      baseEmbed(`${e('controller')} Live Game Schedule`, COLORS.lightpurple)
+        .setDescription('*No active games or raffles right now. Check back soon!*')
     );
+  }
 
   for (const game of gamesRes.rows) {
     const prizeText = game.prize_amount ? `${game.prize_amount} ${game.currency}` : game.prize || 'No prize';
-    embed.addFields({
-      name: `${e('bullet')} ${game.game_name}`,
-      value: [
-        `**Host:** <@${game.host_id}>`,
-        `**Prize:** ${prizeText}`,
-        `**Started:** ${tsF(game.started_at)} (${tsR(game.started_at)})`,
-        game.message_link ? `**[Jump to Game](${game.message_link})**` : '',
-      ].filter(Boolean).join('\n'),
-    });
+    const isAuto    = /rumble|regret|dice attack|auto game/i.test(game.game_name);
+    const category  = /raffle/i.test(game.game_name) ? 'Raffle' : /giveaway/i.test(game.game_name) ? 'Giveaway' : isAuto ? 'Auto-Game' : 'Game';
+    const desc = [
+      `**Prize:** ${prizeText}`,
+      `**Host:** <@${game.host_id}>`,
+      `**Started:** ${tsF(game.started_at)} (${tsR(game.started_at)})`,
+      game.message_link ? `[Jump to Game](${game.message_link})` : '',
+    ].filter(Boolean).join('\n');
+    embeds.push(baseEmbed(`${game.game_name}`, COLORS.tbppurple).setDescription(desc));
   }
 
   for (const raffle of rafflesRes.rows) {
     const prizeText = raffle.prize_amount ? `${raffle.prize_amount} ${raffle.currency}` : raffle.prize || 'No prize';
-    const jumpLink = raffle.message_id && raffle.channel_id
+    const jumpLink  = raffle.message_id && raffle.channel_id
       ? `https://discord.com/channels/${raffle.guild_id}/${raffle.channel_id}/${raffle.message_id}`
       : null;
-    embed.addFields({
-      name: `${e('raffle')} ${prizeText} Raffle`,
-      value: [
-        `**Host:** <@${raffle.host_id}>`,
-        `**Prize:** ${prizeText}`,
-        `**Ends:** ${tsF(raffle.ends_at)} (${tsR(raffle.ends_at)})`,
-        jumpLink ? `**[Jump to Raffle](${jumpLink})**` : '',
-      ].filter(Boolean).join('\n'),
-    });
+    const desc = [
+      `**Prize:** ${prizeText}`,
+      `**Host:** <@${raffle.host_id}>`,
+      `**Ends:** ${tsF(raffle.ends_at)} (${tsR(raffle.ends_at)})`,
+      jumpLink ? `[Jump to Raffle](${jumpLink})` : '',
+    ].filter(Boolean).join('\n');
+    embeds.push(baseEmbed(`${prizeText} Raffle`, COLORS.tbppink).setDescription(desc));
   }
-
-  embed.setTimestamp();
 
   // Ping game role only when new game added
   if (pingRole) try {
@@ -91,16 +89,23 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
     const channel = await guild.channels.fetch(board.channel_id);
     embed.setFooter({ text: `${guild.name} • Last updated` }).setTimestamp();
 
+    // Split into chunks of 10 (Discord limit)
+    const chunks = [];
+    for (let i = 0; i < embeds.length; i += 10) chunks.push(embeds.slice(i, i + 10));
+
     if (board.message_id) {
       try {
         const msg = await channel.messages.fetch(board.message_id);
-        await msg.edit({ embeds: [embed] });
-        await query(`UPDATE game_schedule_board SET updated_at=NOW() WHERE guild_id=$1`, [guildId]);
-        return;
+        await msg.delete();
       } catch {}
     }
 
-    const msg = await channel.send({ embeds: [embed] });
+    let firstMsgId = null;
+    for (const chunk of chunks) {
+      const msg = await channel.send({ embeds: chunk });
+      if (!firstMsgId) firstMsgId = msg.id;
+    }
+    const msg = { id: firstMsgId };
 
     await query(
       `UPDATE game_schedule_board SET message_id=$1, updated_at=NOW() WHERE guild_id=$2`,
