@@ -263,6 +263,10 @@ module.exports = {
       .setDescription('Full payroll overview')
     )
     .addSubcommand(sub => sub
+      .setName('pay-summary')
+      .setDescription('See total owed to staff and boosters this period')
+    )
+    .addSubcommand(sub => sub
       .setName('paycheck-check')
       .setDescription('Check if a staff member is pay-eligible')
       .addUserOption(o => o.setName('user').setDescription('Staff member').setRequired(true))
@@ -370,6 +374,7 @@ module.exports = {
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     if (sub === 'payroll')         await payroll(interaction);
+    if (sub === 'pay-summary')     await paySummary(interaction);
     if (sub === 'paycheck-check')  await paycheckCheck(interaction);
     if (sub === 'late-payouts')    await latePayouts(interaction);
     if (sub === 'missed-schedules')await missedSchedules(interaction);
@@ -384,6 +389,59 @@ module.exports = {
     if (sub === 'mark-paid')       await markPaid(interaction);
   },
 };
+
+
+async function paySummary(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  const reqRes = await query(`SELECT * FROM pay_requirements WHERE guild_id=$1`, [interaction.guildId]);
+  const req = reqRes.rows[0] || { bonus_per_game: 400, pay_period_days: 30 };
+  const bonusPerGame = req.bonus_per_game || 400;
+  const periodDays   = req.pay_period_days || 30;
+  const periodStart  = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
+
+  // Staff totals
+  const staffRes = await query(`SELECT * FROM staff WHERE guild_id=$1 AND active=true ORDER BY role`, [interaction.guildId]);
+  let totalCrowns = 0, totalSins = 0, totalGoos = 0;
+  const staffLines = [];
+
+  for (const s of staffRes.rows) {
+    const gamesRes = await query(`SELECT COUNT(*) FROM game_logs WHERE guild_id=$1 AND host_id=$2 AND started_at > $3`, [interaction.guildId, s.user_id, periodStart]);
+    const gamesHosted = parseInt(gamesRes.rows[0].count);
+    const gameBonus   = gamesHosted * bonusPerGame;
+    const totalPay    = (s.pay_amount || 0) + gameBonus;
+    if (s.pay_currency === 'Crowns') totalCrowns += totalPay;
+    if (s.pay_currency === 'Sins')   totalSins   += totalPay;
+    if (s.pay_currency === 'Goos')   totalGoos   += totalPay;
+    const overdue = s.next_pay_due_at && new Date(s.next_pay_due_at) < new Date();
+    staffLines.push(`${overdue ? e('atention') : e('checkmark')} ${s.username} — **${totalPay} ${s.pay_currency}** (base: ${s.pay_amount || 0} + ${gamesHosted} games × ${bonusPerGame})`);
+  }
+
+  // Booster totals
+  const boosterRes = await query(`SELECT * FROM boosters WHERE guild_id=$1 AND active=true ORDER BY tier`, [interaction.guildId]);
+  let boosterCrowns = 0, boosterSins = 0, boosterGoos = 0;
+  const boosterLines = [];
+
+  for (const b of boosterRes.rows) {
+    const overdue = b.next_pay_due_at && new Date(b.next_pay_due_at) < new Date();
+    const tierEmoji = { basic: e('purplesparkle'), standard: e('heart'), premium: e('diamond') }[b.boost_tier] || e('purplesparkle');
+    if (b.currency === 'Crowns') boosterCrowns += b.amount_owed;
+    if (b.currency === 'Sins')   boosterSins   += b.amount_owed;
+    if (b.currency === 'Goos')   boosterGoos   += b.amount_owed;
+    boosterLines.push(`${tierEmoji} ${b.username} — **${b.amount_owed} ${b.currency}** ${overdue ? e('atention') + ' OVERDUE' : ''}`);
+  }
+
+  const embed = baseEmbed(`${e('payday')} Pay Summary`, COLORS.tbppurple, interaction.guild?.name)
+    .addFields(
+      { name: `${e('members')} Staff Owed`, value: staffLines.join('\n') || 'No staff', inline: false },
+      { name: `${e('purplesparkle')} Staff Total`, value: `Crowns: ${totalCrowns} | Sins: ${totalSins} | Goos: ${totalGoos}`, inline: false },
+      { name: `${e('diamond')} Boosters Owed`, value: boosterLines.join('\n') || 'No boosters', inline: false },
+      { name: `${e('purplesparkle')} Booster Total`, value: `Crowns: ${boosterCrowns} | Sins: ${boosterSins} | Goos: ${boosterGoos}`, inline: false },
+      { name: `${e('payout')} Grand Total`, value: `Crowns: ${totalCrowns + boosterCrowns} | Sins: ${totalSins + boosterSins} | Goos: ${totalGoos + boosterGoos}`, inline: false },
+    );
+
+  await interaction.editReply({ embeds: [embed] });
+}
 
 async function payroll(interaction) {
   await interaction.deferReply({ ephemeral: true });
