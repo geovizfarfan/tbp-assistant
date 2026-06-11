@@ -23,15 +23,21 @@ module.exports = {
     }
 
     const unpaidGames = await query(
-      `SELECT id, game_name, prize, prize_amount, currency, winner_id, 'game' as type FROM game_logs
-       WHERE guild_id=$1 AND host_id=$2 AND payout_status != 'paid' AND payout_status != 'n/a' AND status='ended'
-       ORDER BY ended_at DESC`,
+      `SELECT gl.id, gl.game_name, gl.prize, gl.prize_amount, gl.currency, gl.winner_id, 'game' as type,
+              mw.username as winner_username
+       FROM game_logs gl
+       LEFT JOIN member_wins mw ON mw.ref_id = gl.id AND mw.type = 'game'
+       WHERE gl.guild_id=$1 AND gl.host_id=$2 AND gl.payout_status != 'paid' AND gl.payout_status != 'n/a' AND gl.status='ended'
+       ORDER BY gl.ended_at DESC`,
       [interaction.guildId, interaction.user.id]
     );
     const unpaidRaffles = await query(
-      `SELECT id, prize, prize_amount, currency, winner_id, 'raffle' as type FROM raffles
-       WHERE guild_id=$1 AND host_id=$2 AND payout_status != 'paid' AND status='ended'
-       ORDER BY ended_at DESC`,
+      `SELECT r.id, r.prize, r.prize_amount, r.currency, r.winner_id, 'raffle' as type,
+              mw.username as winner_username
+       FROM raffles r
+       LEFT JOIN member_wins mw ON mw.ref_id = r.id AND mw.type = 'raffle'
+       WHERE r.guild_id=$1 AND r.host_id=$2 AND r.payout_status != 'paid' AND r.status='ended'
+       ORDER BY r.ended_at DESC`,
       [interaction.guildId, interaction.user.id]
     );
 
@@ -42,7 +48,7 @@ module.exports = {
     const options = allUnpaid.map(g => {
       const name   = g.game_name || `Raffle #${g.id}`;
       const prize  = (g.prize || (g.prize_amount ? `${g.prize_amount} ${g.currency}` : 'No prize')).replace(/<[^>]+>/g, '').replace(/:[^:]+:/g, '').trim();
-      const winner = g.winner_id ? `Winner ID: ${g.winner_id}` : 'No winner yet';
+      const winner = g.winner_username ? `Winner: ${g.winner_username}` : (g.winner_id ? `Winner: ${g.winner_id}` : 'No winner yet');
       return new StringSelectMenuOptionBuilder()
         .setLabel(`${name} — ${prize}`.slice(0, 100))
         .setDescription(winner.slice(0, 100))
