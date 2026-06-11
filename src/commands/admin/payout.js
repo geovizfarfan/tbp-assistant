@@ -83,7 +83,8 @@ module.exports = {
 
     const [foundType, foundIdStr] = collected.values[0].split(':');
     const id = parseInt(foundIdStr);
-    await collected.deferUpdate();
+    console.log('[Payout] Selected:', foundType, id);
+    try { await collected.deferUpdate(); } catch (err) { console.error('[Payout] deferUpdate failed:', err.message); }
 
     const tableMap = { game: 'game_logs', raffle: 'raffles', giveaway: 'giveaways' };
     const foundRes = await query(`SELECT * FROM ${tableMap[foundType]} WHERE id=$1 AND guild_id=$2`, [id, interaction.guildId]);
