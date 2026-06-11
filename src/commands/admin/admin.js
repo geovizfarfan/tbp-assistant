@@ -102,6 +102,14 @@ async function setDailyGoals(interaction) {
 }
 
 
+
+async function pingGames(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+  const { refreshScheduleBoard } = require('../../utils/scheduleBoard');
+  await refreshScheduleBoard(interaction.client, interaction.guildId, true);
+  await interaction.editReply({ content: `${e('checkmark')} Game ping sent!` });
+}
+
 async function setTimezone(interaction) {
   const timezone = interaction.options.getString('timezone');
   await interaction.deferReply({ ephemeral: true });
@@ -326,6 +334,10 @@ module.exports = {
       .addIntegerOption(o => o.setName('payouts').setDescription('Daily payouts goal').setRequired(false))
     )
     .addSubcommand(sub => sub
+      .setName('ping-games')
+      .setDescription('Manually send a game ping with Get Pings / Stop Pings buttons')
+    )
+    .addSubcommand(sub => sub
       .setName('set-timezone')
       .setDescription('Set server timezone for daily goal reset')
       .addStringOption(o => o.setName('timezone').setDescription('Server timezone').setRequired(true)
@@ -382,6 +394,7 @@ module.exports = {
     if (sub === 'set-requirements')await setRequirements(interaction);
     if (sub === 'daily-report')    await dailyReport(interaction);
     if (sub === 'set-daily-goals') await setDailyGoals(interaction);
+    if (sub === 'ping-games')      await pingGames(interaction);
     if (sub === 'set-timezone')    await setTimezone(interaction);
     if (sub === 'set-roles')       await setRoles(interaction);
     if (sub === 'set-channels')    await setChannels(interaction);
