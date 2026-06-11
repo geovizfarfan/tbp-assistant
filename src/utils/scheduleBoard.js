@@ -36,7 +36,7 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
   for (const game of gamesRes.rows) {
     const prizeText = game.prize_amount ? `${game.prize_amount} ${game.currency}` : game.prize || 'No prize';
     const isAuto    = /rumble|regret|dice attack|auto game/i.test(game.game_name);
-    const icon      = /raffle/i.test(game.game_name) ? '🎟️' : /giveaway/i.test(game.game_name) ? '🎁' : isAuto ? '⚔️' : '🎮';
+    const icon      = /raffle/i.test(game.game_name) ? e('raffle') : /giveaway/i.test(game.game_name) ? e('gift') : isAuto ? e('bullet') : e('controller');
     allItems.push([
       `${icon} **${game.game_name}**`,
       `Prize: ${prizeText}`,
@@ -52,7 +52,7 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
       ? `https://discord.com/channels/${raffle.guild_id}/${raffle.channel_id}/${raffle.message_id}`
       : null;
     allItems.push([
-      `🎟️ **${prizeText} Raffle**`,
+      `${e('raffle')} **${prizeText} Raffle**`,
       `Host: <@${raffle.host_id}>`,
       `Ends: ${tsR(raffle.ends_at)}`,
       jumpLink ? `[Jump to Raffle](${jumpLink})` : '',
