@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ComponentType } = require('discord.js');
 const { query } = require('../../utils/database');
 const { e } = require('../../utils/appEmojis');
 const { baseEmbed, tsF, COLORS } = require('../../utils/embeds');
@@ -11,7 +11,7 @@ module.exports = {
     .addUserOption(o => o.setName('staff').setDescription('Admin only: view another staff members unpaid games').setRequired(false)),
 
   async execute(interaction) {
-    await interaction.reply({ content: `${e('Loading')} Loading your games...`, ephemeral: true });
+    await interaction.deferReply({ ephemeral: true });
     const now = new Date();
     const staffOverride = interaction.options.getUser('staff');
 
@@ -20,7 +20,7 @@ module.exports = {
       return interaction.editReply({ content: `Only staff can confirm payouts.` });
     }
 
-    const isAdmin = ['admin','owner'].includes(staffRes.rows[0].role);
+    const isAdmin  = ['admin','owner'].includes(staffRes.rows[0].role);
     const targetId = (staffOverride && isAdmin) ? staffOverride.id : interaction.user.id;
     if (staffOverride && !isAdmin) {
       return interaction.editReply({ content: `${e('wrong')} Only admins can view another staff member's payouts.` });
@@ -49,7 +49,6 @@ module.exports = {
     const targetName = (staffOverride && isAdmin) ? staffOverride.username : 'You';
     if (!allUnpaid.length) return interaction.editReply({ content: `${e('checkmark')} ${targetName} has no unpaid games or raffles!` });
 
-    const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ComponentType } = require('discord.js');
     const options = allUnpaid.map(g => {
       const name     = g.game_name || `Raffle #${g.id}`;
       const prize    = (g.prize || (g.prize_amount ? `${g.prize_amount} ${g.currency}` : 'No prize')).replace(/<[^>]+>/g, '').replace(/:[^:]+:/g, '').trim();
@@ -68,14 +67,17 @@ module.exports = {
       .addOptions(options);
 
     const forLabel = (staffOverride && isAdmin) ? ` for ${staffOverride.username}` : '';
-    await interaction.editReply({ content: `${e('payout')} Select which game to confirm payout${forLabel}:`, components: [new ActionRowBuilder().addComponents(select)] });
+    const reply = await interaction.editReply({
+      content: `${e('payout')} Select which game to confirm payout${forLabel}:`,
+      components: [new ActionRowBuilder().addComponents(select)]
+    });
 
     let collected;
     try {
-      collected = await interaction.awaitMessageComponent({
-        filter: i => i.customId === 'payout_select',
+      collected = await reply.awaitMessageComponent({
+        filter: i => i.user.id === interaction.user.id,
         componentType: ComponentType.StringSelect,
-        time: 60_000,
+        time: 120_000,
       });
     } catch {
       return interaction.editReply({ content: `${e('wrong')} Timed out.`, components: [] });
@@ -84,7 +86,7 @@ module.exports = {
     const [foundType, foundIdStr] = collected.values[0].split(':');
     const id = parseInt(foundIdStr);
     console.log('[Payout] Selected:', foundType, id);
-    try { await collected.deferUpdate(); } catch (err) { console.error('[Payout] deferUpdate failed:', err.message); }
+    await collected.deferUpdate();
 
     const tableMap = { game: 'game_logs', raffle: 'raffles', giveaway: 'giveaways' };
     const foundRes = await query(`SELECT * FROM ${tableMap[foundType]} WHERE id=$1 AND guild_id=$2`, [id, interaction.guildId]);
@@ -95,18 +97,15 @@ module.exports = {
     const finalWinnerId = found.winner_id;
     const prize = found.prize || (found.prize_amount ? `${found.prize_amount} ${found.currency}` : 'N/A');
 
-    // Mark paid
     await query(`UPDATE ${tableMap[foundType]} SET payout_status='paid', payout_confirmed_at=$1 WHERE id=$2`, [now, id]);
     await query(`UPDATE member_wins SET payout_status='paid', paid_at=$1 WHERE ref_id=$2 AND type=$3`, [now, id, foundType]);
     await query(`UPDATE payout_reminders SET resolved=true WHERE type=$1 AND ref_id=$2`, [foundType, id]);
 
-    // Track daily progress
     try {
       await updateDailyProgress(interaction.guildId, found.host_id, 'payout');
       await sendCongratsIfGoalMet(interaction.client, interaction.guildId, found.host_id);
     } catch {}
 
-    // Update winner announcement to Claimed
     try {
       const annRes = await query(`SELECT * FROM winner_announcements WHERE game_id=$1 AND guild_id=$2 AND status='pending'`, [id, interaction.guildId]);
       if (annRes.rows.length) {
@@ -127,7 +126,6 @@ module.exports = {
       }
     } catch (err) { console.error('[Payout] Winner message update failed:', err.message); }
 
-    // Post transcript
     try {
       const cfgRes = await query(`SELECT game_transcript_channel_id FROM guild_config WHERE guild_id=$1`, [interaction.guildId]);
       if (cfgRes.rows.length && cfgRes.rows[0].game_transcript_channel_id && foundType === 'game') {
@@ -156,9 +154,9 @@ module.exports = {
     const typeLabel = foundType.charAt(0).toUpperCase() + foundType.slice(1);
     const embed = baseEmbed(`${e('payout')} Payout Confirmed`, COLORS.softgreen, interaction.guild?.name)
       .addFields(
-        { name: `${e('controller')} Type`,    value: typeLabel, inline: true },
-        { name: `${e('trophies')} Winner`,    value: finalWinnerId ? `<@${finalWinnerId}>` : 'N/A', inline: true },
-        { name: `${e('purplesparkle')} Prize`,value: prize, inline: true },
+        { name: `${e('controller')} Type`,     value: typeLabel, inline: true },
+        { name: `${e('trophies')} Winner`,     value: finalWinnerId ? `<@${finalWinnerId}>` : 'N/A', inline: true },
+        { name: `${e('purplesparkle')} Prize`, value: prize, inline: true },
       );
 
     await interaction.editReply({ embeds: [embed], components: [] });
