@@ -11,7 +11,7 @@ module.exports = {
     .addUserOption(o => o.setName('staff').setDescription('Admin only: view another staff members unpaid games').setRequired(false)),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.reply({ content: `${e('Loading')} Loading your games...`, ephemeral: true });
     const now = new Date();
     const staffOverride = interaction.options.getUser('staff');
 
