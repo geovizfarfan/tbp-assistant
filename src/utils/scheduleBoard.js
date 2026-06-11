@@ -30,26 +30,19 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
 
   const totalItems = gamesRes.rows.length + rafflesRes.rows.length;
 
-  const embeds = [];
-
-  if (totalItems === 0) {
-    embeds.push(
-      baseEmbed(`${e('controller')} Live Game Schedule`, COLORS.lightpurple)
-        .setDescription('*No active games or raffles right now. Check back soon!*')
-    );
-  }
+  const allItems = [];
 
   for (const game of gamesRes.rows) {
     const prizeText = game.prize_amount ? `${game.prize_amount} ${game.currency}` : game.prize || 'No prize';
     const isAuto    = /rumble|regret|dice attack|auto game/i.test(game.game_name);
-    const category  = /raffle/i.test(game.game_name) ? 'Raffle' : /giveaway/i.test(game.game_name) ? 'Giveaway' : isAuto ? 'Auto-Game' : 'Game';
-    const desc = [
-      `**Prize:** ${prizeText}`,
-      `**Host:** <@${game.host_id}>`,
-      `**Started:** ${tsF(game.started_at)} (${tsR(game.started_at)})`,
+    const icon      = /raffle/i.test(game.game_name) ? '🎟️' : /giveaway/i.test(game.game_name) ? '🎁' : isAuto ? '⚔️' : '🎮';
+    allItems.push([
+      `${icon} **${game.game_name}**`,
+      `Prize: ${prizeText}`,
+      `Host: <@${game.host_id}>`,
+      `Started: ${tsR(game.started_at)}`,
       game.message_link ? `[Jump to Game](${game.message_link})` : '',
-    ].filter(Boolean).join('\n');
-    embeds.push(baseEmbed(`${game.game_name}`, COLORS.tbppurple).setDescription(desc));
+    ].filter(Boolean).join('\n'));
   }
 
   for (const raffle of rafflesRes.rows) {
@@ -57,14 +50,20 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
     const jumpLink  = raffle.message_id && raffle.channel_id
       ? `https://discord.com/channels/${raffle.guild_id}/${raffle.channel_id}/${raffle.message_id}`
       : null;
-    const desc = [
-      `**Prize:** ${prizeText}`,
-      `**Host:** <@${raffle.host_id}>`,
-      `**Ends:** ${tsF(raffle.ends_at)} (${tsR(raffle.ends_at)})`,
+    allItems.push([
+      `🎟️ **${prizeText} Raffle**`,
+      `Host: <@${raffle.host_id}>`,
+      `Ends: ${tsR(raffle.ends_at)}`,
       jumpLink ? `[Jump to Raffle](${jumpLink})` : '',
-    ].filter(Boolean).join('\n');
-    embeds.push(baseEmbed(`${prizeText} Raffle`, COLORS.tbppink).setDescription(desc));
+    ].filter(Boolean).join('\n'));
   }
+
+  const embed = baseEmbed(`${e('controller')} Live Game Schedule`, COLORS.lightpurple)
+    .setDescription(
+      allItems.length
+        ? allItems.join('\n▬▬▬▬▬▬▬▬▬▬\n')
+        : '*No active games or raffles right now. Check back soon!*'
+    );
 
   // Ping game role only when new game added
   if (pingRole) try {
@@ -89,23 +88,16 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
     const channel = await guild.channels.fetch(board.channel_id);
     embed.setFooter({ text: `${guild.name} • Last updated` }).setTimestamp();
 
-    // Split into chunks of 10 (Discord limit)
-    const chunks = [];
-    for (let i = 0; i < embeds.length; i += 10) chunks.push(embeds.slice(i, i + 10));
-
     if (board.message_id) {
       try {
         const msg = await channel.messages.fetch(board.message_id);
-        await msg.delete();
+        await msg.edit({ embeds: [embed] });
+        await query(`UPDATE game_schedule_board SET updated_at=NOW() WHERE guild_id=$1`, [guildId]);
+        return;
       } catch {}
     }
 
-    let firstMsgId = null;
-    for (const chunk of chunks) {
-      const msg = await channel.send({ embeds: chunk });
-      if (!firstMsgId) firstMsgId = msg.id;
-    }
-    const msg = { id: firstMsgId };
+    const msg = await channel.send({ embeds: [embed] });
 
     await query(
       `UPDATE game_schedule_board SET message_id=$1, updated_at=NOW() WHERE guild_id=$2`,
