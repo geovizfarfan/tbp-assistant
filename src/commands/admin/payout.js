@@ -27,7 +27,7 @@ module.exports = {
               mw.username as winner_username
        FROM game_logs gl
        LEFT JOIN member_wins mw ON mw.ref_id = gl.id AND mw.type = 'game'
-       WHERE gl.guild_id=$1 AND gl.host_id=$2 AND gl.payout_status != 'paid' AND gl.payout_status != 'n/a' AND gl.status='ended'
+       WHERE gl.guild_id=$1 AND gl.host_id=$2 AND gl.payout_status NOT IN ('paid','n/a','not_claimed') AND gl.status='ended'
        ORDER BY gl.ended_at DESC`,
       [interaction.guildId, interaction.user.id]
     );

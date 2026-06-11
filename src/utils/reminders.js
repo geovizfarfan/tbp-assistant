@@ -98,6 +98,7 @@ async function checkNotClaimed(client) {
       const ticketRes = await query(`SELECT id FROM ticket_logs WHERE guild_id=$1 AND opened_by=$2 AND opened_at > $3`, [ann.guild_id, ann.winner_id, new Date(ann.created_at)]);
       if (ticketRes.rows.length) continue;
       await query(`UPDATE winner_announcements SET status='not_claimed' WHERE id=$1`, [ann.id]);
+      if (ann.game_id) await query(`UPDATE game_logs SET payout_status='not_claimed' WHERE id=$1`, [ann.game_id]);
       try {
         const { EmbedBuilder } = require('discord.js');
         const ch = await client.channels.fetch(ann.channel_id);
