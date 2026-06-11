@@ -8,7 +8,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('payout')
     .setDescription('Confirm a prize was paid out')
-,
+    .addUserOption(o => o.setName('staff').setDescription('Admin only: view another staff members unpaid games').setRequired(false)),
 
   async execute(interaction) {
     const now         = new Date();
