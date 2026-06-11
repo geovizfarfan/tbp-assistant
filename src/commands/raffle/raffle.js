@@ -137,7 +137,7 @@ async function startRaffle(interaction) {
   const raffleId = res.rows[0].id;
 
   // Refresh schedule board to show new raffle
-  await refreshScheduleBoard(interaction.client, interaction.guildId);
+  await refreshScheduleBoard(interaction.client, interaction.guildId, true);
 
   const msUntilEnd = endsAt.getTime() - Date.now();
   if (msUntilEnd > 0) {
