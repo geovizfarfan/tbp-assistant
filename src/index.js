@@ -137,10 +137,11 @@ client.on('interactionCreate', async interaction => {
       try {
         const { baseEmbed, tsF, tsR, COLORS } = require('./utils/embeds');
         const prizeText = raffle.prize_amount ? `${raffle.prize_amount} ${raffle.prize}` : raffle.prize || 'Prize';
-        const updatedEmbed = baseEmbed(`${e('raffle')} RAFFLE`, COLORS.lightpurple, interaction.guild?.name)
-          .setDescription(`**Prize:** ${prizeText}\n**Host:** <@${raffle.host_id}>\n**Ends:** ${tsF(raffle.ends_at)} (${tsR(raffle.ends_at)})`)
-          .addFields({ name: `${e('members')} Entries`, value: `${count} entered` })
-          .setFooter({ text: `${interaction.guild?.name} — Click Join Raffle to enter!` });
+        const { EmbedBuilder } = require('discord.js');
+        const oldEmbed = interaction.message.embeds[0];
+        const updatedEmbed = EmbedBuilder.from(oldEmbed)
+          .spliceFields(0, oldEmbed.fields.length)
+          .addFields({ name: `${e('members')} Entries`, value: `${count} entered` });
         await interaction.message.edit({ embeds: [updatedEmbed] });
       } catch {}
       await interaction.reply({ content: `${e('checkmark')} You're in the raffle! Good luck!`, ephemeral: true });
