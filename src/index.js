@@ -132,6 +132,17 @@ client.on('interactionCreate', async interaction => {
         `INSERT INTO raffle_entries (raffle_id, user_id, username) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
         [raffle.id, interaction.user.id, interaction.user.username]
       );
+      const countRes = await query(`SELECT COUNT(*) FROM raffle_entries WHERE raffle_id=$1`, [raffle.id]);
+      const count = parseInt(countRes.rows[0].count);
+      try {
+        const { baseEmbed, tsF, tsR, COLORS } = require('./utils/embeds');
+        const prizeText = raffle.prize_amount ? `${raffle.prize_amount} ${raffle.prize}` : raffle.prize || 'Prize';
+        const updatedEmbed = baseEmbed(`${e('raffle')} RAFFLE`, COLORS.lightpurple, interaction.guild?.name)
+          .setDescription(`**Prize:** ${prizeText}\n**Host:** <@${raffle.host_id}>\n**Ends:** ${tsF(raffle.ends_at)} (${tsR(raffle.ends_at)})`)
+          .addFields({ name: `${e('members')} Entries`, value: `${count} entered` })
+          .setFooter({ text: `${interaction.guild?.name} — Click Join Raffle to enter!` });
+        await interaction.message.edit({ embeds: [updatedEmbed] });
+      } catch {}
       await interaction.reply({ content: `${e('checkmark')} You're in the raffle! Good luck!`, ephemeral: true });
     } catch (err) {
       console.error('[RaffleJoin] Error:', err.message);
