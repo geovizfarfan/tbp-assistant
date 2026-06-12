@@ -114,6 +114,32 @@ client.on('threadCreate', (thread) => handleThreadCreate(thread, client));
 
 client.on('interactionCreate', async interaction => {
   if (!interaction.isButton()) return;
+
+  // Raffle join button
+  if (interaction.customId === 'raffle_join') {
+    try {
+      const { query } = require('./utils/database');
+      const { e } = require('./utils/appEmojis');
+      const raffleRes = await query(
+        `SELECT * FROM raffles WHERE channel_id=$1 AND message_id=$2 AND status='active'`,
+        [interaction.channelId, interaction.message.id]
+      );
+      if (!raffleRes.rows.length) {
+        return interaction.reply({ content: 'This raffle has ended.', ephemeral: true });
+      }
+      const raffle = raffleRes.rows[0];
+      await query(
+        `INSERT INTO raffle_entries (raffle_id, user_id, username) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+        [raffle.id, interaction.user.id, interaction.user.username]
+      );
+      await interaction.reply({ content: `${e('checkmark')} You're in the raffle! Good luck!`, ephemeral: true });
+    } catch (err) {
+      console.error('[RaffleJoin] Error:', err.message);
+      await interaction.reply({ content: 'Something went wrong joining the raffle.', ephemeral: true }).catch(() => {});
+    }
+    return;
+  }
+
   if (!['game_ping_join', 'game_ping_leave'].includes(interaction.customId)) return;
   try {
     const { query } = require('./utils/database');
