@@ -266,7 +266,7 @@ async function listGames(interaction) {
   const embed = baseEmbed(title, COLORS.lightpurple, interaction.guild?.name);
 
   for (const g of res.rows) {
-    const payout = g.payout_status === 'paid' ? `${e('checkmark')} Paid` : g.payout_status === 'late' ? `${e('atention')} Late` : `${e('Loading')} Pending`;
+    const payout = g.payout_status === 'paid' ? `${e('checkmark')} Paid` : g.payout_status === 'n/a' ? 'N/A' : g.payout_status === 'not_claimed' ? `${e('wrong')} Not Claimed` : g.payout_status === 'late' ? `${e('atention')} Late` : `${e('Loading')} Pending`;
     embed.addFields({
       name: `#${g.id} — ${g.game_name}`,
       value: `${e('purplesparkle')} Prize: ${g.prize || 'N/A'} | Payout: ${payout}${g.message_link ? ` | [Jump](${g.message_link})` : ''}`,
