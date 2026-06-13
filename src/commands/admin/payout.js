@@ -50,7 +50,7 @@ module.exports = {
     if (!allUnpaid.length) return interaction.editReply({ content: `${e('checkmark')} ${targetName} has no unpaid games or raffles!` });
 
     const options = allUnpaid.map(g => {
-      const name     = g.game_name || `Raffle #${g.id}`;
+      const name     = (g.game_name || `Raffle #${g.id}`).replace(/<a?:[^:]+:\d+>/g, '').trim();
       const prize    = (g.prize || (g.prize_amount ? `${g.prize_amount} ${g.currency}` : 'No prize')).replace(/<[^>]+>/g, '').replace(/:[^:]+:/g, '').trim();
       const winner   = g.winner_username ? `Winner: ${g.winner_username}` : (g.winner_id ? `Winner: ${g.winner_id}` : 'No winner yet');
       const isAuto   = /rumble|regret|dice attack|auto game/i.test(name);
