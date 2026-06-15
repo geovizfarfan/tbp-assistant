@@ -6,7 +6,7 @@ const { e } = require('../../utils/appEmojis');
 const { query } = require('../../utils/database');
 const { baseEmbed, tsF, tsR, COLORS } = require('../../utils/embeds');
 const { getPrizeImage, getPrizeLabel } = require('../../utils/prizeImages');
-const { refreshScheduleBoard } = require('../../utils/scheduleBoard');
+const { refreshScheduleBoard, removeFromBoard } = require('../../utils/scheduleBoard');
 
 const PRIZE_CHOICES = [
   { label: 'Discord Profile Accessory', value: 'accessory',   emoji: '💎' },
@@ -231,7 +231,11 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
       );
 
     await channel.send({ content: `${e('confetti')} Congratulations <@${winner.user_id}>!`, embeds: [winEmbed] });
-    await refreshScheduleBoard(client, guildId);
+    // Remove raffle from board
+    try {
+      const raffleBoard = await query('SELECT board_message_id FROM raffles WHERE id=$1', [raffleId]);
+      if (raffleBoard.rows[0]?.board_message_id) await removeFromBoard(client, guildId, raffleBoard.rows[0].board_message_id);
+    } catch {}
 
     try {
       const origMsg = await channel.messages.fetch(messageId);

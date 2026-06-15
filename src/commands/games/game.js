@@ -2,7 +2,7 @@ const { SlashCommandBuilder } = require('discord.js');
 const { e } = require('../../utils/appEmojis');
 const { query } = require('../../utils/database');
 const { baseEmbed, tsF, tsR, COLORS } = require('../../utils/embeds');
-const { refreshScheduleBoard } = require('../../utils/scheduleBoard');
+const { refreshScheduleBoard, removeFromBoard } = require('../../utils/scheduleBoard');
 const { updateDailyProgress, sendCongratsIfGoalMet } = require('../../utils/dailyGoals');
 
 module.exports = {
