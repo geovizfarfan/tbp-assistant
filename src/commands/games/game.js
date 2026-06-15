@@ -191,7 +191,7 @@ async function endGame(interaction) {
     );
 
   await interaction.editReply({ embeds: [embed] });
-  await refreshScheduleBoard(interaction.client, interaction.guildId);
+  if (game.board_message_id) await removeFromBoard(interaction.client, interaction.guildId, game.board_message_id);
 
   try {
     const configRes = await query(`SELECT winner_channel_id, ticket_channel_id, game_transcript_channel_id FROM guild_config WHERE guild_id=$1`, [interaction.guildId]);
