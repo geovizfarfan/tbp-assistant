@@ -4,7 +4,6 @@ const { baseEmbed, tsF, tsR, COLORS } = require('./embeds');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 async function refreshScheduleBoard(client, guildId, pingRole = false) {
-  // Check guild_config first, fall back to game_schedule_board
   let channelId, messageId;
   const configRes = await query(`SELECT schedule_channel_id FROM guild_config WHERE guild_id=$1`, [guildId]);
   if (configRes.rows.length && configRes.rows[0].schedule_channel_id) {
@@ -17,33 +16,26 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
     channelId = boardRes.rows[0].channel_id;
     messageId = boardRes.rows[0].message_id;
   }
-  const board = { channel_id: channelId, message_id: messageId };
 
-  const gamesRes = await query(
-    `SELECT * FROM game_logs WHERE guild_id=$1 AND status='active' ORDER BY started_at ASC`,
-    [guildId]
-  );
+  const gamesRes = await query(`SELECT * FROM game_logs WHERE guild_id=$1 AND status='active' ORDER BY started_at ASC`, [guildId]);
+  const rafflesRes = await query(`SELECT * FROM raffles WHERE guild_id=$1 AND status='active' ORDER BY created_at ASC`, [guildId]);
 
-  const rafflesRes = await query(
-    `SELECT * FROM raffles WHERE guild_id=$1 AND status='active' ORDER BY created_at ASC`,
-    [guildId]
-  );
-
-  const totalItems = gamesRes.rows.length + rafflesRes.rows.length;
-
-  const allItems = [];
+  // Build individual embeds per game/raffle
+  const embeds = [];
 
   for (const game of gamesRes.rows) {
     const prizeText = game.prize_amount ? `${game.prize_amount} ${game.currency}` : game.prize || 'No prize';
     const isAuto    = /rumble|regret|dice attack|auto game/i.test(game.game_name);
     const icon      = /raffle/i.test(game.game_name) ? e('raffle') : /giveaway/i.test(game.game_name) ? e('gift') : isAuto ? e('bullet') : e('controller');
-    allItems.push([
-      `${icon} **${game.game_name}**`,
-      `Prize: ${prizeText}`,
-      `Host: <@${game.host_id}>`,
-      `Started: ${tsR(game.started_at)}`,
-      game.message_link ? `[Jump to Game](${game.message_link})` : '',
-    ].filter(Boolean).join('\n'));
+    const cleanName = game.game_name.replace(/<a?:[^:]+:\d+>/g, '').trim();
+    const gameEmbed = baseEmbed(`${icon} ${cleanName}`, COLORS.tbppurple)
+      .addFields(
+        { name: `${e('purplesparkle')} Prize`, value: prizeText, inline: true },
+        { name: `${e('members')} Host`,        value: `<@${game.host_id}>`, inline: true },
+        { name: `${e('RojasClock')} Started`,  value: tsR(game.started_at), inline: true },
+      );
+    if (game.message_link) gameEmbed.setURL(game.message_link);
+    embeds.push(gameEmbed);
   }
 
   for (const raffle of rafflesRes.rows) {
@@ -51,34 +43,29 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
     const jumpLink  = raffle.message_id && raffle.channel_id
       ? `https://discord.com/channels/${raffle.guild_id}/${raffle.channel_id}/${raffle.message_id}`
       : null;
-    allItems.push([
-      `${e('raffle')} **${prizeText} Raffle**`,
-      `Host: <@${raffle.host_id}>`,
-      `Ends: ${tsR(raffle.ends_at)}`,
-      jumpLink ? `[Jump to Raffle](${jumpLink})` : '',
-    ].filter(Boolean).join('\n'));
+    const raffleEmbed = baseEmbed(`${e('raffle')} ${prizeText} Raffle`, COLORS.tbppink)
+      .addFields(
+        { name: `${e('members')} Host`,    value: `<@${raffle.host_id}>`, inline: true },
+        { name: `${e('RojasClock')} Ends`, value: tsR(raffle.ends_at), inline: true },
+      );
+    if (jumpLink) raffleEmbed.setURL(jumpLink);
+    embeds.push(raffleEmbed);
   }
 
-  const embed = baseEmbed(`${e('controller')} Live Game Schedule`, COLORS.lightpurple)
-    .setDescription(
-      allItems.length
-        ? allItems.join('\n▬▬▬▬▬▬▬▬▬▬\n')
-        : '*No active games or raffles right now. Check back soon!*'
-    );
+  const emptyEmbed = baseEmbed(`${e('controller')} Live Game Schedule`, COLORS.lightpurple)
+    .setDescription('*No active games or raffles right now. Check back soon!*');
 
   // Ping game role only when new game added
   if (pingRole) try {
     const cfgRes = await query(`SELECT game_ping_role_id, schedule_channel_id, last_ping_message_id FROM guild_config WHERE guild_id=$1`, [guildId]);
     if (cfgRes.rows.length && cfgRes.rows[0].game_ping_role_id && cfgRes.rows[0].schedule_channel_id) {
       const schedCh = await client.channels.fetch(cfgRes.rows[0].schedule_channel_id);
-      // Delete previous ping message
       if (cfgRes.rows[0].last_ping_message_id) {
         try {
           const oldMsg = await schedCh.messages.fetch(cfgRes.rows[0].last_ping_message_id);
           await oldMsg.delete();
         } catch {}
       }
-      // Send new ping and save message ID
       const pingRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('game_ping_join').setLabel('🔔 Get Pings').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId('game_ping_leave').setLabel('🔕 Stop Pings').setStyle(ButtonStyle.Danger)
@@ -90,13 +77,12 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
 
   try {
     const guild   = await client.guilds.fetch(guildId);
-    const channel = await guild.channels.fetch(board.channel_id);
-    embed.setFooter({ text: `${guild.name} • Last updated` }).setTimestamp();
+    const channel = await guild.channels.fetch(channelId);
 
-    // Delete old board messages and repost fresh
-    if (board.message_id) {
+    // Delete old board message
+    if (messageId) {
       try {
-        const oldMsg = await channel.messages.fetch(board.message_id);
+        const oldMsg = await channel.messages.fetch(messageId);
         await oldMsg.delete();
       } catch {}
     }
@@ -110,13 +96,12 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
       const sent = await channel.send({ embeds: chunk });
       if (!firstMsgId) firstMsgId = sent.id;
     }
-    const msg = { id: firstMsgId };
 
     await query(
       `UPDATE game_schedule_board SET message_id=$1, updated_at=NOW() WHERE guild_id=$2`,
-      [msg.id, guildId]
+      [firstMsgId, guildId]
     );
-    } catch (err) {
+  } catch (err) {
     console.error('[ScheduleBoard] Failed to refresh:', err.message);
   }
 }
