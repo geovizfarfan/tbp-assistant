@@ -93,16 +93,24 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
     const channel = await guild.channels.fetch(board.channel_id);
     embed.setFooter({ text: `${guild.name} • Last updated` }).setTimestamp();
 
+    // Delete old board messages and repost fresh
     if (board.message_id) {
       try {
-        const msg = await channel.messages.fetch(board.message_id);
-        await msg.edit({ embeds: [embed] });
-        await query(`UPDATE game_schedule_board SET updated_at=NOW() WHERE guild_id=$1`, [guildId]);
-        return;
+        const oldMsg = await channel.messages.fetch(board.message_id);
+        await oldMsg.delete();
       } catch {}
     }
 
-    const msg = await channel.send({ embeds: [embed] });
+    const toSend = embeds.length ? embeds : [emptyEmbed];
+    const chunks = [];
+    for (let i = 0; i < toSend.length; i += 10) chunks.push(toSend.slice(i, i + 10));
+
+    let firstMsgId = null;
+    for (const chunk of chunks) {
+      const sent = await channel.send({ embeds: chunk });
+      if (!firstMsgId) firstMsgId = sent.id;
+    }
+    const msg = { id: firstMsgId };
 
     await query(
       `UPDATE game_schedule_board SET message_id=$1, updated_at=NOW() WHERE guild_id=$2`,

@@ -19,9 +19,10 @@ module.exports = {
     )
     .addSubcommand(sub => sub
       .setName('end')
-      .setDescription('End a game and log the winner')
+      .setDescription('End an active game')
       .addStringOption(o => o.setName('link').setDescription('Message link of the game').setRequired(true))
-      .addUserOption(o => o.setName('winner').setDescription('The winner').setRequired(true))
+      .addUserOption(o => o.setName('winner').setDescription('Who won the game').setRequired(false))
+      .addBooleanOption(o => o.setName('cancelled').setDescription('Was this game cancelled with no winner?').setRequired(false))
     )
 
     .addSubcommand(sub => sub
@@ -132,7 +133,12 @@ async function logGame(interaction) {
 
 async function endGame(interaction) {
   const link   = interaction.options.getString('link');
-  const winner = interaction.options.getUser('winner');
+  const winner    = interaction.options.getUser('winner');
+  const cancelled = interaction.options.getBoolean('cancelled') || false;
+
+  if (!winner && !cancelled) {
+    return interaction.editReply({ content: `${e('wrong')} Please select a winner or mark the game as cancelled.` });
+  }
   const now    = new Date();
   await interaction.deferReply({ ephemeral: true });
 
@@ -142,6 +148,12 @@ async function endGame(interaction) {
   );
   if (!gameRes.rows.length) return interaction.editReply({ content: `${e('wrong')} No active game found with that link.` });
   const game = gameRes.rows[0];
+
+  if (cancelled) {
+    await query(`UPDATE game_logs SET status='ended', ended_at=$1, payout_status='n/a' WHERE id=$2`, [now, game.id]);
+    await refreshScheduleBoard(interaction.client, interaction.guildId);
+    return interaction.editReply({ content: `${e('checkmark')} Game **${game.game_name}** marked as cancelled. No winner recorded.` });
+  }
 
   await query(`UPDATE game_logs SET status='ended', ended_at=$1, winner_id=$2 WHERE id=$3`, [now, winner.id, game.id]);
 
