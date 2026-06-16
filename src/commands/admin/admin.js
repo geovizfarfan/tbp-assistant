@@ -254,6 +254,50 @@ async function fixPayout(interaction) {
   await interaction.editReply({ content: `${e('checkmark')} Payout #${id} fixed. Winner updated to <@${winner.id}>. Reminder restarted.` });
 }
 
+
+async function fixPayout(interaction) {
+  const id = interaction.options.getInteger('id');
+  await interaction.deferReply({ ephemeral: true });
+
+  const staffRes = await query(`SELECT role FROM staff WHERE user_id=$1 AND active=true`, [interaction.user.id]);
+  if (!staffRes.rows.length || !['admin','owner'].includes(staffRes.rows[0].role)) {
+    return interaction.editReply({ content: `${e('wrong')} Only admins can fix payouts.` });
+  }
+
+  const gameRes = await query(`SELECT * FROM game_logs WHERE id=$1 AND guild_id=$2`, [id, interaction.guildId]);
+  if (!gameRes.rows.length) return interaction.editReply({ content: `${e('wrong')} Game #${id} not found.` });
+  const game = gameRes.rows[0];
+
+  const now = new Date();
+  await query(`UPDATE game_logs SET payout_status='paid', payout_confirmed_at=$1 WHERE id=$2`, [now, id]);
+  await query(`UPDATE member_wins SET payout_status='paid', paid_at=$1 WHERE ref_id=$2 AND type='game'`, [now, id]);
+  await query(`UPDATE payout_reminders SET resolved=true WHERE type='game' AND ref_id=$1`, [id]);
+
+  // Update winner announcement
+  try {
+    const { EmbedBuilder } = require('discord.js');
+    const annRes = await query(`SELECT * FROM winner_announcements WHERE game_id=$1 AND guild_id=$2`, [id, interaction.guildId]);
+    if (annRes.rows.length) {
+      await query(`UPDATE winner_announcements SET status='claimed' WHERE game_id=$1 AND guild_id=$2`, [id, interaction.guildId]);
+      const ann = annRes.rows[0];
+      const winnerCh = await interaction.client.channels.fetch(ann.channel_id);
+      const msg = await winnerCh.messages.fetch(ann.message_id);
+      if (msg.embeds[0]) {
+        const claimedEmbed = EmbedBuilder.from(msg.embeds[0])
+          .setColor(0x7F36F5)
+          .spliceFields(3, 1, {
+            name: e('payout') + ' Status',
+            value: e('checkmark') + ' Claimed — confirmed by <@' + interaction.user.id + '>',
+            inline: false
+          });
+        await msg.edit({ embeds: [claimedEmbed] });
+      }
+    }
+  } catch {}
+
+  await interaction.editReply({ content: `${e('checkmark')} Game #${id} (**${game.game_name}**) marked as paid by <@${interaction.user.id}>. #winners updated.` });
+}
+
 async function stopReminder(interaction) {
   const id  = interaction.options.getInteger('id');
   await interaction.deferReply({ ephemeral: true });
@@ -373,6 +417,11 @@ module.exports = {
       .addUserOption(o => o.setName('winner').setDescription('The correct winner').setRequired(true))
     )
     .addSubcommand(sub => sub
+      .setName('fix-payout')
+      .setDescription('Admin: manually mark a payout as paid')
+      .addIntegerOption(o => o.setName('id').setDescription('Game ID').setRequired(true))
+    )
+    .addSubcommand(sub => sub
       .setName('stop-reminder')
       .setDescription('Stop a payout reminder')
       .addIntegerOption(o => o.setName('id').setDescription('Reminder ID (from /admin late-payouts)').setRequired(true))
@@ -398,6 +447,7 @@ module.exports = {
     if (sub === 'set-timezone')    await setTimezone(interaction);
     if (sub === 'set-roles')       await setRoles(interaction);
     if (sub === 'set-channels')    await setChannels(interaction);
+    if (sub === 'fix-payout')      await fixPayout(interaction);
     if (sub === 'fix-payout')      await fixPayout(interaction);
     if (sub === 'stop-reminder')   await stopReminder(interaction);
     if (sub === 'mark-paid')       await markPaid(interaction);
