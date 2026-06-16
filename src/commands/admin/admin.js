@@ -235,7 +235,13 @@ async function fixPayout(interaction) {
     }
   } catch {}
 
-  await interaction.editReply({ content: `${e('checkmark')} Game #${id} (**${game.game_name}**) marked as paid by <@${interaction.user.id}>. #winners updated.` });
+  // Remove from schedule board if still showing
+  try {
+    const { removeFromBoard } = require('../../utils/scheduleBoard');
+    if (game.board_message_id) await removeFromBoard(interaction.client, interaction.guildId, game.board_message_id);
+  } catch {}
+
+  await interaction.editReply({ content: `${e('checkmark')} Game #${id} (**${game.game_name}**) marked as paid. #winners updated.` });
 }
 
 async function stopReminder(interaction) {

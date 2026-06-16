@@ -133,17 +133,16 @@ async function logGame(interaction) {
 }
 
 async function endGame(interaction) {
-  const link   = interaction.options.getString('link');
+  const link      = interaction.options.getString('link');
+  const gameId    = interaction.options.getInteger('id');
   const winner    = interaction.options.getUser('winner');
   const cancelled = interaction.options.getBoolean('cancelled') || false;
 
-  if (!winner && !cancelled) {
-    return interaction.editReply({ content: `${e('wrong')} Please select a winner or mark the game as cancelled.` });
-  }
   const now    = new Date();
   await interaction.deferReply({ ephemeral: true });
 
   if (!link && !gameId) return interaction.editReply({ content: `${e('wrong')} Please provide either a message link or game ID.` });
+  if (!winner && !cancelled) return interaction.editReply({ content: `${e('wrong')} Please select a winner or mark the game as cancelled.` });
   const gameRes = gameId
     ? await query(`SELECT * FROM game_logs WHERE guild_id=$1 AND id=$2 AND status='active' LIMIT 1`, [interaction.guildId, gameId])
     : await query(`SELECT * FROM game_logs WHERE guild_id=$1 AND message_link=$2 AND status='active' LIMIT 1`, [interaction.guildId, link]);
