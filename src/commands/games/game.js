@@ -20,7 +20,8 @@ module.exports = {
     .addSubcommand(sub => sub
       .setName('end')
       .setDescription('End an active game')
-      .addStringOption(o => o.setName('link').setDescription('Message link of the game').setRequired(true))
+      .addStringOption(o => o.setName('link').setDescription('Message link of the game').setRequired(false))
+      .addIntegerOption(o => o.setName('id').setDescription('Game ID (alternative to link)').setRequired(false))
       .addUserOption(o => o.setName('winner').setDescription('Who won the game').setRequired(false))
       .addBooleanOption(o => o.setName('cancelled').setDescription('Was this game cancelled with no winner?').setRequired(false))
     )
@@ -142,11 +143,11 @@ async function endGame(interaction) {
   const now    = new Date();
   await interaction.deferReply({ ephemeral: true });
 
-  const gameRes = await query(
-    `SELECT * FROM game_logs WHERE guild_id=$1 AND message_link=$2 AND status='active' LIMIT 1`,
-    [interaction.guildId, link]
-  );
-  if (!gameRes.rows.length) return interaction.editReply({ content: `${e('wrong')} No active game found with that link.` });
+  if (!link && !gameId) return interaction.editReply({ content: `${e('wrong')} Please provide either a message link or game ID.` });
+  const gameRes = gameId
+    ? await query(`SELECT * FROM game_logs WHERE guild_id=$1 AND id=$2 AND status='active' LIMIT 1`, [interaction.guildId, gameId])
+    : await query(`SELECT * FROM game_logs WHERE guild_id=$1 AND message_link=$2 AND status='active' LIMIT 1`, [interaction.guildId, link]);
+  if (!gameRes.rows.length) return interaction.editReply({ content: `${e('wrong')} No active game found with that ${gameId ? 'ID' : 'link'}.` });
   const game = gameRes.rows[0];
 
   if (cancelled) {

@@ -16,6 +16,7 @@ const BUILT_IN_ASSETS = {
   'gift_card':     'raffle_gift_card.png',
   'gift':          'raffle_gift.png',
   'sticker':       'raffle_sticker.png',
+  'kirby':         'Kirby_Raffle.png',
 };
 
 const ASSETS_DIR = path.join(__dirname, '../../assets');
@@ -60,6 +61,7 @@ const PRIZE_LABELS = {
   'gift_card':   'Gift Card',
   'gift':        'Other Gift',
   'sticker':     'Sticker Pack',
+  'kirby':       'Kirby',
 };
 
 function getPrizeLabel(key, customName) {
