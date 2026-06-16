@@ -167,9 +167,9 @@ async function endGame(interaction) {
     ? await query(`SELECT * FROM game_logs WHERE guild_id=$1 AND id=$2 AND status='active' LIMIT 1`, [interaction.guildId, gameId])
     : await query(`SELECT * FROM game_logs WHERE guild_id=$1 AND message_link=$2 AND status='active' LIMIT 1`, [interaction.guildId, link]);
   if (!gameRes.rows.length) return interaction.editReply({ content: `${e('wrong')} No active game found with that ${gameId ? 'ID' : 'link'}.` });
+  const game = gameRes.rows[0];
   const runnerPrize = runnerPrizeOpt || game.runner_up_prize || null;
   const comment     = commentOpt || game.comment || null;
-  const game = gameRes.rows[0];
 
   if (cancelled) {
     await query(`UPDATE game_logs SET status='ended', ended_at=$1, payout_status='n/a' WHERE id=$2`, [now, game.id]);
