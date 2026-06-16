@@ -29,15 +29,15 @@ async function checkEligibility(guildId, userId, periodDays) {
     [guildId, userId, periodStart]
   );
   const lateRes = await query(
-    `SELECT COUNT(*) FROM payout_reminders WHERE guild_id=$1 AND host_id=$2 AND created_at > $3 AND escalation_level >= 2`,
+    `SELECT COUNT(*) FROM game_logs WHERE guild_id=$1 AND host_id=$2 AND started_at > $3 AND payout_status='late'`,
     [guildId, userId, periodStart]
   );
   const missedRes = await query(
-    `SELECT COUNT(*) FROM schedules WHERE guild_id=$1 AND host_id=$2 AND scheduled_at > $3 AND status='missed'`,
+    `SELECT COUNT(*) FROM schedules WHERE guild_id=$1 AND user_id=$2 AND scheduled_date > $3 AND status='missed'`,
     [guildId, userId, periodStart]
   );
   const totalScheduled = parseInt((await query(
-    `SELECT COUNT(*) FROM schedules WHERE guild_id=$1 AND host_id=$2 AND scheduled_at > $3`,
+    `SELECT COUNT(*) FROM schedules WHERE guild_id=$1 AND user_id=$2 AND scheduled_date > $3`,
     [guildId, userId, periodStart]
   )).rows[0].count);
 
