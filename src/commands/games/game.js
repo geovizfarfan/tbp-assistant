@@ -16,6 +16,8 @@ module.exports = {
       .addStringOption(o => o.setName('link').setDescription('Message link to the game post').setRequired(true))
       .addStringOption(o => o.setName('prize').setDescription('Prize e.g. 500 Goos or Discord Nitro').setRequired(true))
       .addUserOption(o => o.setName('host').setDescription('Who actually hosted (leave blank if you are the host)').setRequired(false))
+      .addStringOption(o => o.setName('runner_up_prize').setDescription('Runner up prize if applicable').setRequired(false))
+      .addStringOption(o => o.setName('comment').setDescription('Optional comment e.g. Weekly special event').setRequired(false))
     )
     .addSubcommand(sub => sub
       .setName('end')
