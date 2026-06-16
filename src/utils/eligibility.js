@@ -2,7 +2,9 @@ const { query } = require('./database');
 
 async function checkEligibility(guildId, userId, periodDays) {
   const now = new Date();
-  const periodStart = new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000);
+  const reqRes0 = await query(`SELECT pay_period_days FROM pay_requirements WHERE guild_id=$1`, [guildId]);
+  const days = parseInt(periodDays) || parseInt(reqRes0.rows[0]?.pay_period_days) || 30;
+  const periodStart = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
   const reqRes = await query(`SELECT * FROM pay_requirements WHERE guild_id=$1`, [guildId]);
   const req = reqRes.rows[0] || {
