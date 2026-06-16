@@ -110,18 +110,28 @@ module.exports = {
       const annRes = await query(`SELECT * FROM winner_announcements WHERE game_id=$1 AND guild_id=$2 AND status='pending'`, [id, interaction.guildId]);
       if (annRes.rows.length) {
         const ann = annRes.rows[0];
-        await query(`UPDATE winner_announcements SET status='claimed' WHERE id=$1`, [ann.id]);
         const winnerCh = await interaction.client.channels.fetch(ann.channel_id);
         const msg = await winnerCh.messages.fetch(ann.message_id);
         if (msg.embeds[0]) {
-          const claimedEmbed = EmbedBuilder.from(msg.embeds[0])
-            .setColor(0x7F36F5)
-            .spliceFields(3, 1, {
-              name: e('payout') + ' Status',
-              value: e('checkmark') + ' Claimed — confirmed by <@' + interaction.user.id + '>',
-              inline: false
-            });
-          await msg.edit({ embeds: [claimedEmbed] });
+          const oldEmbed = msg.embeds[0];
+          // Update the specific winner's line in the Payout field
+          const fields = oldEmbed.fields.map(f => {
+            if (f.name.includes('Payout') || f.name.includes('payout') || f.name.includes('Status')) {
+              const updatedValue = f.value.replace(
+                new RegExp(`${e('Loading')} <@${finalWinnerId}> — Pending`),
+                `${e('checkmark')} <@${finalWinnerId}> — Claimed`
+              );
+              return { name: f.name, value: updatedValue, inline: f.inline };
+            }
+            return { name: f.name, value: f.value, inline: f.inline };
+          });
+          // Check if all winners claimed
+          const payoutField = fields.find(f => f.name.includes('Payout') || f.name.includes('payout') || f.name.includes('Status'));
+          const allClaimed = payoutField && !payoutField.value.includes('Pending');
+          const newColor = allClaimed ? 0x7F36F5 : 0xFF00C1;
+          if (allClaimed) await query(`UPDATE winner_announcements SET status='claimed' WHERE id=$1`, [ann.id]);
+          const updatedEmbed = EmbedBuilder.from(oldEmbed).setColor(newColor).setFields(fields);
+          await msg.edit({ embeds: [updatedEmbed] });
         }
       }
     } catch (err) { console.error('[Payout] Winner message update failed:', err.message); }
