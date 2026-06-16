@@ -23,6 +23,10 @@ module.exports = {
       .addStringOption(o => o.setName('link').setDescription('Message link of the game').setRequired(false))
       .addIntegerOption(o => o.setName('id').setDescription('Game ID (alternative to link)').setRequired(false))
       .addUserOption(o => o.setName('winner').setDescription('Who won the game').setRequired(false))
+      .addStringOption(o => o.setName('prize').setDescription('Winner prize (overrides logged prize)').setRequired(false))
+      .addUserOption(o => o.setName('runner_up').setDescription('Runner up winner').setRequired(false))
+      .addStringOption(o => o.setName('runner_up_prize').setDescription('Runner up prize').setRequired(false))
+      .addStringOption(o => o.setName('comment').setDescription('Optional comment e.g. Weekly special event').setRequired(false))
       .addBooleanOption(o => o.setName('cancelled').setDescription('Was this game cancelled with no winner?').setRequired(false))
     )
 
@@ -135,8 +139,12 @@ async function logGame(interaction) {
 async function endGame(interaction) {
   const link      = interaction.options.getString('link');
   const gameId    = interaction.options.getInteger('id');
-  const winner    = interaction.options.getUser('winner');
-  const cancelled = interaction.options.getBoolean('cancelled') || false;
+  const winner      = interaction.options.getUser('winner');
+  const winnerPrize = interaction.options.getString('prize');
+  const runnerUp    = interaction.options.getUser('runner_up');
+  const runnerPrize = interaction.options.getString('runner_up_prize');
+  const comment     = interaction.options.getString('comment');
+  const cancelled   = interaction.options.getBoolean('cancelled') || false;
 
   const now    = new Date();
   await interaction.deferReply({ ephemeral: true });
