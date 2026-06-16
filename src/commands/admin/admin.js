@@ -74,7 +74,7 @@ async function dailyReport(interaction) {
 
     embed.addFields({
       name: `${status} ${s.username} [${roleLabel}]`,
-      value: `${e('controller')} ${games}/${gGoal} · ${e('bullet')} ${autogames}/${aGoal} · ${e('payout')} ${payouts}/${pGoal}`,
+      value: `${e('controller')} ${games}/${gGoal} · ${'<a:sword:1516443055157416069>'} ${autogames}/${aGoal} · ${e('payout')} ${payouts}/${pGoal}`,
     });
   }
 
@@ -643,7 +643,7 @@ async function missedSchedules(interaction) {
       const roleLabel = { admin:'Admin', staff:'Mod', host:'Host', rumble_host:'Rumble Host', owner:'Owner' }[s.role] || s.role;
       const missing = [];
       if (!gameMet)   missing.push(`${e('controller')} Games: ${games}/${gGoal}`);
-      if (!autoMet)   missing.push(`${e('bullet')} Auto: ${autogames}/${aGoal}`);
+      if (!autoMet)   missing.push(`${'<a:sword:1516443055157416069>'} Auto: ${autogames}/${aGoal}`);
       if (!payoutMet) missing.push(`${e('payout')} Payouts: ${payouts}/${pGoal}`);
       embed.addFields({
         name: `${e('wrong')} ${s.username} [${roleLabel}]`,
