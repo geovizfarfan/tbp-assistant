@@ -34,6 +34,7 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
           { name: `${e('purplesparkle')} Prize`, value: prizeText, inline: true },
           { name: `${e('members')} Host`,        value: `<@${game.host_id}>`, inline: true },
           { name: `${e('RojasClock')} Started`,  value: tsR(game.started_at), inline: true },
+          { name: `${e('receipt')} ID`,          value: `#${game.id}`, inline: true },
         );
       if (game.message_link) gameEmbed.setURL(game.message_link);
 
