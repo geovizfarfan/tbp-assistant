@@ -138,6 +138,14 @@ async function logGame(interaction) {
 
   await interaction.editReply({ embeds: [embed] });
   await refreshScheduleBoard(interaction.client, interaction.guildId, true);
+
+  // Track daily progress
+  try {
+    const isAutoGame = /rumble|regret|dice attack|auto game|clash/i.test(gameName);
+    if (isAutoGame) await updateDailyProgress(interaction.guildId, hostId, 'autogame');
+    await updateDailyProgress(interaction.guildId, hostId, 'game');
+    await sendCongratsIfGoalMet(interaction.client, interaction.guildId, hostId);
+  } catch (err) { console.error('[DailyGoals] tracking error:', err.message); }
 }
 
 async function endGame(interaction) {
