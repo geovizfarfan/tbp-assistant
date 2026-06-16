@@ -442,7 +442,7 @@ async function paySummary(interaction) {
   }
 
   // Booster totals
-  const boosterRes = await query(`SELECT * FROM boosters WHERE guild_id=$1 AND active=true ORDER BY tier`, [interaction.guildId]);
+  const boosterRes = await query(`SELECT * FROM boosters WHERE guild_id=$1 AND active=true ORDER BY boost_tier`, [interaction.guildId]);
   let boosterCrowns = 0, boosterSins = 0, boosterGoos = 0;
   const boosterLines = [];
 
@@ -584,22 +584,82 @@ async function latePayouts(interaction) {
 }
 
 async function missedSchedules(interaction) {
+  const period = interaction.options.getString('period');
   await interaction.deferReply({ ephemeral: true });
-  const res = await query(
-    `SELECT * FROM schedules WHERE guild_id=$1 AND status='missed' ORDER BY scheduled_date DESC LIMIT 15`,
-    [interaction.guildId]
-  );
-  if (!res.rows.length) return interaction.editReply({ content: `${e('checkmark')} No missed schedules.` });
 
-  const embed = baseEmbed(`${e('calender')} Missed Schedules`, COLORS.softpeach, interaction.guild?.name);
-  for (const s of res.rows) {
-    embed.addFields({
-      name: `${s.scheduled_date} — ${s.type}`,
-      value: `Staff: <@${s.staff_id}> | Time: ${s.time_start}–${s.time_end} | Notes: ${s.notes || 'None'}`,
-    });
+  const tzRes = await query(`SELECT timezone FROM guild_config WHERE guild_id=$1`, [interaction.guildId]);
+  const tz = tzRes.rows[0]?.timezone || 'America/New_York';
+  const now = new Date();
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(now);
+
+  let dateFilter, periodLabel, multiplier;
+  if (period === 'today') {
+    dateFilter = `date = '${today}'`;
+    periodLabel = `Today — ${today}`;
+    multiplier = 1;
+  } else if (period === 'weekly') {
+    const weekAgo = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date(now.getTime() - 7*24*60*60*1000));
+    dateFilter = `date >= '${weekAgo}'`;
+    periodLabel = `This Week`;
+    multiplier = 7;
+  } else {
+    const monthAgo = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date(now.getTime() - 30*24*60*60*1000));
+    dateFilter = `date >= '${monthAgo}'`;
+    periodLabel = `This Month`;
+    multiplier = 30;
   }
+
+  const staffRes = await query(`SELECT user_id, username, role FROM staff WHERE guild_id=$1 AND active=true ORDER BY role, username`, [interaction.guildId]);
+  if (!staffRes.rows.length) return interaction.editReply({ content: `${e('wrong')} No staff found.` });
+
+  const embed = baseEmbed(`${e('atention')} Goals Not Met — ${periodLabel}`, COLORS.softred, interaction.guild?.name);
+  let anyMissed = false;
+
+  for (const s of staffRes.rows) {
+    const goalRes = await query(`SELECT * FROM daily_goals WHERE guild_id=$1 AND role=$2`, [interaction.guildId, s.role]);
+    if (!goalRes.rows.length) continue;
+    const goal = goalRes.rows[0];
+
+    const progressRes = await query(
+      `SELECT COALESCE(SUM(games),0) as games, COALESCE(SUM(autogames),0) as autogames, COALESCE(SUM(payouts),0) as payouts FROM daily_progress WHERE guild_id=$1 AND user_id=$2 AND ${dateFilter}`,
+      [interaction.guildId, s.user_id]
+    );
+    const p = progressRes.rows[0];
+    const games     = parseInt(p.games);
+    const autogames = parseInt(p.autogames);
+    const payouts   = parseInt(p.payouts);
+
+    const gGoal = goal.games * multiplier;
+    const aGoal = goal.autogames * multiplier;
+    const pGoal = goal.payouts * multiplier;
+
+    const gameMet    = games >= gGoal;
+    const autoMet    = autogames >= aGoal;
+    const payoutMet  = payouts >= pGoal;
+    const allMet     = gameMet && autoMet && payoutMet;
+
+    if (!allMet) {
+      anyMissed = true;
+      const roleLabel = { admin:'Admin', staff:'Mod', host:'Host', rumble_host:'Rumble Host', owner:'Owner' }[s.role] || s.role;
+      const missing = [];
+      if (!gameMet)   missing.push(`${e('controller')} Games: ${games}/${gGoal}`);
+      if (!autoMet)   missing.push(`${e('bullet')} Auto: ${autogames}/${aGoal}`);
+      if (!payoutMet) missing.push(`${e('payout')} Payouts: ${payouts}/${pGoal}`);
+      embed.addFields({
+        name: `${e('wrong')} ${s.username} [${roleLabel}]`,
+        value: missing.join(' · '),
+      });
+    }
+  }
+
+  if (!anyMissed) {
+    embed.setDescription(`${e('checkmark')} All staff have met their goals for ${periodLabel}!`);
+    embed.setColor(COLORS.softgreen);
+  }
+
   await interaction.editReply({ embeds: [embed] });
 }
+
 
 async function setRequirements(interaction) {
   await interaction.deferReply({ ephemeral: true });
