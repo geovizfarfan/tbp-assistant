@@ -195,7 +195,8 @@ async function setChannels(interaction) {
 
 
 async function fixPayout(interaction) {
-  const id = interaction.options.getInteger('id');
+  const id     = interaction.options.getInteger('id');
+  const status = interaction.options.getString('status');
   await interaction.deferReply({ ephemeral: true });
 
   const staffRes = await query(`SELECT role FROM staff WHERE user_id=$1 AND active=true`, [interaction.user.id]);
@@ -206,42 +207,57 @@ async function fixPayout(interaction) {
   const gameRes = await query(`SELECT * FROM game_logs WHERE id=$1 AND guild_id=$2`, [id, interaction.guildId]);
   if (!gameRes.rows.length) return interaction.editReply({ content: `${e('wrong')} Game #${id} not found.` });
   const game = gameRes.rows[0];
-
   const now = new Date();
-  await query(`UPDATE game_logs SET payout_status='paid', payout_confirmed_at=$1 WHERE id=$2`, [now, id]);
-  await query(`UPDATE member_wins SET payout_status='paid', paid_at=$1 WHERE ref_id=$2 AND type='game'`, [now, id]);
-  await query(`UPDATE payout_reminders SET resolved=true WHERE type='game' AND ref_id=$1`, [id]);
 
-  // Update winner announcement
+  // End the game if it was never ended
+  if (game.status === 'active') {
+    await query(`UPDATE game_logs SET status='ended', ended_at=$1 WHERE id=$2`, [now, id]);
+  }
+
+  if (status === 'claimed') {
+    await query(`UPDATE game_logs SET payout_status='paid', payout_confirmed_at=$1 WHERE id=$2`, [now, id]);
+    await query(`UPDATE member_wins SET payout_status='paid', paid_at=$1 WHERE ref_id=$2 AND type='game'`, [now, id]);
+    await query(`UPDATE payout_reminders SET resolved=true WHERE type='game' AND ref_id=$1`, [id]);
+  } else {
+    await query(`UPDATE game_logs SET payout_status='not_claimed' WHERE id=$1`, [id]);
+    await query(`UPDATE winner_announcements SET status='not_claimed' WHERE game_id=$1 AND guild_id=$2`, [id, interaction.guildId]);
+  }
+
+  // Update winner announcement embed
   try {
     const { EmbedBuilder } = require('discord.js');
     const annRes = await query(`SELECT * FROM winner_announcements WHERE game_id=$1 AND guild_id=$2`, [id, interaction.guildId]);
     if (annRes.rows.length) {
-      await query(`UPDATE winner_announcements SET status='claimed' WHERE game_id=$1 AND guild_id=$2`, [id, interaction.guildId]);
       const ann = annRes.rows[0];
       const winnerCh = await interaction.client.channels.fetch(ann.channel_id);
       const msg = await winnerCh.messages.fetch(ann.message_id);
       if (msg.embeds[0]) {
         const oldEmbed = msg.embeds[0];
+        const isClaimed = status === 'claimed';
+        const newColor  = isClaimed ? 0x7F36F5 : 0x00FFF9;
+        const newStatus = isClaimed
+          ? e('checkmark') + ' Claimed — confirmed by <@' + interaction.user.id + '>'
+          : e('wrong') + ' Not Claimed — winner did not claim within 6hrs';
         const fields = oldEmbed.fields.map(f => {
           if (f.name.includes('Status') || f.name.includes('Payout') || f.name.includes('payout')) {
-            return { name: e('payout') + ' Status', value: e('checkmark') + ' Claimed — confirmed by <@' + interaction.user.id + '>', inline: false };
+            return { name: e('payout') + ' Status', value: newStatus, inline: false };
           }
           return { name: f.name, value: f.value, inline: f.inline };
         });
-        const claimedEmbed = EmbedBuilder.from(oldEmbed).setColor(0x7F36F5).setFields(fields);
-        await msg.edit({ embeds: [claimedEmbed] });
+        const updatedEmbed = EmbedBuilder.from(oldEmbed).setColor(newColor).setFields(fields);
+        await msg.edit({ embeds: [updatedEmbed] });
       }
     }
   } catch {}
 
-  // Remove from schedule board if still showing
+  // Remove from schedule board
   try {
     const { removeFromBoard } = require('../../utils/scheduleBoard');
     if (game.board_message_id) await removeFromBoard(interaction.client, interaction.guildId, game.board_message_id);
   } catch {}
 
-  await interaction.editReply({ content: `${e('checkmark')} Game #${id} (**${game.game_name}**) marked as paid. #winners updated.` });
+  const label = status === 'claimed' ? 'Claimed ✅' : 'Not Claimed ❌';
+  await interaction.editReply({ content: `${e('checkmark')} Game #${id} (**${game.game_name}**) marked as **${label}**. #winners updated.` });
 }
 
 async function stopReminder(interaction) {
@@ -358,8 +374,13 @@ module.exports = {
     )
     .addSubcommand(sub => sub
       .setName('fix-payout')
-      .setDescription('Admin: manually mark a payout as paid')
+      .setDescription('Admin: manually update a game payout status')
       .addIntegerOption(o => o.setName('id').setDescription('Game ID').setRequired(true))
+      .addStringOption(o => o.setName('status').setDescription('Payout status').setRequired(true)
+        .addChoices(
+          { name: 'Claimed — winner was paid', value: 'claimed' },
+          { name: 'Not Claimed — winner never claimed', value: 'not_claimed' },
+        ))
     )
     .addSubcommand(sub => sub
       .setName('stop-reminder')
