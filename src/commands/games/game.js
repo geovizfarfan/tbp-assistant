@@ -146,8 +146,8 @@ async function endGame(interaction) {
   const winner      = interaction.options.getUser('winner');
   const winnerPrize = interaction.options.getString('prize');
   const runnerUp    = interaction.options.getUser('runner_up');
-  const runnerPrize = interaction.options.getString('runner_up_prize');
-  const comment     = interaction.options.getString('comment');
+  const runnerPrizeOpt = interaction.options.getString('runner_up_prize');
+  const commentOpt  = interaction.options.getString('comment');
   const cancelled   = interaction.options.getBoolean('cancelled') || false;
 
   const now    = new Date();
@@ -159,6 +159,8 @@ async function endGame(interaction) {
     ? await query(`SELECT * FROM game_logs WHERE guild_id=$1 AND id=$2 AND status='active' LIMIT 1`, [interaction.guildId, gameId])
     : await query(`SELECT * FROM game_logs WHERE guild_id=$1 AND message_link=$2 AND status='active' LIMIT 1`, [interaction.guildId, link]);
   if (!gameRes.rows.length) return interaction.editReply({ content: `${e('wrong')} No active game found with that ${gameId ? 'ID' : 'link'}.` });
+  const runnerPrize = runnerPrizeOpt || game.runner_up_prize || null;
+  const comment     = commentOpt || game.comment || null;
   const game = gameRes.rows[0];
 
   if (cancelled) {
