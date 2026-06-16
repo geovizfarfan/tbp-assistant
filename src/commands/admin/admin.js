@@ -222,13 +222,14 @@ async function fixPayout(interaction) {
       const winnerCh = await interaction.client.channels.fetch(ann.channel_id);
       const msg = await winnerCh.messages.fetch(ann.message_id);
       if (msg.embeds[0]) {
-        const claimedEmbed = EmbedBuilder.from(msg.embeds[0])
-          .setColor(0x7F36F5)
-          .spliceFields(3, 1, {
-            name: e('payout') + ' Status',
-            value: e('checkmark') + ' Claimed — confirmed by <@' + interaction.user.id + '>',
-            inline: false
-          });
+        const oldEmbed = msg.embeds[0];
+        const fields = oldEmbed.fields.map(f => {
+          if (f.name.includes('Status') || f.name.includes('Payout') || f.name.includes('payout')) {
+            return { name: e('payout') + ' Status', value: e('checkmark') + ' Claimed — confirmed by <@' + interaction.user.id + '>', inline: false };
+          }
+          return { name: f.name, value: f.value, inline: f.inline };
+        });
+        const claimedEmbed = EmbedBuilder.from(oldEmbed).setColor(0x7F36F5).setFields(fields);
         await msg.edit({ embeds: [claimedEmbed] });
       }
     }
