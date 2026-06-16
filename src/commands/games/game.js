@@ -72,7 +72,9 @@ async function logGame(interaction) {
   const gameName   = interaction.options.getString('game');
   const link       = interaction.options.getString('link');
   const prize      = interaction.options.getString('prize');
-  const hostOverride = interaction.options.getUser('host');
+  const hostOverride      = interaction.options.getUser('host');
+  const logComment        = interaction.options.getString('comment');
+  const logRunnerUpPrize  = interaction.options.getString('runner_up_prize');
   const hostId     = hostOverride ? hostOverride.id : interaction.user.id;
   const amount     = null;
   const currency   = 'Goos';
