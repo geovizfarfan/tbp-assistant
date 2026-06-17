@@ -177,7 +177,11 @@ async function endGame(interaction) {
     return interaction.editReply({ content: `${e('checkmark')} Game **${game.game_name}** marked as cancelled. No winner recorded.` });
   }
 
-  await query(`UPDATE game_logs SET status='ended', ended_at=$1, winner_id=$2 WHERE id=$3`, [now, winner.id, game.id]);
+  const hostWonOwnGame = game.host_id === winner.id;
+  await query(
+    `UPDATE game_logs SET status='ended', ended_at=$1, winner_id=$2, payout_status=$3 WHERE id=$4`,
+    [now, winner.id, hostWonOwnGame ? 'n/a' : 'pending', game.id]
+  );
 
   await query(
     `INSERT INTO member_wins (guild_id, user_id, username, type, ref_id, prize, prize_amount, currency, host_id, won_at)
