@@ -213,7 +213,7 @@ async function endGame(interaction) {
       { name: `${e('RojasClock')} Started`, value: tsF(game.started_at), inline: true },
       { name: `${e('confetti')} Ended`,     value: tsF(now), inline: true },
       { name: `${e('RojasClock')} Duration`,value: durationStr, inline: true },
-      { name: `${e('payout')} Payout`,      value: game.prize ? `${e('Loading')} Pending — host will reach out` : 'N/A', inline: false },
+      { name: `${e('payout')} Payout`,      value: hostWonOwnGame ? 'N/A' : (game.prize ? `${e('Loading')} Pending — host will reach out` : 'N/A'), inline: false },
     );
 
   await interaction.editReply({ embeds: [embed] });
