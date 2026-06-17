@@ -231,7 +231,7 @@ async function endGame(interaction) {
             { name: `${e('trophies')} Winner`,    value: `<@${winner.id}>`, inline: true },
             { name: `${e('purplesparkle')} Prize`, value: game.prize_amount ? `${game.prize_amount} ${game.currency}` : (game.prize || 'N/A'), inline: true },
             { name: `${e('members')} Host`,        value: `<@${game.host_id}>`, inline: true },
-            { name: `${e('payout')} Payout`,       value: `${e('Loading')} Pending — please open a ticket in ${ticketMention} to claim your prize!`, inline: false },
+            { name: `${e('payout')} Payout`,       value: hostWonOwnGame ? 'N/A' : `${e('Loading')} Pending — please open a ticket in ${ticketMention} to claim your prize!`, inline: false },
           );
         const winnerMsg = await winnerCh.send({ content: `${e('confetti')} Congratulations <@${winner.id}>!`, embeds: [winEmbed] });
 
