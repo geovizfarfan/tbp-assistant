@@ -118,8 +118,8 @@ module.exports = {
           const fields = oldEmbed.fields.map(f => {
             if (f.name.includes('Payout') || f.name.includes('payout') || f.name.includes('Status')) {
               const updatedValue = f.value.replace(
-                new RegExp(`${e('Loading')} <@${finalWinnerId}> — Pending`),
-                `${e('checkmark')} <@${finalWinnerId}> — Claimed`
+                new RegExp(`${e('Loading')} Pending[^\\n]*`),
+                `${e('checkmark')} Claimed — paid by <@${interaction.user.id}>`
               );
               return { name: f.name, value: updatedValue, inline: f.inline };
             }

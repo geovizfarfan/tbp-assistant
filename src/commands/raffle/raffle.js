@@ -201,6 +201,28 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
       );
 
     await channel.send({ content: `${e('confetti')} Congratulations <@${winner.user_id}>!`, embeds: [winEmbed] });
+
+    // Post to #winners channel
+    try {
+      const winnerCfgRes = await query(`SELECT winner_channel_id, ticket_channel_id FROM guild_config WHERE guild_id=$1`, [guildId]);
+      if (winnerCfgRes.rows.length && winnerCfgRes.rows[0].winner_channel_id) {
+        const winnerChId = winnerCfgRes.rows[0].winner_channel_id;
+        const winnerCh = await guild.channels.fetch(winnerChId);
+        const winnersEmbed = baseEmbed(`${e('confetti')} Raffle Winner — ${prizeText} Raffle`, 0xFF00C1, guild.name)
+          .addFields(
+            { name: `${e('trophies')} Winner`,    value: `<@${winner.user_id}>`, inline: true },
+            { name: `${e('purplesparkle')} Prize`, value: prizeText, inline: true },
+            { name: `${e('members')} Host`,        value: `<@${raffle.host_id}>`, inline: true },
+            { name: `${e('payout')} Payout`,       value: `${e('Loading')} Pending — please open a ticket in ${ticketMention} to claim your prize!`, inline: false },
+          );
+        const winnerMsg = await winnerCh.send({ content: `${e('confetti')} Congratulations <@${winner.user_id}>!`, embeds: [winnersEmbed] });
+        await query(
+          `INSERT INTO winner_announcements (guild_id, game_id, channel_id, message_id, winner_id, prize, is_booster)
+           VALUES ($1,$2,$3,$4,$5,$6,false)`,
+          [guildId, raffleId, winnerChId, winnerMsg.id, winner.user_id, prizeText]
+        );
+      }
+    } catch (err) { console.error('[Raffle] #winners post failed:', err.message); }
     // Remove raffle from board
     try {
       const raffleBoard = await query('SELECT board_message_id FROM raffles WHERE id=$1', [raffleId]);
