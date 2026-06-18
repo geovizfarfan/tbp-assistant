@@ -103,6 +103,8 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
 
   } catch (err) {
     console.error('[ScheduleBoard] Failed to refresh:', err.message);
+    if (err.errors) console.error('[ScheduleBoard] Detail:', JSON.stringify(err.errors, null, 2));
+    console.error(err.stack);
   }
 }
 
