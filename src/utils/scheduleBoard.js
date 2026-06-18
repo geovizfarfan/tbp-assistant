@@ -29,7 +29,8 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
       const isAuto    = /rumble|regret|dice attack|auto game|clash/i.test(game.game_name);
       const icon      = /raffle/i.test(game.game_name) ? e('raffle') : /giveaway/i.test(game.game_name) ? e('gift') : isAuto ? '<a:sword:1516443055157416069>' : e('controller');
       const cleanName = game.game_name.replace(/<a?:[^:]+:\d+>/g, '').trim();
-      const gameEmbed = baseEmbed(`${icon} ${cleanName}`, COLORS.tbppurple, guild.name)
+      const boardColor = isAuto ? COLORS.lavender : /raffle/i.test(game.game_name) ? COLORS.pastelblue : /giveaway/i.test(game.game_name) ? COLORS.pastelblue : COLORS.pastelyellow;
+      const gameEmbed = baseEmbed(`${icon} ${cleanName}`, boardColor, guild.name)
         .addFields(
           { name: `${e('purplesparkle')} Prize`, value: prizeText, inline: true },
           { name: `${e('members')} Host`,        value: `<@${game.host_id}>`, inline: true },
