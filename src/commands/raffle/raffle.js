@@ -51,7 +51,8 @@ module.exports = {
     )
     .addSubcommand(sub => sub
       .setName('list')
-      .setDescription('List active raffles')
+      .setDescription('List raffles')
+      .addBooleanOption(o => o.setName('ended').setDescription('Show ended raffles instead of active').setRequired(false))
     )
     .addSubcommand(sub => sub
       .setName('cancel')
@@ -276,15 +277,26 @@ async function endRaffle(interaction) {
 
 async function listRaffles(interaction) {
   await interaction.deferReply({ ephemeral: true });
-  const res = await query(
-    `SELECT * FROM raffles WHERE guild_id=$1 AND status='active' ORDER BY ends_at ASC LIMIT 10`,
-    [interaction.guildId]
-  );
-  if (!res.rows.length) return interaction.editReply({ content: 'No active raffles right now.' });
+  const showEnded = interaction.options.getBoolean('ended') || false;
+  const statusFilter = showEnded ? 'ended' : 'active';
 
-  const embed = baseEmbed(`${e('raffle')} Active Raffles`, COLORS.lightpurple, interaction.guild?.name);
+  const res = await query(
+    `SELECT * FROM raffles WHERE guild_id=$1 AND status=$2 ORDER BY ends_at DESC LIMIT 20`,
+    [interaction.guildId, statusFilter]
+  );
+  if (!res.rows.length) return interaction.editReply({ content: `No ${statusFilter} raffles found.` });
+
+  const title = `${e('raffle')} ${showEnded ? 'Ended' : 'Active'} Raffles`;
+  const embed = baseEmbed(title, COLORS.lightpurple, interaction.guild?.name);
+
   for (const r of res.rows) {
-    embed.addFields({ name: `#${r.id} — ${r.prize}`, value: `Host: <@${r.host_id}> | Ends: ${tsF(r.ends_at)} (${tsR(r.ends_at)})` });
+    const payout = r.payout_status === 'paid' ? `${e('checkmark')} Paid` : r.payout_status === 'late' ? `${e('atention')} Late` : `${e('Loading')} Pending`;
+    const winnerText = r.winner_id ? `<@${r.winner_id}>` : 'No winner';
+    const timeText = showEnded ? `Ended: ${tsF(r.ended_at)}` : `Ends: ${tsF(r.ends_at)} (${tsR(r.ends_at)})`;
+    embed.addFields({
+      name: `#${r.id} — ${r.prize}`,
+      value: `${e('purplesparkle')} Prize: ${r.prize || 'N/A'} | Payout: ${payout} | ${timeText}${showEnded ? ` | Winner: ${winnerText}` : ` | Host: <@${r.host_id}>`}`,
+    });
   }
   await interaction.editReply({ embeds: [embed] });
 }
