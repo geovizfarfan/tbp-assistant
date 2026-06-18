@@ -135,15 +135,23 @@ client.on('interactionCreate', async interaction => {
       const countRes = await query(`SELECT COUNT(*) FROM raffle_entries WHERE raffle_id=$1`, [raffle.id]);
       const count = parseInt(countRes.rows[0].count);
       try {
-        const { baseEmbed, tsF, tsR, COLORS } = require('./utils/embeds');
-        const prizeText = raffle.prize_amount ? `${raffle.prize_amount} ${raffle.prize}` : raffle.prize || 'Prize';
-        const { EmbedBuilder } = require('discord.js');
+        const { EmbedBuilder, AttachmentBuilder } = require('discord.js');
+        const { getPrizeImage } = require('./utils/prizeImages');
         const oldEmbed = interaction.message.embeds[0];
         const updatedEmbed = EmbedBuilder.from(oldEmbed)
           .spliceFields(0, oldEmbed.fields.length)
           .addFields({ name: `${e('members')} Entries`, value: `${count} entered` });
-        await interaction.message.edit({ embeds: [updatedEmbed] });
-      } catch {}
+
+        // Re-attach the image file if it was an attachment, to prevent Discord rendering it full-size
+        const imageData = await getPrizeImage(interaction.guildId, raffle.prize_key || 'gift');
+        if (imageData.type === 'attachment') {
+          const refreshedFile = new AttachmentBuilder(imageData.filepath, { name: imageData.filename });
+          updatedEmbed.setThumbnail(`attachment://${imageData.filename}`);
+          await interaction.message.edit({ embeds: [updatedEmbed], files: [refreshedFile] });
+        } else {
+          await interaction.message.edit({ embeds: [updatedEmbed] });
+        }
+      } catch (err) { console.error('[RaffleJoin] Embed update failed:', err.message); }
       await interaction.reply({ content: `${e('checkmark')} You're in the raffle! Good luck!`, ephemeral: true });
     } catch (err) {
       console.error('[RaffleJoin] Error:', err.message);

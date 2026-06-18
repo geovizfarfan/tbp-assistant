@@ -129,10 +129,10 @@ async function startRaffle(interaction) {
   const msg = await interaction.channel.send(msgPayload);
 
   const res = await query(
-    `INSERT INTO raffles (guild_id, channel_id, message_id, host_id, prize, prize_amount, currency, ends_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+    `INSERT INTO raffles (guild_id, channel_id, message_id, host_id, prize, prize_amount, currency, ends_at, prize_key)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
     [interaction.guildId, interaction.channelId, msg.id, interaction.user.id, prizeLabel, amount,
-     ['goos','sins','crowns'].includes(prizeKey) ? prizeKey.toUpperCase() : prizeKey, endsAt]
+     ['goos','sins','crowns'].includes(prizeKey) ? prizeKey.toUpperCase() : prizeKey, endsAt, prizeKey]
   );
   const raffleId = res.rows[0].id;
 
