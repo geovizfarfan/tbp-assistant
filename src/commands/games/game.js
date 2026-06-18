@@ -226,7 +226,7 @@ async function endGame(interaction) {
       const ticketMention = cfg.ticket_channel_id ? `<#${cfg.ticket_channel_id}>` : 'our support channel';
       if (cfg.winner_channel_id) {
         const winnerCh = await interaction.client.channels.fetch(cfg.winner_channel_id);
-        const winEmbed = baseEmbed(`${e('confetti')} Game Winner — ${game.game_name}`, 0xFF00C1, interaction.guild?.name)
+        const winEmbed = baseEmbed(`${e('confetti')} Game Winner — ${game.game_name}`, hostWonOwnGame ? 0xFFFF00 : 0xFF00C1, interaction.guild?.name)
           .addFields(
             { name: `${e('trophies')} Winner`,    value: `<@${winner.id}>`, inline: true },
             { name: `${e('purplesparkle')} Prize`, value: game.prize_amount ? `${game.prize_amount} ${game.currency}` : (game.prize || 'N/A'), inline: true },
