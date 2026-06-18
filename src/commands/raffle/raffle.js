@@ -53,6 +53,7 @@ module.exports = {
       .setName('list')
       .setDescription('List raffles')
       .addBooleanOption(o => o.setName('ended').setDescription('Show ended raffles instead of active').setRequired(false))
+      .addUserOption(o => o.setName('user').setDescription('Admin only: view another staff member\'s raffles').setRequired(false))
     )
     .addSubcommand(sub => sub
       .setName('cancel')
@@ -278,24 +279,36 @@ async function endRaffle(interaction) {
 async function listRaffles(interaction) {
   await interaction.deferReply({ ephemeral: true });
   const showEnded = interaction.options.getBoolean('ended') || false;
+  const targetUser = interaction.options.getUser('user');
   const statusFilter = showEnded ? 'ended' : 'active';
 
-  const res = await query(
-    `SELECT * FROM raffles WHERE guild_id=$1 AND status=$2 ORDER BY ends_at DESC LIMIT 20`,
-    [interaction.guildId, statusFilter]
-  );
-  if (!res.rows.length) return interaction.editReply({ content: `No ${statusFilter} raffles found.` });
+  const staffRes = await query(`SELECT role FROM staff WHERE user_id=$1 AND active=true`, [interaction.user.id]);
+  const isAdmin = staffRes.rows.length && ['admin','owner'].includes(staffRes.rows[0].role);
 
-  const title = `${e('raffle')} ${showEnded ? 'Ended' : 'Active'} Raffles`;
+  if (targetUser && !isAdmin) return interaction.editReply({ content: `${e('wrong')} Only admins can view another staff member's raffles.` });
+
+  const hostId = targetUser ? targetUser.id : interaction.user.id;
+
+  const res = await query(
+    `SELECT * FROM raffles WHERE guild_id=$1 AND host_id=$2 AND status=$3 ORDER BY ends_at DESC LIMIT 20`,
+    [interaction.guildId, hostId, statusFilter]
+  );
+
+  const who = targetUser ? targetUser.username : 'Your';
+  if (!res.rows.length) return interaction.editReply({ content: `${who} has no ${statusFilter} raffles.` });
+
+  const title = targetUser
+    ? `${e('raffle')} ${targetUser.username}'s ${showEnded ? 'Ended' : 'Active'} Raffles`
+    : `${e('raffle')} ${showEnded ? 'Ended' : 'Active'} Raffles`;
   const embed = baseEmbed(title, COLORS.lightpurple, interaction.guild?.name);
 
   for (const r of res.rows) {
     const payout = r.payout_status === 'paid' ? `${e('checkmark')} Paid` : r.payout_status === 'late' ? `${e('atention')} Late` : `${e('Loading')} Pending`;
     const winnerText = r.winner_id ? `<@${r.winner_id}>` : 'No winner';
-    const timeText = showEnded ? `Ended: ${tsF(r.ended_at)}` : `Ends: ${tsF(r.ends_at)} (${tsR(r.ends_at)})`;
+    const timeText = showEnded ? `Ended: ${tsF(r.ended_at)} | Winner: ${winnerText}` : `Ends: ${tsF(r.ends_at)} (${tsR(r.ends_at)})`;
     embed.addFields({
       name: `#${r.id} — ${r.prize}`,
-      value: `${e('purplesparkle')} Prize: ${r.prize || 'N/A'} | Payout: ${payout} | ${timeText}${showEnded ? ` | Winner: ${winnerText}` : ` | Host: <@${r.host_id}>`}`,
+      value: `${e('purplesparkle')} Prize: ${r.prize || 'N/A'} | Payout: ${payout} | ${timeText}`,
     });
   }
   await interaction.editReply({ embeds: [embed] });
