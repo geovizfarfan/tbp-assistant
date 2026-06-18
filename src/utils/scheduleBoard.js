@@ -65,6 +65,7 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
         .addFields(
           { name: `${e('members')} Host`,    value: `<@${raffle.host_id}>`, inline: true },
           { name: `${e('RojasClock')} Ends`, value: tsR(raffle.ends_at), inline: true },
+          { name: `${e('receipt')} ID`,        value: `#${raffle.id}`, inline: true },
         );
       if (jumpLink) raffleEmbed.setURL(jumpLink);
 
