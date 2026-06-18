@@ -147,36 +147,6 @@ async function startRaffle(interaction) {
     await autoEndRaffle(interaction.client, raffleId, interaction.guildId, interaction.channelId, msg.id);
   }
 
-  const collector = msg.createMessageComponentCollector({ componentType: ComponentType.Button, time: msUntilEnd });
-  collector.on('collect', async (btn) => {
-    if (btn.customId !== 'raffle_join') return;
-    try {
-      await query(
-        `INSERT INTO raffle_entries (raffle_id, user_id, username) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
-        [raffleId, btn.user.id, btn.user.username]
-      );
-      const countRes = await query(`SELECT COUNT(*) FROM raffle_entries WHERE raffle_id=$1`, [raffleId]);
-      const count = parseInt(countRes.rows[0].count);
-
-      const updatedEmbed = baseEmbed(`${e('raffle')} RAFFLE`, COLORS.lightpurple, interaction.guild?.name)
-        .setDescription(`**Prize:** ${displayPrize}\n**Host:** <@${interaction.user.id}>\n**Ends:** ${tsF(endsAt)} (${tsR(endsAt)})`)
-        .addFields({ name: `${e('member')} Entries`, value: `${count} entered` })
-        .setFooter({ text: `${interaction.guild?.name || '👑 Royal Ops'} — Click Join Raffle to enter!` });
-
-      if (imageData.type === 'attachment') {
-        updatedEmbed.setThumbnail(`attachment://${attachmentName}`);
-        const refreshedFile = new AttachmentBuilder(imageData.filepath, { name: imageData.filename });
-        await msg.edit({ embeds: [updatedEmbed], components: [joinRow], files: [refreshedFile] });
-      } else if (imageData.type === 'url') {
-        updatedEmbed.setThumbnail(imageData.url);
-        await msg.edit({ embeds: [updatedEmbed], components: [joinRow] });
-      }
-
-      await btn.reply({ content: `${e('checkmark')} You're in the raffle! Good luck!`, ephemeral: true });
-    } catch {
-      await btn.reply({ content: 'You are already entered in this raffle!', ephemeral: true });
-    }
-  });
 }
 
 async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
