@@ -16,6 +16,9 @@ const COLORS = {
   softpeach:   0xF9CB9C,
   softred:     0xE06666,
   tbppink:     0xFF1889,
+  pastelyellow: 0xFFF2B2,
+  pastelblue:   0xB2D8F0,
+  lavender:     0xC8A8E9,
 };
 
 function currencyLabel(c) {

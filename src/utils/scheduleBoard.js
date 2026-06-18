@@ -61,7 +61,7 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
       const jumpLink  = raffle.message_id && raffle.channel_id
         ? `https://discord.com/channels/${raffle.guild_id}/${raffle.channel_id}/${raffle.message_id}`
         : null;
-      const raffleEmbed = baseEmbed(`${e('raffle')} ${prizeText} Raffle`, COLORS.tbppink, guild.name)
+      const raffleEmbed = baseEmbed(`${e('raffle')} ${prizeText} Raffle`, COLORS.pastelblue, guild.name)
         .addFields(
           { name: `${e('members')} Host`,    value: `<@${raffle.host_id}>`, inline: true },
           { name: `${e('RojasClock')} Ends`, value: tsR(raffle.ends_at), inline: true },
