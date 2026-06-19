@@ -18,6 +18,7 @@ module.exports = {
       .addUserOption(o => o.setName('host').setDescription('Who actually hosted (leave blank if you are the host)').setRequired(false))
       .addStringOption(o => o.setName('runner_up_prize').setDescription('Runner up prize if applicable').setRequired(false))
       .addStringOption(o => o.setName('comment').setDescription('Optional comment e.g. Weekly special event').setRequired(false))
+      .addStringOption(o => o.setName('start_time').setDescription('When the game starts/ran e.g. <t:UNIX:F> or unix timestamp').setRequired(false))
     )
     .addSubcommand(sub => sub
       .setName('end')
