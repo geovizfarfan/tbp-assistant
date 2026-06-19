@@ -29,12 +29,13 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
       const isAuto    = /rumble|regret|dice attack|auto game|clash|hangry|hunger games/i.test(game.game_name);
       const icon      = /raffle/i.test(game.game_name) ? e('raffle') : /giveaway/i.test(game.game_name) ? e('gift') : isAuto ? '<a:sword:1516443055157416069>' : e('controller');
       const cleanName = game.game_name.replace(/<a?:[^:]+:\d+>/g, '').trim();
+      const startLabel = new Date(game.started_at) > new Date() ? 'Starts' : 'Started';
       const boardColor = isAuto ? COLORS.lavender : /raffle/i.test(game.game_name) ? COLORS.pastelblue : /giveaway/i.test(game.game_name) ? COLORS.pastelblue : COLORS.pastelyellow;
       const gameEmbed = baseEmbed(`${icon} ${cleanName}`, boardColor, guild.name)
         .addFields(
           { name: `${e('purplesparkle')} Prize`, value: prizeText, inline: true },
           { name: `${e('members')} Host`,        value: `<@${game.host_id}>`, inline: true },
-          { name: `${e('RojasClock')} Started`,  value: tsR(game.started_at), inline: true },
+          { name: `${e('RojasClock')} ${startLabel}`,  value: tsR(game.started_at), inline: true },
           { name: `${e('receipt')} ID`,          value: `#${game.id}`, inline: true },
         );
       if (game.message_link && /^https?:\/\//.test(game.message_link)) gameEmbed.setURL(game.message_link);
