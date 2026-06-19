@@ -18,6 +18,7 @@ const PRIZE_CHOICES = [
   { label: 'Gift Card',                 value: 'gift_card',   emoji: '🎁' },
   { label: 'Sticker Pack',              value: 'sticker',     emoji: '🎀' },
   { label: 'Other Gift (specify below)',value: 'gift',        emoji: '🎀' },
+  { label: 'Kirby',                     value: 'kirby',       emoji: '🩷' },
 ];
 
 module.exports = {
@@ -39,6 +40,7 @@ module.exports = {
           { name: 'Gift Card',                  value: 'gift_card'   },
           { name: 'Sticker Pack',               value: 'sticker'     },
           { name: 'Other Gift',                 value: 'gift'        },
+          { name: 'Kirby',                      value: 'kirby'       },
         ))
       .addStringOption(o => o.setName('duration').setDescription('How long the raffle runs e.g. 2h, 30m, 1h30m, 24h').setRequired(true))
       .addIntegerOption(o => o.setName('amount').setDescription('Prize amount (if currency-based)').setRequired(false))
