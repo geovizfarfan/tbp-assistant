@@ -196,6 +196,7 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
     } catch {}
 
     const prizeText = raffle.prize_amount ? `${raffle.prize_amount} ${raffle.prize}` : raffle.prize;
+    const winnerImageData = await getPrizeImage(guildId, raffle.prize_key);
     const winEmbed = baseEmbed(`${e('confetti')} Raffle Winner — ${prizeText} Raffle`, COLORS.tbppurple, guild.name)
       .addFields(
         { name: `${e('trophies')} Winner`,     value: `<@${winner.user_id}>`, inline: true },
@@ -204,7 +205,15 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
         { name: `${e('payout')} Payout`,        value: `${e('Loading')} Pending — please open a ticket in ${ticketMention} to claim your prize!`, inline: false },
       );
 
-    await channel.send({ content: `${e('confetti')} Congratulations <@${winner.user_id}>!`, embeds: [winEmbed] });
+    let winMsgPayload = { content: `${e('confetti')} Congratulations <@${winner.user_id}>!`, embeds: [winEmbed] };
+    if (winnerImageData.type === 'attachment') {
+      const winAttachment = new AttachmentBuilder(winnerImageData.filepath, { name: winnerImageData.filename });
+      winEmbed.setThumbnail(`attachment://${winnerImageData.filename}`);
+      winMsgPayload.files = [winAttachment];
+    } else if (winnerImageData.type === 'url') {
+      winEmbed.setThumbnail(winnerImageData.url);
+    }
+    await channel.send(winMsgPayload);
 
     // Post to #winners channel
     try {
@@ -219,7 +228,15 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
             { name: `${e('members')} Host`,        value: `<@${raffle.host_id}>`, inline: true },
             { name: `${e('payout')} Payout`,       value: `${e('Loading')} Pending — please open a ticket in ${ticketMention} to claim your prize!`, inline: false },
           );
-        const winnerMsg = await winnerCh.send({ content: `${e('confetti')} Congratulations <@${winner.user_id}>!`, embeds: [winnersEmbed] });
+        let winnersMsgPayload = { content: `${e('confetti')} Congratulations <@${winner.user_id}>!`, embeds: [winnersEmbed] };
+        if (winnerImageData.type === 'attachment') {
+          const winnersAttachment = new AttachmentBuilder(winnerImageData.filepath, { name: winnerImageData.filename });
+          winnersEmbed.setThumbnail(`attachment://${winnerImageData.filename}`);
+          winnersMsgPayload.files = [winnersAttachment];
+        } else if (winnerImageData.type === 'url') {
+          winnersEmbed.setThumbnail(winnerImageData.url);
+        }
+        const winnerMsg = await winnerCh.send(winnersMsgPayload);
         await query(
           `INSERT INTO winner_announcements (guild_id, game_id, channel_id, message_id, winner_id, prize, is_booster)
            VALUES ($1,$2,$3,$4,$5,$6,false)`,
