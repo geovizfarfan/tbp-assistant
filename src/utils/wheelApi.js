@@ -17,6 +17,8 @@ async function spinWheel(entries, colors) {
     return obj;
   });
 
+  console.log('[WheelAPI] Sending entries:', JSON.stringify(wheelEntries));
+
   const response = await fetch('https://wheelofnames.com/api/v2/wheels/animate', {
     method: 'POST',
     headers: {
