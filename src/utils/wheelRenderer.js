@@ -1,3 +1,29 @@
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+// sharp/librsvg need fontconfig to find fonts. Headless Linux containers (like Railway)
+// often ship with zero system fonts, causing text to render as blank boxes. We bundle our
+// own font and point fontconfig at it dynamically before sharp is required, so this works
+// regardless of where the app is deployed.
+const FONT_DIR = path.join(__dirname, '..', '..', 'assets', 'fonts');
+const FONTCONFIG_DIR = path.join(os.tmpdir(), 'tbp-fontconfig');
+const FONTCONFIG_FILE_PATH = path.join(FONTCONFIG_DIR, 'fonts.conf');
+
+try {
+  if (!fs.existsSync(FONTCONFIG_DIR)) fs.mkdirSync(FONTCONFIG_DIR, { recursive: true });
+  const fontsConfXml = '<?xml version="1.0"?>\n' +
+    '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n' +
+    '<fontconfig>\n' +
+    '  <dir>' + FONT_DIR + '</dir>\n' +
+    '  <cachedir>' + path.join(os.tmpdir(), 'tbp-fonts-cache') + '</cachedir>\n' +
+    '</fontconfig>\n';
+  fs.writeFileSync(FONTCONFIG_FILE_PATH, fontsConfXml);
+  process.env.FONTCONFIG_FILE = FONTCONFIG_FILE_PATH;
+} catch (err) {
+  console.error('[WheelRenderer] Failed to set up fontconfig:', err.message);
+}
+
 const sharp = require('sharp');
 const GIF = require('sharp-gif2');
 
@@ -41,7 +67,7 @@ function buildWheelSVG(entries, colors, size, rotationDeg) {
       ? entries[i].slice(0, maxChars - 1) + '\u2026'
       : entries[i];
 
-    labels += `<text x="${lx}" y="${ly}" font-size="${fontSize}" font-family="sans-serif" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle" transform="rotate(${midAngle} ${lx} ${ly})">${escapeXml(displayText)}</text>`;
+    labels += `<text x="${lx}" y="${ly}" font-size="${fontSize}" font-family="Roboto, sans-serif" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle" transform="rotate(${midAngle} ${lx} ${ly})">${escapeXml(displayText)}</text>`;
   }
 
   // Pointer at the right side (3 o'clock), straddling the rim
