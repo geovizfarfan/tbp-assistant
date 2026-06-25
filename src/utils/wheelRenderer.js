@@ -70,7 +70,7 @@ function buildWheelSVG(entries, colors, size, rotationDeg) {
     const textColor = getContrastTextColor(color);
     const strokeColor = textColor === '#000000' ? '#ffffff' : '#000000';
 
-    labels += `<text x="${lx}" y="${ly}" font-size="${fontSize}" font-family="Roboto, sans-serif" font-weight="900" fill="${textColor}" stroke="${strokeColor}" stroke-width="0.6" paint-order="stroke" text-anchor="middle" dominant-baseline="middle" transform="rotate(${midAngle} ${lx} ${ly})">${escapeXml(displayText)}</text>`;
+    labels += `<text x="${lx}" y="${ly}" font-size="${fontSize}" font-family="Roboto, sans-serif" font-weight="bold" fill="${textColor}" stroke="${strokeColor}" stroke-width="0.4" paint-order="stroke" text-anchor="middle" dominant-baseline="middle" transform="rotate(${midAngle} ${lx} ${ly})">${escapeXml(displayText)}</text>`;
   }
 
   // Pointer at the right side (3 o'clock), straddling the rim

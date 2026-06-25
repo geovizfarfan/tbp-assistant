@@ -21,7 +21,7 @@ async function resolveMentionsToEntries(interaction, rawEntries) {
     if (match) {
       try {
         const member = await interaction.guild.members.fetch(match[1]);
-        resolved.push({ text: member.displayName || member.user.username, userId: match[1] });
+        resolved.push({ text: member.user.username, userId: match[1] });
       } catch {
         resolved.push({ text: entry, userId: null });
       }
@@ -183,7 +183,7 @@ async function spinReactions(interaction) {
   for (const userId of uniqueUserIds) {
     try {
       const member = await interaction.guild.members.fetch(userId);
-      entryObjects.push({ text: member.displayName || member.user.username, userId: userId });
+      entryObjects.push({ text: member.user.username, userId: userId });
     } catch {
       entryObjects.push({ text: userId, userId: userId });
     }
@@ -238,7 +238,7 @@ async function spinBoosted(interaction) {
       userId = match[1];
       try {
         const member = await interaction.guild.members.fetch(match[1]);
-        displayName = member.displayName || member.user.username;
+        displayName = member.user.username;
         hasRole = member.roles.cache.has(role.id);
       } catch {
       }
