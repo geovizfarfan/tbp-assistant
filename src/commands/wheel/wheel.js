@@ -14,22 +14,27 @@ function parseManualEntries(raw) {
   return raw.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
 }
 
-async function resolveMentionsToNames(interaction, rawEntries) {
+async function resolveMentionsToEntries(interaction, rawEntries) {
   const resolved = [];
   for (const entry of rawEntries) {
     const match = entry.match(/<@!?(\d+)>/);
     if (match) {
       try {
         const member = await interaction.guild.members.fetch(match[1]);
-        resolved.push(member.displayName || member.user.username);
+        resolved.push({ text: member.displayName || member.user.username, userId: match[1] });
       } catch {
-        resolved.push(entry);
+        resolved.push({ text: entry, userId: null });
       }
     } else {
-      resolved.push(entry);
+      resolved.push({ text: entry, userId: null });
     }
   }
   return resolved;
+}
+
+function formatWinnerMention(winnerEntry) {
+  if (winnerEntry && winnerEntry.userId) return '<@' + winnerEntry.userId + '>';
+  return winnerEntry ? winnerEntry.text : 'Unknown';
 }
 
 const DEFAULT_COLORS = ['#ff00c1', '#9600ff', '#4900ff', '#00b8ff', '#00fff9', '#fff200'];
@@ -117,13 +122,27 @@ async function spinMembers(interaction) {
   if (!rawEntries.length) {
     return interaction.reply({ content: e('wrong') + ' No entries provided.', ephemeral: true });
   }
-  const entries = await resolveMentionsToNames(interaction, rawEntries);
+  const entryObjects = await resolveMentionsToEntries(interaction, rawEntries);
+  const textEntries = entryObjects.map(function(o) { return o.text; });
 
-  await sendWheelResult(
-    interaction, entries, colors,
-    e('controller') + ' Wheel Spin \u2014 Members',
-    e('trophies') + ' Winner'
-  );
+  await interaction.deferReply();
+  let result;
+  try {
+    result = await spinWheel(textEntries, colors);
+  } catch (err) {
+    console.error('[Wheel] Spin failed:', err.message);
+    return interaction.editReply({ content: e('wrong') + ' Wheel spin failed: ' + err.message });
+  }
+
+  const winnerEntry = entryObjects[result.winnerIndex];
+  const winnerDisplay = formatWinnerMention(winnerEntry);
+
+  const attachment = new AttachmentBuilder(result.buffer, { name: 'wheel.gif' });
+  const embed = baseEmbed(e('controller') + ' Wheel Spin \u2014 Members', COLORS.tbppurple, interaction.guild ? interaction.guild.name : null)
+    .setImage('attachment://wheel.gif')
+    .addFields({ name: e('trophies') + ' Winner', value: winnerDisplay, inline: false });
+
+  await interaction.editReply({ embeds: [embed], files: [attachment] });
 }
 
 async function spinReactions(interaction) {
@@ -160,31 +179,35 @@ async function spinReactions(interaction) {
     return interaction.editReply({ content: e('wrong') + ' No reactions found on that message.' });
   }
 
-  const entries = [];
+  const entryObjects = [];
   for (const userId of uniqueUserIds) {
     try {
       const member = await interaction.guild.members.fetch(userId);
-      entries.push(member.displayName || member.user.username);
+      entryObjects.push({ text: member.displayName || member.user.username, userId: userId });
     } catch {
-      entries.push(userId);
+      entryObjects.push({ text: userId, userId: userId });
     }
   }
+  const textEntries = entryObjects.map(function(o) { return o.text; });
 
   let result;
   try {
-    result = await spinWheel(entries, colors);
+    result = await spinWheel(textEntries, colors);
   } catch (err) {
     console.error('[Wheel] Spin failed:', err.message);
     return interaction.editReply({ content: e('wrong') + ' Wheel spin failed: ' + err.message });
   }
+
+  const winnerEntry = entryObjects[result.winnerIndex];
+  const winnerDisplay = formatWinnerMention(winnerEntry);
 
   const attachment = new AttachmentBuilder(result.buffer, { name: 'wheel.gif' });
 
   const embed = baseEmbed(e('confetti') + ' Wheel Spin \u2014 Reactions', COLORS.tbppurple, interaction.guild ? interaction.guild.name : null)
     .setImage('attachment://wheel.gif')
     .addFields(
-      { name: e('trophies') + ' Winner', value: result.winner, inline: false },
-      { name: e('member') + ' Total Entries', value: String(entries.length), inline: true },
+      { name: e('trophies') + ' Winner', value: winnerDisplay, inline: false },
+      { name: e('member') + ' Total Entries', value: String(entryObjects.length), inline: true },
     );
 
   await interaction.editReply({ embeds: [embed], files: [attachment] });
@@ -204,13 +227,15 @@ async function spinBoosted(interaction) {
     return interaction.editReply({ content: e('wrong') + ' No entries provided.' });
   }
 
-  const entries = [];
+  const entryObjects = [];
   for (const rawEntry of rawEntries) {
     const match = rawEntry.match(/<@!?(\d+)>/);
     let displayName = rawEntry;
+    let userId = null;
     let hasRole = false;
 
     if (match) {
+      userId = match[1];
       try {
         const member = await interaction.guild.members.fetch(match[1]);
         displayName = member.displayName || member.user.username;
@@ -219,18 +244,33 @@ async function spinBoosted(interaction) {
       }
     }
 
-    entries.push(displayName);
+    entryObjects.push({ text: displayName, userId: userId });
     if (hasRole && bonus > 0) {
-      for (let i = 0; i < bonus; i++) entries.push(displayName);
+      for (let i = 0; i < bonus; i++) entryObjects.push({ text: displayName, userId: userId });
     }
   }
+  const textEntries = entryObjects.map(function(o) { return o.text; });
 
-  await sendWheelResult(
-    interaction, entries, colors,
-    e('diamond') + ' Wheel Spin \u2014 Bonus Entries',
-    e('trophies') + ' Winner',
-    [{ name: e('diamond') + ' Bonus Role', value: '<@&' + role.id + '> (+' + bonus + ' entries each)', inline: true }]
-  );
+  let result;
+  try {
+    result = await spinWheel(textEntries, colors);
+  } catch (err) {
+    console.error('[Wheel] Spin failed:', err.message);
+    return interaction.editReply({ content: e('wrong') + ' Wheel spin failed: ' + err.message });
+  }
+
+  const winnerEntry = entryObjects[result.winnerIndex];
+  const winnerDisplay = formatWinnerMention(winnerEntry);
+
+  const attachment = new AttachmentBuilder(result.buffer, { name: 'wheel.gif' });
+  const embed = baseEmbed(e('diamond') + ' Wheel Spin \u2014 Bonus Entries', COLORS.tbppurple, interaction.guild ? interaction.guild.name : null)
+    .setImage('attachment://wheel.gif')
+    .addFields(
+      { name: e('trophies') + ' Winner', value: winnerDisplay, inline: false },
+      { name: e('diamond') + ' Bonus Role', value: '<@&' + role.id + '> (+' + bonus + ' entries each)', inline: true }
+    );
+
+  await interaction.editReply({ embeds: [embed], files: [attachment] });
 }
 
 async function spinPrizes(interaction) {
@@ -265,21 +305,24 @@ async function spinCombo(interaction) {
   if (!entryList.length || !prizeList.length) {
     return interaction.editReply({ content: e('wrong') + ' Need both entries and prizes.' });
   }
-  const resolvedEntries = await resolveMentionsToNames(interaction, entryList);
+  const entryObjects = await resolveMentionsToEntries(interaction, entryList);
+  const textEntries = entryObjects.map(function(o) { return o.text; });
 
   let winnerResult;
   try {
-    winnerResult = await spinWheel(resolvedEntries, colors);
+    winnerResult = await spinWheel(textEntries, colors);
   } catch (err) {
     console.error('[Wheel] Winner spin failed:', err.message);
     return interaction.editReply({ content: e('wrong') + ' Winner spin failed: ' + err.message });
   }
-  const winnerName = winnerResult.winner;
+  const winnerEntry = entryObjects[winnerResult.winnerIndex];
+  const winnerDisplay = formatWinnerMention(winnerEntry);
+  const winnerPlainText = winnerEntry ? winnerEntry.text : 'Unknown';
 
   const winnerAttachment = new AttachmentBuilder(winnerResult.buffer, { name: 'wheel-winner.gif' });
   const winnerEmbed = baseEmbed(e('confetti') + ' Step 1 \u2014 Picking the Winner', COLORS.tbppurple, interaction.guild ? interaction.guild.name : null)
     .setImage('attachment://wheel-winner.gif')
-    .addFields({ name: e('trophies') + ' Winner', value: winnerName, inline: false });
+    .addFields({ name: e('trophies') + ' Winner', value: winnerDisplay, inline: false });
 
   await interaction.editReply({ embeds: [winnerEmbed], files: [winnerAttachment] });
 
@@ -293,10 +336,10 @@ async function spinCombo(interaction) {
   const prizeName = prizeResult.winner;
 
   const prizeAttachment = new AttachmentBuilder(prizeResult.buffer, { name: 'wheel-prize.gif' });
-  const prizeEmbed = baseEmbed(e('purplesparkle') + ' Step 2 \u2014 ' + winnerName + '\u2019s Prize', COLORS.tbppurple, interaction.guild ? interaction.guild.name : null)
+  const prizeEmbed = baseEmbed(e('purplesparkle') + ' Step 2 \u2014 ' + winnerPlainText + '\u2019s Prize', COLORS.tbppurple, interaction.guild ? interaction.guild.name : null)
     .setImage('attachment://wheel-prize.gif')
     .addFields(
-      { name: e('members') + ' Winner', value: winnerName, inline: true },
+      { name: e('members') + ' Winner', value: winnerDisplay, inline: true },
       { name: e('trophies') + ' Prize', value: prizeName, inline: true },
     );
 

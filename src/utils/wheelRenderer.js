@@ -63,11 +63,14 @@ function buildWheelSVG(entries, colors, size, rotationDeg) {
 
     const fontSize = n > 24 ? 9 : Math.max(11, Math.min(20, size / (n * 1.3)));
     const maxChars = n > 30 ? 8 : 14;
-    const displayText = entries[i].length > maxChars
-      ? entries[i].slice(0, maxChars - 1) + '\u2026'
-      : entries[i];
+    const cleanedText = stripEmoji(entries[i]) || entries[i];
+    const displayText = cleanedText.length > maxChars
+      ? cleanedText.slice(0, maxChars - 1) + '\u2026'
+      : cleanedText;
+    const textColor = getContrastTextColor(color);
+    const strokeColor = textColor === '#000000' ? '#ffffff' : '#000000';
 
-    labels += `<text x="${lx}" y="${ly}" font-size="${fontSize}" font-family="Roboto, sans-serif" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle" transform="rotate(${midAngle} ${lx} ${ly})">${escapeXml(displayText)}</text>`;
+    labels += `<text x="${lx}" y="${ly}" font-size="${fontSize}" font-family="Roboto, sans-serif" font-weight="900" fill="${textColor}" stroke="${strokeColor}" stroke-width="0.6" paint-order="stroke" text-anchor="middle" dominant-baseline="middle" transform="rotate(${midAngle} ${lx} ${ly})">${escapeXml(displayText)}</text>`;
   }
 
   // Pointer at the right side (3 o'clock), straddling the rim
@@ -94,6 +97,30 @@ function escapeXml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+function stripEmoji(str) {
+  // Remove emoji and other symbol characters that our bundled font can't render,
+  // to avoid blank "missing glyph" boxes on the wheel.
+  return String(str)
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+    .replace(/[\u{2600}-\u{27BF}]/gu, '')
+    .replace(/[\u{2190}-\u{21FF}]/gu, '')
+    .replace(/[\u{2B00}-\u{2BFF}]/gu, '')
+    .replace(/[\u{FE00}-\u{FE0F}]/gu, '')
+    .replace(/[\u{200D}]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getContrastTextColor(hexColor) {
+  const hex = hexColor.replace('#', '');
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  // Relative luminance (per WCAG-ish approximation)
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? '#000000' : '#ffffff';
 }
 
 function easeOutCubic(t) {

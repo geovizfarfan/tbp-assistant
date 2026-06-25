@@ -7,7 +7,7 @@ const WHEEL_PALETTES = {
   'city_sunset':       { label: 'City Sunset',      colors: ['#eeaf61', '#fb9062', '#ee5d6c', '#ce4993', '#6a0d83'] },
   'kawaii_pastel':     { label: 'Kawaii Pastel',     colors: ['#ffdef2', '#f2e2ff', '#e2eeff', '#ddfffc', '#ffffe3'] },
   'vaporwave_neon':    { label: 'Vaporwave Neon',    colors: ['#ff00c1', '#9600ff', '#4900ff', '#00b8ff', '#00fff9'] },
-  'violet':            { label: 'Violet',            colors: ['#ffffff', '#e5d0ff', '#dabcff', '#cca3ff', '#bf8bff'] },
+  'violet':            { label: 'Violet',            colors: ['#f3eaff', '#e5d0ff', '#dabcff', '#cca3ff', '#bf8bff'] },
   'blues':             { label: 'Blues',             colors: ['#77aaff', '#99ccff', '#bbeeff', '#5588ff', '#3366ff'] },
   'shades_of_pink':    { label: 'Shades of Pink',    colors: ['#ff00a9', '#fb9f9f', '#ff0065', '#ffbfd3', '#fb5858'] },
 };
