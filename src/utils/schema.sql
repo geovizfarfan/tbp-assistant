@@ -242,3 +242,15 @@ CREATE TABLE IF NOT EXISTS guild_config (
   game_ping_role_id TEXT,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Wheel role-based bonus entries
+CREATE TABLE IF NOT EXISTS wheel_role_bonuses (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  role_id TEXT NOT NULL,
+  role_name TEXT,
+  bonus_entries INTEGER NOT NULL CHECK (bonus_entries > 0),
+  added_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(guild_id, role_id)
+);

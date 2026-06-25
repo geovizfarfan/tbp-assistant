@@ -5,6 +5,7 @@ const { e } = require('../../utils/appEmojis');
 const { baseEmbed, COLORS } = require('../../utils/embeds');
 const { spinWheel } = require('../../utils/wheelRenderer');
 const { getPaletteColors, getPaletteChoices } = require('../../utils/wheelPalettes');
+const { query } = require('../../utils/database');
 
 function buildPaletteOption(opt) {
   return opt.setName('palette').setDescription('Wheel color theme').setRequired(false).addChoices(...getPaletteChoices());
@@ -58,11 +59,24 @@ module.exports = {
     )
     .addSubcommand(sub => sub
       .setName('boosted')
-      .setDescription('Spin a wheel with bonus entries for a specific role')
+      .setDescription('Spin a wheel with bonus entries based on configured roles (see /wheel role-bonus)')
       .addStringOption(o => o.setName('entries').setDescription('Comma-separated: @usera, @userb, @userc').setRequired(true))
-      .addRoleOption(o => o.setName('role').setDescription('Role that gets bonus entries').setRequired(true))
-      .addIntegerOption(o => o.setName('bonus').setDescription('Extra entries added per member with that role').setRequired(true))
       .addStringOption(buildPaletteOption)
+    )
+    .addSubcommand(sub => sub
+      .setName('role-bonus-add')
+      .setDescription('Add or update a role\'s bonus wheel entries')
+      .addRoleOption(o => o.setName('role').setDescription('Role to configure').setRequired(true))
+      .addIntegerOption(o => o.setName('bonus').setDescription('Extra entries per member with this role').setRequired(true))
+    )
+    .addSubcommand(sub => sub
+      .setName('role-bonus-list')
+      .setDescription('View all configured role bonuses for the wheel')
+    )
+    .addSubcommand(sub => sub
+      .setName('role-bonus-remove')
+      .setDescription('Remove a role\'s bonus wheel entries')
+      .addRoleOption(o => o.setName('role').setDescription('Role to remove').setRequired(true))
     )
     .addSubcommand(sub => sub
       .setName('prizes')
@@ -84,6 +98,9 @@ module.exports = {
     if (sub === 'members') return spinMembers(interaction);
     if (sub === 'reactions') return spinReactions(interaction);
     if (sub === 'boosted') return spinBoosted(interaction);
+    if (sub === 'role-bonus-add') return roleBonusAdd(interaction);
+    if (sub === 'role-bonus-list') return roleBonusList(interaction);
+    if (sub === 'role-bonus-remove') return roleBonusRemove(interaction);
     if (sub === 'prizes') return spinPrizes(interaction);
     if (sub === 'combo') return spinCombo(interaction);
   },
@@ -215,8 +232,6 @@ async function spinReactions(interaction) {
 
 async function spinBoosted(interaction) {
   const raw = interaction.options.getString('entries');
-  const role = interaction.options.getRole('role');
-  const bonus = interaction.options.getInteger('bonus');
   const paletteKey = interaction.options.getString('palette');
   const colors = paletteKey ? getPaletteColors(paletteKey) : DEFAULT_COLORS;
 
@@ -227,26 +242,42 @@ async function spinBoosted(interaction) {
     return interaction.editReply({ content: e('wrong') + ' No entries provided.' });
   }
 
+  const bonusRes = await query('SELECT role_id, role_name, bonus_entries FROM wheel_role_bonuses WHERE guild_id=$1', [interaction.guildId]);
+  const roleBonuses = bonusRes.rows;
+
+  if (!roleBonuses.length) {
+    return interaction.editReply({ content: e('wrong') + ' No role bonuses configured yet. Use /wheel role-bonus-add first.' });
+  }
+
   const entryObjects = [];
+  const appliedBonusLines = [];
+
   for (const rawEntry of rawEntries) {
     const match = rawEntry.match(/<@!?(\d+)>/);
     let displayName = rawEntry;
     let userId = null;
-    let hasRole = false;
+    let totalBonus = 0;
+    const matchedRoleNames = [];
 
     if (match) {
       userId = match[1];
       try {
         const member = await interaction.guild.members.fetch(match[1]);
         displayName = member.user.username;
-        hasRole = member.roles.cache.has(role.id);
+        for (const rb of roleBonuses) {
+          if (member.roles.cache.has(rb.role_id)) {
+            totalBonus += rb.bonus_entries;
+            matchedRoleNames.push((rb.role_name || rb.role_id) + ' +' + rb.bonus_entries);
+          }
+        }
       } catch {
       }
     }
 
     entryObjects.push({ text: displayName, userId: userId });
-    if (hasRole && bonus > 0) {
-      for (let i = 0; i < bonus; i++) entryObjects.push({ text: displayName, userId: userId });
+    if (totalBonus > 0) {
+      for (let i = 0; i < totalBonus; i++) entryObjects.push({ text: displayName, userId: userId });
+      appliedBonusLines.push(displayName + ': ' + matchedRoleNames.join(', ') + ' (total +' + totalBonus + ')');
     }
   }
   const textEntries = entryObjects.map(function(o) { return o.text; });
@@ -265,12 +296,62 @@ async function spinBoosted(interaction) {
   const attachment = new AttachmentBuilder(result.buffer, { name: 'wheel.gif' });
   const embed = baseEmbed(e('diamond') + ' Wheel Spin \u2014 Bonus Entries', COLORS.tbppurple, interaction.guild ? interaction.guild.name : null)
     .setImage('attachment://wheel.gif')
-    .addFields(
-      { name: e('trophies') + ' Winner', value: winnerDisplay, inline: false },
-      { name: e('diamond') + ' Bonus Role', value: '<@&' + role.id + '> (+' + bonus + ' entries each)', inline: true }
-    );
+    .addFields({ name: e('trophies') + ' Winner', value: winnerDisplay, inline: false });
+
+  if (appliedBonusLines.length) {
+    embed.addFields({ name: e('diamond') + ' Bonuses Applied', value: appliedBonusLines.join('\n').slice(0, 1024), inline: false });
+  }
 
   await interaction.editReply({ embeds: [embed], files: [attachment] });
+}
+
+async function roleBonusAdd(interaction) {
+  const role = interaction.options.getRole('role');
+  const bonus = interaction.options.getInteger('bonus');
+
+  if (bonus <= 0) {
+    return interaction.reply({ content: e('wrong') + ' Bonus must be a positive number.', ephemeral: true });
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  await query(
+    'INSERT INTO wheel_role_bonuses (guild_id, role_id, role_name, bonus_entries, added_by) VALUES ($1,$2,$3,$4,$5) ' +
+    'ON CONFLICT (guild_id, role_id) DO UPDATE SET bonus_entries=$4, role_name=$3',
+    [interaction.guildId, role.id, role.name, bonus, interaction.user.id]
+  );
+
+  await interaction.editReply({ content: e('checkmark') + ' Set ' + role.toString() + ' to give +' + bonus + ' bonus wheel entries.' });
+}
+
+async function roleBonusList(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  const res = await query('SELECT role_id, role_name, bonus_entries FROM wheel_role_bonuses WHERE guild_id=$1 ORDER BY bonus_entries DESC', [interaction.guildId]);
+
+  if (!res.rows.length) {
+    return interaction.editReply({ content: 'No role bonuses configured yet. Use /wheel role-bonus-add to set one up.' });
+  }
+
+  const embed = baseEmbed(e('diamond') + ' Wheel Role Bonuses', COLORS.tbppurple, interaction.guild ? interaction.guild.name : null);
+  for (const row of res.rows) {
+    embed.addFields({ name: '<@&' + row.role_id + '>', value: '+' + row.bonus_entries + ' entries', inline: true });
+  }
+
+  await interaction.editReply({ embeds: [embed] });
+}
+
+async function roleBonusRemove(interaction) {
+  const role = interaction.options.getRole('role');
+  await interaction.deferReply({ ephemeral: true });
+
+  const res = await query('DELETE FROM wheel_role_bonuses WHERE guild_id=$1 AND role_id=$2 RETURNING role_name', [interaction.guildId, role.id]);
+
+  if (!res.rows.length) {
+    return interaction.editReply({ content: e('wrong') + ' That role had no bonus configured.' });
+  }
+
+  await interaction.editReply({ content: e('checkmark') + ' Removed bonus entries for ' + role.toString() + '.' });
 }
 
 async function spinPrizes(interaction) {
