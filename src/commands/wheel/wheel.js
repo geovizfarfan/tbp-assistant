@@ -3,7 +3,7 @@ const {
 } = require('discord.js');
 const { e } = require('../../utils/appEmojis');
 const { baseEmbed, COLORS } = require('../../utils/embeds');
-const { spinWheel } = require('../../utils/wheelApi');
+const { spinWheel } = require('../../utils/wheelRenderer');
 const { getPaletteColors, getPaletteChoices } = require('../../utils/wheelPalettes');
 
 function buildPaletteOption(opt) {
@@ -31,6 +31,8 @@ async function resolveMentionsToNames(interaction, rawEntries) {
   }
   return resolved;
 }
+
+const DEFAULT_COLORS = ['#ff00c1', '#9600ff', '#4900ff', '#00b8ff', '#00fff9', '#fff200'];
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -94,23 +96,22 @@ async function sendWheelResult(interaction, entries, colors, embedTitle, fieldLa
     return interaction.editReply({ content: e('wrong') + ' Wheel spin failed: ' + err.message });
   }
 
-  const attachment = new AttachmentBuilder(result.animation, { name: 'wheel.' + result.imageFormat });
-  const winnerText = result.winner && result.winner.text ? result.winner.text : 'Unknown';
+  const attachment = new AttachmentBuilder(result.buffer, { name: 'wheel.gif' });
 
   const embed = baseEmbed(embedTitle, COLORS.tbppurple, interaction.guild ? interaction.guild.name : null)
-    .setImage('attachment://wheel.' + result.imageFormat)
-    .addFields({ name: fieldLabel, value: winnerText, inline: false });
+    .setImage('attachment://wheel.gif')
+    .addFields({ name: fieldLabel, value: result.winner, inline: false });
 
   for (const f of extraFields) embed.addFields(f);
 
   await interaction.editReply({ embeds: [embed], files: [attachment] });
-  return winnerText;
+  return result.winner;
 }
 
 async function spinMembers(interaction) {
   const raw = interaction.options.getString('entries');
   const paletteKey = interaction.options.getString('palette');
-  const colors = paletteKey ? getPaletteColors(paletteKey) : null;
+  const colors = paletteKey ? getPaletteColors(paletteKey) : DEFAULT_COLORS;
 
   const rawEntries = parseManualEntries(raw);
   if (!rawEntries.length) {
@@ -129,7 +130,7 @@ async function spinReactions(interaction) {
   const link = interaction.options.getString('link');
   const emojiFilter = interaction.options.getString('emoji');
   const paletteKey = interaction.options.getString('palette');
-  const colors = paletteKey ? getPaletteColors(paletteKey) : null;
+  const colors = paletteKey ? getPaletteColors(paletteKey) : DEFAULT_COLORS;
 
   await interaction.deferReply();
 
@@ -177,13 +178,12 @@ async function spinReactions(interaction) {
     return interaction.editReply({ content: e('wrong') + ' Wheel spin failed: ' + err.message });
   }
 
-  const attachment = new AttachmentBuilder(result.animation, { name: 'wheel.' + result.imageFormat });
-  const winnerText = result.winner && result.winner.text ? result.winner.text : 'Unknown';
+  const attachment = new AttachmentBuilder(result.buffer, { name: 'wheel.gif' });
 
   const embed = baseEmbed(e('confetti') + ' Wheel Spin \u2014 Reactions', COLORS.tbppurple, interaction.guild ? interaction.guild.name : null)
-    .setImage('attachment://wheel.' + result.imageFormat)
+    .setImage('attachment://wheel.gif')
     .addFields(
-      { name: e('trophies') + ' Winner', value: winnerText, inline: false },
+      { name: e('trophies') + ' Winner', value: result.winner, inline: false },
       { name: e('member') + ' Total Entries', value: String(entries.length), inline: true },
     );
 
@@ -195,7 +195,7 @@ async function spinBoosted(interaction) {
   const role = interaction.options.getRole('role');
   const bonus = interaction.options.getInteger('bonus');
   const paletteKey = interaction.options.getString('palette');
-  const colors = paletteKey ? getPaletteColors(paletteKey) : null;
+  const colors = paletteKey ? getPaletteColors(paletteKey) : DEFAULT_COLORS;
 
   await interaction.deferReply();
 
@@ -237,7 +237,7 @@ async function spinPrizes(interaction) {
   const rawPrizes = interaction.options.getString('prizes');
   const winner = interaction.options.getUser('winner');
   const paletteKey = interaction.options.getString('palette');
-  const colors = paletteKey ? getPaletteColors(paletteKey) : null;
+  const colors = paletteKey ? getPaletteColors(paletteKey) : DEFAULT_COLORS;
 
   const prizes = parseManualEntries(rawPrizes);
   if (!prizes.length) {
@@ -256,7 +256,7 @@ async function spinCombo(interaction) {
   const rawEntries = interaction.options.getString('entries');
   const rawPrizes = interaction.options.getString('prizes');
   const paletteKey = interaction.options.getString('palette');
-  const colors = paletteKey ? getPaletteColors(paletteKey) : null;
+  const colors = paletteKey ? getPaletteColors(paletteKey) : DEFAULT_COLORS;
 
   await interaction.deferReply();
 
@@ -274,11 +274,11 @@ async function spinCombo(interaction) {
     console.error('[Wheel] Winner spin failed:', err.message);
     return interaction.editReply({ content: e('wrong') + ' Winner spin failed: ' + err.message });
   }
-  const winnerName = winnerResult.winner && winnerResult.winner.text ? winnerResult.winner.text : 'Unknown';
+  const winnerName = winnerResult.winner;
 
-  const winnerAttachment = new AttachmentBuilder(winnerResult.animation, { name: 'wheel-winner.' + winnerResult.imageFormat });
+  const winnerAttachment = new AttachmentBuilder(winnerResult.buffer, { name: 'wheel-winner.gif' });
   const winnerEmbed = baseEmbed(e('confetti') + ' Step 1 \u2014 Picking the Winner', COLORS.tbppurple, interaction.guild ? interaction.guild.name : null)
-    .setImage('attachment://wheel-winner.' + winnerResult.imageFormat)
+    .setImage('attachment://wheel-winner.gif')
     .addFields({ name: e('trophies') + ' Winner', value: winnerName, inline: false });
 
   await interaction.editReply({ embeds: [winnerEmbed], files: [winnerAttachment] });
@@ -290,11 +290,11 @@ async function spinCombo(interaction) {
     console.error('[Wheel] Prize spin failed:', err.message);
     return interaction.followUp({ content: e('wrong') + ' Prize spin failed: ' + err.message });
   }
-  const prizeName = prizeResult.winner && prizeResult.winner.text ? prizeResult.winner.text : 'Unknown';
+  const prizeName = prizeResult.winner;
 
-  const prizeAttachment = new AttachmentBuilder(prizeResult.animation, { name: 'wheel-prize.' + prizeResult.imageFormat });
+  const prizeAttachment = new AttachmentBuilder(prizeResult.buffer, { name: 'wheel-prize.gif' });
   const prizeEmbed = baseEmbed(e('purplesparkle') + ' Step 2 \u2014 ' + winnerName + '\u2019s Prize', COLORS.tbppurple, interaction.guild ? interaction.guild.name : null)
-    .setImage('attachment://wheel-prize.' + prizeResult.imageFormat)
+    .setImage('attachment://wheel-prize.gif')
     .addFields(
       { name: e('members') + ' Winner', value: winnerName, inline: true },
       { name: e('trophies') + ' Prize', value: prizeName, inline: true },
