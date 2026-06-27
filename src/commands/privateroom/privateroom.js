@@ -22,12 +22,13 @@ module.exports = {
 async function setupButton(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
-  const title = interaction.options.getString('title') || 'Private Rooms';
+  const title = interaction.options.getString('title') || 'Private Gambling Rooms';
   const description = interaction.options.getString('description') ||
-    'Press the button to create your **private room**.\n\n' +
-    '• Private access for just you and staff\n' +
-    '• Auto-deletes after **3 days of inactivity**\n' +
-    '• Sending a message resets the timer';
+    'Press the button to create your **private gambling room**.\n\n' +
+    '• Private access for you and staff\n' +
+    '• Archives after **24 hours of inactivity**\n' +
+    '• Activity resets the timer\n' +
+    '• Deletes permanently after **1 week archived**';
 
   const embed = baseEmbed(`${e('purplesparkle')} ${title}`, COLORS.tbppurple, interaction.guild?.name)
     .setDescription(description);
@@ -35,8 +36,8 @@ async function setupButton(interaction) {
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('privateroom_create')
-      .setLabel('Create Private Room')
-      .setEmoji('🔒')
+      .setLabel('Create Private Gambling Room')
+      .setEmoji('🎲')
       .setStyle(ButtonStyle.Success)
   );
 

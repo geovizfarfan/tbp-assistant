@@ -224,7 +224,7 @@ client.on('interactionCreate', async interaction => {
         [interaction.guildId, interaction.user.id, thread.id, interaction.channelId]
       );
 
-      await thread.send(e('confetti') + ' Welcome to your private room, <@' + interaction.user.id + '>! This room auto-deletes after 3 days of inactivity.');
+      await thread.send(e('confetti') + ' Welcome to your private gambling room, <@' + interaction.user.id + '>! This room archives after 24 hours of inactivity (reopen anytime), and deletes permanently after 1 week archived.');
 
       await interaction.reply({
         content: e('checkmark') + ' Your private room is ready: ' + thread.toString(),
