@@ -71,10 +71,10 @@ async function addStaff(interaction) {
   nextDue.setDate(nextDue.getDate() + 30);
 
   await query(
-    `INSERT INTO staff (user_id, username, role, pay_currency, pay_amount, next_pay_due_at, added_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7)
-     ON CONFLICT (user_id) DO UPDATE SET role=$3, pay_currency=$4, pay_amount=$5, active=true`,
-    [user.id, user.username, role, currency, pay, nextDue, interaction.user.id]
+    `INSERT INTO staff (user_id, username, role, pay_currency, pay_amount, next_pay_due_at, added_by, guild_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT (user_id) DO UPDATE SET role=$3, pay_currency=$4, pay_amount=$5, active=true, guild_id=$8`,
+    [user.id, user.username, role, currency, pay, nextDue, interaction.user.id, interaction.guildId]
   );
 
   const embed = baseEmbed(`${e('checkmark')} Staff Added`, COLORS.softgreen, interaction.guild?.name)
