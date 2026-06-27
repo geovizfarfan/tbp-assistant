@@ -76,6 +76,8 @@ client.once('ready', async () => {
   startReminderLoop(client);
   const { startPrivateRoomCleanupLoop } = require('./utils/privateRooms');
   startPrivateRoomCleanupLoop(client);
+  const { startGoosDateLoop } = require('./utils/goosDate');
+  startGoosDateLoop(client);
 
   // Register slash commands
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);

@@ -268,3 +268,13 @@ CREATE TABLE IF NOT EXISTS private_rooms (
   status TEXT DEFAULT 'active' CHECK (status IN ('active','archived','deleted')),
   UNIQUE(guild_id, user_id, status)
 );
+
+-- Goos Date reminder config
+CREATE TABLE IF NOT EXISTS goosdate_config (
+  guild_id TEXT PRIMARY KEY,
+  channel_id TEXT NOT NULL,
+  role_id TEXT NOT NULL,
+  enabled BOOLEAN DEFAULT TRUE,
+  last_sent_minute_key TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
