@@ -22,16 +22,19 @@ module.exports = {
 async function setupButton(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
-  const title = interaction.options.getString('title') || 'Private Gambling Rooms';
+  const customTitle = interaction.options.getString('title');
   const description = interaction.options.getString('description') ||
-    'Press the button to create **your private room**.\n' +
-    `${e('vertical_line')} ${e('bullet')} Private access for **you**.\n` +
-    `${e('vertical_line')} ${e('bullet')} Archives after **24 hours** of inactivity\n` +
-    `${e('vertical_line')} ${e('bullet')} Activity **resets** the timer\n` +
-    `${e('vertical_line')} ${e('bullet')} Deletes **permanently** after 1 week archived`;
+    '## <a:lock:1520456965245898903> <a:purplesparkle:1512912828489793626> ' + (customTitle || 'Private Gambling Rooms') + '\n' +
+    '**Press the button to create your private room.**\n' +
+    '<:vertical_line:1520457297476845741> <:bullet:1512973213645410335> Private access for you.\n' +
+    '<:vertical_line:1520457297476845741> <:bullet:1512973213645410335> Archives after 24 hours of inactivity\n' +
+    '<:vertical_line:1520457297476845741> <:bullet:1512973213645410335> Activity resets the timer\n' +
+    '<:vertical_line:1520457297476845741> <:bullet:1512973213645410335> Deletes permanently after 1 week archived';
 
-  const embed = baseEmbed(`${e('lock')} ${e('purplesparkle')} ${title}`, COLORS.tbppurple, interaction.guild?.name)
-    .setDescription(description);
+  const embed = new EmbedBuilder()
+    .setColor(COLORS.tbppurple)
+    .setDescription(description)
+    .setFooter({ text: interaction.guild?.name || '' });
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
