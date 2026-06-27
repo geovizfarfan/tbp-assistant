@@ -26,7 +26,7 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
     // Post or update each game's individual message
     for (const game of gamesRes.rows) {
       const prizeText = game.prize_amount ? `${game.prize_amount} ${game.currency}` : game.prize || 'No prize';
-      const isAuto    = /rumble|regret|dice attack|auto game|clash|hangry|hunger games/i.test(game.game_name);
+      const isAuto    = /rumble|regret|dice attack|auto game|clash|hangry|hunger games|wheel/i.test(game.game_name);
       const icon      = /raffle/i.test(game.game_name) ? e('raffle') : /giveaway/i.test(game.game_name) ? e('gift') : isAuto ? '<a:sword:1516443055157416069>' : e('controller');
       const cleanName = game.game_name.replace(/<a?:[^:]+:\d+>/g, '').trim();
       const startLabel = new Date(game.started_at) > new Date() ? 'Starts' : 'Started';

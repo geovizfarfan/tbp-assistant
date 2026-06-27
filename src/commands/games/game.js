@@ -142,7 +142,7 @@ async function logGame(interaction) {
 
   // Track daily progress
   try {
-    const isAutoGame = /rumble|regret|dice attack|auto game|clash|hangry|hunger games/i.test(gameName);
+    const isAutoGame = /rumble|regret|dice attack|auto game|clash|hangry|hunger games|wheel/i.test(gameName);
     if (isAutoGame) await updateDailyProgress(interaction.guildId, hostId, 'autogame');
     await updateDailyProgress(interaction.guildId, hostId, 'game');
     await sendCongratsIfGoalMet(interaction.client, interaction.guildId, hostId);
