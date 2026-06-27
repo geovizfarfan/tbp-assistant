@@ -93,7 +93,7 @@ async function setDailyGoals(interaction) {
      ON CONFLICT (guild_id, role) DO UPDATE SET games=COALESCE($3,daily_goals.games), autogames=COALESCE($4,daily_goals.autogames), payouts=COALESCE($5,daily_goals.payouts), updated_at=NOW()`,
     [interaction.guildId, role, games, autogames, payouts]
   );
-  const roleLabel = { admin:'Admin', staff:'Mod', host:'Host', rumble_host:'Rumble Host' }[role];
+  const roleLabel = { owner:'Owner', admin:'Admin', staff:'Mod', host:'Host', rumble_host:'Rumble Host' }[role] || role;
   const lines = [`${e('checkmark')} Daily goals set for **${roleLabel}**:`];
   if (games !== null)     lines.push(`${e('controller')} Games: **${games}**/day`);
   if (autogames !== null) lines.push(`${e('bullet')} Auto-Games: **${autogames}**/day`);
