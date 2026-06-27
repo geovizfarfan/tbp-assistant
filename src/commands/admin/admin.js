@@ -330,6 +330,7 @@ module.exports = {
       .setDescription('Set daily goals per staff role')
       .addStringOption(o => o.setName('role').setDescription('Staff role').setRequired(true)
         .addChoices(
+          { name: 'Owner',       value: 'owner'       },
           { name: 'Admin',       value: 'admin'       },
           { name: 'Mod',         value: 'staff'       },
           { name: 'Host',        value: 'host'        },
