@@ -37,8 +37,8 @@ async function setupButton(interaction) {
     new ButtonBuilder()
       .setCustomId('privateroom_create')
       .setLabel('Create Private Gambling Room')
-      .setEmoji('🎲')
-      .setStyle(ButtonStyle.Success)
+      .setEmoji({ id: '1520461704259960842', name: 'unlock', animated: true })
+      .setStyle(ButtonStyle.Secondary)
   );
 
   await interaction.channel.send({ embeds: [embed], components: [row] });
