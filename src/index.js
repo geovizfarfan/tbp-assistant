@@ -74,6 +74,8 @@ client.once('ready', async () => {
   await restoreRaffles(client);
   await initDB();
   startReminderLoop(client);
+  const { startPrivateRoomCleanupLoop } = require('./utils/privateRooms');
+  startPrivateRoomCleanupLoop(client);
 
   // Register slash commands
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
@@ -112,6 +114,19 @@ client.on('interactionCreate', async (interaction) => {
 client.on('messageCreate', handleTicketMessage);
 client.on('channelDelete', handleChannelDelete);
 client.on('threadCreate', (thread) => handleThreadCreate(thread, client));
+
+// Private room activity tracking — any message in a tracked private room thread
+// resets its inactivity timer and un-archives it if needed.
+client.on('messageCreate', async (message) => {
+  if (!message.channel.isThread || !message.channel.isThread()) return;
+  if (message.author.bot) return;
+  try {
+    const { touchActivity } = require('./utils/privateRooms');
+    await touchActivity(message.channel.id);
+  } catch (err) {
+    // Not a tracked private room thread, or DB hiccup; safe to ignore.
+  }
+});
 
 client.on('interactionCreate', async interaction => {
   if (!interaction.isButton()) return;
@@ -157,6 +172,67 @@ client.on('interactionCreate', async interaction => {
     } catch (err) {
       console.error('[RaffleJoin] Error:', err.message);
       await interaction.reply({ content: 'Something went wrong joining the raffle.', ephemeral: true }).catch(() => {});
+    }
+    return;
+  }
+
+  // Private room creation button
+  if (interaction.customId === 'privateroom_create') {
+    try {
+      const { query } = require('./utils/database');
+      const { e } = require('./utils/appEmojis');
+
+      const existingRes = await query(
+        "SELECT * FROM private_rooms WHERE guild_id=$1 AND user_id=$2 AND status IN ('active','archived')",
+        [interaction.guildId, interaction.user.id]
+      );
+
+      if (existingRes.rows.length) {
+        const existing = existingRes.rows[0];
+        try {
+          const existingThread = await interaction.client.channels.fetch(existing.thread_id);
+          if (existing.status === 'archived') {
+            await existingThread.setArchived(false, 'Reopened via private room button');
+            await query(
+              "UPDATE private_rooms SET status='active', archived_at=NULL, last_activity_at=NOW() WHERE id=$1",
+              [existing.id]
+            );
+            await existingThread.send(e('confetti') + ' Welcome back, <@' + interaction.user.id + '>! Your private room has been reopened.');
+          }
+          return interaction.reply({
+            content: e('checkmark') + ' You already have a private room: ' + existingThread.toString(),
+            ephemeral: true,
+          });
+        } catch {
+          // Thread was deleted out-of-band; clean up the stale row and let them create a new one
+          await query("DELETE FROM private_rooms WHERE id=$1", [existing.id]);
+        }
+      }
+
+      const thread = await interaction.channel.threads.create({
+        name: 'Private Room — ' + interaction.user.username,
+        type: 12, // PrivateThread
+        invitable: false,
+        reason: 'Private room requested via button',
+      });
+
+      await thread.members.add(interaction.user.id);
+
+      await query(
+        `INSERT INTO private_rooms (guild_id, user_id, thread_id, parent_channel_id)
+         VALUES ($1,$2,$3,$4)`,
+        [interaction.guildId, interaction.user.id, thread.id, interaction.channelId]
+      );
+
+      await thread.send(e('confetti') + ' Welcome to your private room, <@' + interaction.user.id + '>! This room auto-deletes after 3 days of inactivity.');
+
+      await interaction.reply({
+        content: e('checkmark') + ' Your private room is ready: ' + thread.toString(),
+        ephemeral: true,
+      });
+    } catch (err) {
+      console.error('[PrivateRoom] Creation failed:', err.message);
+      await interaction.reply({ content: 'Something went wrong creating your private room.', ephemeral: true }).catch(() => {});
     }
     return;
   }

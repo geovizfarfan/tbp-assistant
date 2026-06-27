@@ -254,3 +254,17 @@ CREATE TABLE IF NOT EXISTS wheel_role_bonuses (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(guild_id, role_id)
 );
+
+-- Private rooms (auto-archiving private threads)
+CREATE TABLE IF NOT EXISTS private_rooms (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  parent_channel_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  last_activity_at TIMESTAMPTZ DEFAULT NOW(),
+  archived_at TIMESTAMPTZ,
+  status TEXT DEFAULT 'active' CHECK (status IN ('active','archived','deleted')),
+  UNIQUE(guild_id, user_id, status)
+);
