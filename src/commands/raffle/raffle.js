@@ -325,9 +325,10 @@ async function listRaffles(interaction) {
     const payout = r.payout_status === 'paid' ? `${e('checkmark')} Paid` : r.payout_status === 'late' ? `${e('atention')} Late` : `${e('Loading')} Pending`;
     const winnerText = r.winner_id ? `<@${r.winner_id}>` : 'No winner';
     const timeText = showEnded ? `Ended: ${tsF(r.ended_at)} | Winner: ${winnerText}` : `Ends: ${tsF(r.ends_at)} (${tsR(r.ends_at)})`;
+    const jumpLink = r.message_id ? ` | [Jump](https://discord.com/channels/${interaction.guildId}/${r.channel_id}/${r.message_id})` : '';
     embed.addFields({
       name: `#${r.id} — ${r.prize}`,
-      value: `${e('purplesparkle')} Prize: ${r.prize || 'N/A'} | Payout: ${payout} | ${timeText}`,
+      value: `${e('purplesparkle')} Prize: ${r.prize || 'N/A'} | Payout: ${payout} | ${timeText}${jumpLink}`,
     });
   }
   await interaction.editReply({ embeds: [embed] });

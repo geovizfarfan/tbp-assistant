@@ -161,6 +161,65 @@ client.on('interactionCreate', async interaction => {
     return;
   }
 
+  // Game winner payout buttons (Claimed / Not Claimed)
+  if (interaction.customId.startsWith('gamewin_claimed_') || interaction.customId.startsWith('gamewin_notclaimed_')) {
+    try {
+      const { query } = require('./utils/database');
+      const { e } = require('./utils/appEmojis');
+      const { EmbedBuilder } = require('discord.js');
+
+      const isClaimed = interaction.customId.startsWith('gamewin_claimed_');
+      const gameId = parseInt(interaction.customId.split('_').pop());
+
+      const gameRes = await query('SELECT * FROM game_logs WHERE id=$1 AND guild_id=$2', [gameId, interaction.guildId]);
+      if (!gameRes.rows.length) {
+        return interaction.reply({ content: `${e('wrong')} Game not found.`, ephemeral: true });
+      }
+      const game = gameRes.rows[0];
+
+      const staffRes = await query(`SELECT role FROM staff WHERE user_id=$1 AND active=true`, [interaction.user.id]);
+      const staffRole = staffRes.rows[0]?.role;
+      const isHost = interaction.user.id === game.host_id;
+      const isAdminOrOwner = ['admin', 'owner'].includes(staffRole);
+
+      if (!isHost && !isAdminOrOwner) {
+        return interaction.reply({ content: `${e('wrong')} Only the host, an admin, or the owner can mark this payout.`, ephemeral: true });
+      }
+
+      const now = new Date();
+      const newStatus = isClaimed ? 'paid' : 'not_claimed';
+      await query('UPDATE game_logs SET payout_status=$1, payout_confirmed_at=$2 WHERE id=$3', [newStatus, now, gameId]);
+      await query(`UPDATE member_wins SET payout_status=$1, paid_at=$2 WHERE ref_id=$3 AND type='game'`, [newStatus, now, gameId]);
+      await query(`UPDATE payout_reminders SET resolved=true WHERE type='game' AND ref_id=$1`, [gameId]);
+
+      const oldEmbed = interaction.message.embeds[0];
+      const fields = oldEmbed.fields.map(f => {
+        if (f.name.includes('Payout')) {
+          return {
+            name: f.name,
+            value: isClaimed
+              ? `${e('checkmark')} Claimed — confirmed by <@${interaction.user.id}>`
+              : `${e('wrong')} Not Claimed — confirmed by <@${interaction.user.id}>`,
+            inline: f.inline,
+          };
+        }
+        return { name: f.name, value: f.value, inline: f.inline };
+      });
+      const newColor = isClaimed ? 0x7F36F5 : 0x00FFF9;
+      const updatedEmbed = EmbedBuilder.from(oldEmbed).setColor(newColor).setFields(fields);
+
+      await interaction.message.edit({ embeds: [updatedEmbed], components: [] });
+      await interaction.reply({
+        content: isClaimed ? `${e('checkmark')} Marked as claimed.` : `${e('wrong')} Marked as not claimed.`,
+        ephemeral: true,
+      });
+    } catch (err) {
+      console.error('[GameWinButton] Error:', err.message);
+      await interaction.reply({ content: 'Something went wrong updating the payout.', ephemeral: true }).catch(() => {});
+    }
+    return;
+  }
+
   if (!['game_ping_join', 'game_ping_leave'].includes(interaction.customId)) return;
   try {
     const { query } = require('./utils/database');

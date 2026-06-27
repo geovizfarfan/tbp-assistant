@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
 const { e } = require('../../utils/appEmojis');
 const { query } = require('../../utils/database');
 const { baseEmbed, tsF, tsR, COLORS } = require('../../utils/embeds');
@@ -233,8 +233,28 @@ async function endGame(interaction) {
             { name: `${e('purplesparkle')} Prize`, value: game.prize_amount ? `${game.prize_amount} ${game.currency}` : (game.prize || 'N/A'), inline: true },
             { name: `${e('members')} Host`,        value: `<@${game.host_id}>`, inline: true },
             { name: `${e('payout')} Payout`,       value: hostWonOwnGame ? 'N/A' : `${e('Loading')} Pending — please open a ticket in ${ticketMention} to claim your prize!`, inline: false },
+            { name: `${e('receipt')} Game ID`,     value: `#${game.id}`, inline: true },
           );
-        const winnerMsg = await winnerCh.send({ content: `${e('confetti')} Congratulations <@${winner.id}>!`, embeds: [winEmbed] });
+        if (game.message_link && /^https?:\/\//.test(game.message_link)) {
+          winEmbed.addFields({ name: `${e('purplesparkle')} Jump Link`, value: `[View Game](${game.message_link})`, inline: true });
+        }
+
+        let winnerComponents = [];
+        if (!hostWonOwnGame) {
+          const claimedButton = new ButtonBuilder()
+            .setCustomId(`gamewin_claimed_${game.id}`)
+            .setLabel('Claimed')
+            .setEmoji('✅')
+            .setStyle(ButtonStyle.Success);
+          const notClaimedButton = new ButtonBuilder()
+            .setCustomId(`gamewin_notclaimed_${game.id}`)
+            .setLabel('Not Claimed')
+            .setEmoji('❌')
+            .setStyle(ButtonStyle.Danger);
+          winnerComponents = [new ActionRowBuilder().addComponents(claimedButton, notClaimedButton)];
+        }
+
+        const winnerMsg = await winnerCh.send({ content: `${e('confetti')} Congratulations <@${winner.id}>!`, embeds: [winEmbed], components: winnerComponents });
 
         const boosterRes = await query(`SELECT id FROM boosters WHERE guild_id=$1 AND user_id=$2 AND active=true`, [interaction.guildId, winner.id]);
         const isBooster = boosterRes.rows.length > 0;
