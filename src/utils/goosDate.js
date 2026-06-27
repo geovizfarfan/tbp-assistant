@@ -75,7 +75,7 @@ async function checkGoosDate(client) {
           content: `<@&${cfg.role_id}>`,
           embeds: [{
             description:
-              '## <a:purplesparkle:1512912828489793626><:bullet1:1520457476032561285> GOOS DATE <:bullet1:1520457476032561285><a:purplesparkle:1512912828489793626>\n' +
+              '### <a:purplesparkle:1512912828489793626><:bullet1:1520457476032561285> GOOS DATE <:bullet1:1520457476032561285><a:purplesparkle:1512912828489793626>\n' +
               'ᴛʏᴘᴇ ?ᴅᴀᴛᴇ ᴛᴏ ᴄʟᴀɪᴍ ʏᴏᴜʀ ɢᴏᴏs ᴡɪᴛʜɪɴ 1 ᴍɪɴᴜᴛᴇ! <a:goosrotate:1520470791806914570>',
             color: 0x7F36F5,
           }],
