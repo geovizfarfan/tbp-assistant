@@ -172,7 +172,8 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
     }
 
     const winner = entries[Math.floor(Math.random() * entries.length)];
-    await query(`UPDATE raffles SET status='ended', ended_at=$1, winner_id=$2 WHERE id=$3`, [now, winner.user_id, raffleId]);
+    const hostWonOwnRaffle = raffle.host_id === winner.user_id;
+    await query(`UPDATE raffles SET status='ended', ended_at=$1, winner_id=$2, payout_status=$3 WHERE id=$4`, [now, winner.user_id, hostWonOwnRaffle ? 'n/a' : 'pending', raffleId]);
 
     await query(
       `INSERT INTO member_wins (guild_id, user_id, username, type, ref_id, prize, prize_amount, currency, host_id, won_at)
@@ -180,11 +181,13 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
       [guildId, winner.user_id, winner.username, raffleId, raffle.prize, raffle.prize_amount, raffle.currency, raffle.host_id, now]
     );
 
-    await query(
-      `INSERT INTO payout_reminders (type, ref_id, host_id, winner_id, prize, guild_id, channel_id)
-       VALUES ('raffle',$1,$2,$3,$4,$5,$6)`,
-      [raffleId, raffle.host_id, winner.user_id, `${raffle.prize_amount ? raffle.prize_amount + ' ' : ''}${raffle.prize}`, guildId, channelId]
-    );
+    if (!hostWonOwnRaffle) {
+      await query(
+        `INSERT INTO payout_reminders (type, ref_id, host_id, winner_id, prize, guild_id, channel_id)
+         VALUES ('raffle',$1,$2,$3,$4,$5,$6)`,
+        [raffleId, raffle.host_id, winner.user_id, `${raffle.prize_amount ? raffle.prize_amount + ' ' : ''}${raffle.prize}`, guildId, channelId]
+      );
+    }
 
     // Get ticket channel if configured
     let ticketMention = 'our support channel';
@@ -202,7 +205,7 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
         { name: `${e('trophies')} Winner`,     value: `<@${winner.user_id}>`, inline: true },
         { name: `${e('purplesparkle')} Prize`,  value: prizeText, inline: true },
         { name: `${e('members')} Host`,         value: `<@${raffle.host_id}>`, inline: true },
-        { name: `${e('payout')} Payout`,        value: `${e('Loading')} Pending — please open a ticket in ${ticketMention} to claim your prize!`, inline: false },
+        { name: `${e('payout')} Payout`,        value: hostWonOwnRaffle ? 'N/A' : `${e('Loading')} Pending — please open a ticket in ${ticketMention} to claim your prize!`, inline: false },
       );
 
     let winMsgPayload = { content: `${e('confetti')} Congratulations <@${winner.user_id}>!`, embeds: [winEmbed] };
@@ -221,12 +224,13 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
       if (winnerCfgRes.rows.length && winnerCfgRes.rows[0].winner_channel_id) {
         const winnerChId = winnerCfgRes.rows[0].winner_channel_id;
         const winnerCh = await guild.channels.fetch(winnerChId);
-        const winnersEmbed = baseEmbed(`${e('confetti')} Raffle Winner — ${prizeText} Raffle`, 0xFF00C1, guild.name)
+        const winnersEmbed = baseEmbed(`${e('confetti')} Raffle Winner — ${prizeText} Raffle`, hostWonOwnRaffle ? 0xFFFF00 : 0xFF00C1, guild.name)
           .addFields(
             { name: `${e('trophies')} Winner`,    value: `<@${winner.user_id}>`, inline: true },
             { name: `${e('purplesparkle')} Prize`, value: prizeText, inline: true },
             { name: `${e('members')} Host`,        value: `<@${raffle.host_id}>`, inline: true },
-            { name: `${e('payout')} Payout`,       value: `${e('Loading')} Pending — please open a ticket in ${ticketMention} to claim your prize!`, inline: false },
+            { name: `${e('payout')} Payout`,       value: hostWonOwnRaffle ? 'N/A' : `${e('Loading')} Pending — please open a ticket in ${ticketMention} to claim your prize!`, inline: false },
+            { name: `${e('receipt')} Raffle ID`,   value: `#${raffleId}`, inline: true },
           );
         let winnersMsgPayload = { content: `${e('confetti')} Congratulations <@${winner.user_id}>!`, embeds: [winnersEmbed] };
         if (winnerImageData.type === 'attachment') {
@@ -235,6 +239,19 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
           winnersMsgPayload.files = [winnersAttachment];
         } else if (winnerImageData.type === 'url') {
           winnersEmbed.setThumbnail(winnerImageData.url);
+        }
+        if (!hostWonOwnRaffle) {
+          const raffleClaimedButton = new ButtonBuilder()
+            .setCustomId('rafflewin_claimed_' + raffleId)
+            .setLabel('Claimed')
+            .setEmoji('\u2705')
+            .setStyle(ButtonStyle.Success);
+          const raffleNotClaimedButton = new ButtonBuilder()
+            .setCustomId('rafflewin_notclaimed_' + raffleId)
+            .setLabel('Not Claimed')
+            .setEmoji('\u274c')
+            .setStyle(ButtonStyle.Danger);
+          winnersMsgPayload.components = [new ActionRowBuilder().addComponents(raffleClaimedButton, raffleNotClaimedButton)];
         }
         const winnerMsg = await winnerCh.send(winnersMsgPayload);
         await query(

@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS raffles (
   ended_at TIMESTAMPTZ,
   winner_id TEXT,
   status TEXT DEFAULT 'active' CHECK (status IN ('active','ended','cancelled')),
-  payout_status TEXT DEFAULT 'pending' CHECK (payout_status IN ('pending','paid','auto_paid','late')),
+  payout_status TEXT DEFAULT 'pending' CHECK (payout_status IN ('pending','paid','not_claimed','n/a')),
   payout_confirmed_at TIMESTAMPTZ,
   payout_confirmed_by TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
