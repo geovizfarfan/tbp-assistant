@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { e } = require('../../utils/appEmojis');
-const { baseEmbed, COLORS } = require('../../utils/embeds');
+const { COLORS } = require('../../utils/embeds');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -9,8 +9,6 @@ module.exports = {
     .addSubcommand(sub => sub
       .setName('setup')
       .setDescription('Post the Create Private Room button in this channel')
-      .addStringOption(o => o.setName('title').setDescription('Embed title').setRequired(false))
-      .addStringOption(o => o.setName('description').setDescription('Embed description').setRequired(false))
     ),
 
   async execute(interaction) {
@@ -22,9 +20,8 @@ module.exports = {
 async function setupButton(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
-  const customTitle = interaction.options.getString('title');
-  const description = interaction.options.getString('description') ||
-    '## <a:lock:1520456965245898903> <a:purplesparkle:1512912828489793626> ' + (customTitle || 'Private Gambling Rooms') + '\n' +
+  const description =
+    '## <a:lock:1520456965245898903>  Private Gambling Rooms\n' +
     '**Press the button to create your private room.**\n' +
     '<:vertical_line:1520457297476845741> <:bullet:1512973213645410335> Private access for you.\n' +
     '<:vertical_line:1520457297476845741> <:bullet:1512973213645410335> Archives after 24 hours of inactivity\n' +
