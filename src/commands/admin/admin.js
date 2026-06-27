@@ -103,6 +103,51 @@ async function setDailyGoals(interaction) {
 
 
 
+async function settingsSummary(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  const reqRes = await query('SELECT * FROM pay_requirements WHERE guild_id=$1', [interaction.guildId]);
+  const goalsRes = await query('SELECT * FROM daily_goals WHERE guild_id=$1 ORDER BY role', [interaction.guildId]);
+
+  const embed = baseEmbed(`${e('payday')} Server Settings Summary`, COLORS.tbppurple, interaction.guild?.name);
+
+  if (reqRes.rows.length) {
+    const r = reqRes.rows[0];
+    embed.addFields({
+      name: `${e('controller')} Pay Requirements`,
+      value:
+        `Min Games (period): **${r.min_games_hosted ?? r.min_games ?? 'N/A'}**\n` +
+        `Min Raffles (period): **${r.min_raffles_hosted ?? r.min_raffles ?? 'N/A'}**\n` +
+        `Min Giveaways (period): **${r.min_giveaways_hosted ?? r.min_giveaways ?? 'N/A'}**\n` +
+        `Min Rumble: **${r.min_rumble ?? 'N/A'}**\n` +
+        `Max Late Payouts: **${r.max_late_payouts ?? 'N/A'}**\n` +
+        `Max Missed Shifts: **${r.max_missed_shifts ?? 'N/A'}**\n` +
+        `Ticket Response Limit: **${r.ticket_response_limit_minutes ?? 'N/A'} min**\n` +
+        `Pay Period: **${r.pay_period_days ?? 'N/A'} days**\n` +
+        `Bonus Per Game: **${r.bonus_per_game ?? 'N/A'}**`,
+      inline: false,
+    });
+  } else {
+    embed.addFields({ name: `${e('controller')} Pay Requirements`, value: 'Not set yet — use /admin set-requirements', inline: false });
+  }
+
+  if (goalsRes.rows.length) {
+    const roleLabels = { owner: 'Owner', admin: 'Admin', staff: 'Mod', host: 'Host', rumble_host: 'Rumble Host' };
+    for (const g of goalsRes.rows) {
+      const label = roleLabels[g.role] || g.role;
+      embed.addFields({
+        name: `${e('confetti')} Daily Goals — ${label}`,
+        value: `Games: **${g.games ?? 0}**/day | Auto-Games: **${g.autogames ?? 0}**/day | Payouts: **${g.payouts ?? 0}**/day`,
+        inline: false,
+      });
+    }
+  } else {
+    embed.addFields({ name: `${e('confetti')} Daily Goals`, value: 'No roles configured yet — use /admin set-daily-goals', inline: false });
+  }
+
+  await interaction.editReply({ embeds: [embed] });
+}
+
 async function pingGames(interaction) {
   await interaction.deferReply({ ephemeral: true });
   const { refreshScheduleBoard } = require('../../utils/scheduleBoard');
@@ -393,11 +438,16 @@ module.exports = {
       .setDescription('Mark a staff member as paid')
       .addUserOption(o => o.setName('user').setDescription('Staff member').setRequired(true))
       .addIntegerOption(o => o.setName('amount').setDescription('Amount paid').setRequired(false))
+    )
+    .addSubcommand(sub => sub
+      .setName('settings-summary')
+      .setDescription('View current pay requirements and daily goals for all roles')
     ),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     if (sub === 'payroll')         await payroll(interaction);
+    if (sub === 'settings-summary') await settingsSummary(interaction);
     if (sub === 'pay-summary')     await paySummary(interaction);
     if (sub === 'paycheck-check')  await paycheckCheck(interaction);
     if (sub === 'late-payouts')    await latePayouts(interaction);
