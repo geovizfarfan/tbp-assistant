@@ -24,13 +24,13 @@ async function setupButton(interaction) {
 
   const title = interaction.options.getString('title') || 'Private Gambling Rooms';
   const description = interaction.options.getString('description') ||
-    'Press the button to create your **private gambling room**.\n\n' +
-    '• Private access for you and staff\n' +
-    '• Archives after **24 hours of inactivity**\n' +
-    '• Activity resets the timer\n' +
-    '• Deletes permanently after **1 week archived**';
+    'Press the button to create **your private room**.\n' +
+    `${e('vertical_line')} ${e('bullet')} Private access for **you**.\n` +
+    `${e('vertical_line')} ${e('bullet')} Archives after **24 hours** of inactivity\n` +
+    `${e('vertical_line')} ${e('bullet')} Activity **resets** the timer\n` +
+    `${e('vertical_line')} ${e('bullet')} Deletes **permanently** after 1 week archived`;
 
-  const embed = baseEmbed(`${e('purplesparkle')} ${title}`, COLORS.tbppurple, interaction.guild?.name)
+  const embed = baseEmbed(`${e('lock')} ${e('purplesparkle')} ${title}`, COLORS.tbppurple, interaction.guild?.name)
     .setDescription(description);
 
   const row = new ActionRowBuilder().addComponents(
