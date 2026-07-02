@@ -112,6 +112,13 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
+// Rumble Royale integration
+const { handleMessage: handleRRMessage } = require('./events/rumbleRoyale');
+client.on('messageCreate', async (message) => {
+  try { await handleRRMessage(message, client); }
+  catch (e) { console.error('[RumbleRoyale]', e.message); }
+});
+
 // Ticket tracking
 client.on('messageCreate', handleTicketMessage);
 client.on('channelDelete', handleChannelDelete);

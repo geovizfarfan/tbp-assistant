@@ -291,3 +291,32 @@ CREATE TABLE IF NOT EXISTS afk_status (
 -- (handled via ALTER TABLE in Railway console since table already exists)
 -- claim_hours_default INTEGER DEFAULT 6
 -- claim_hours_booster INTEGER DEFAULT 12
+
+-- Rumble Royale integration
+CREATE TABLE IF NOT EXISTS rr_channel_config (
+  channel_id TEXT PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  winner_role_id TEXT,
+  ping_role1_id TEXT,
+  ping_role2_id TEXT,
+  ping_role3_id TEXT,
+  next_channel_id TEXT,
+  reward_amount BIGINT DEFAULT 0,
+  battle_image TEXT,
+  embed_color TEXT DEFAULT '#cab2fb',
+  last_host TEXT,
+  total_games INT DEFAULT 0,
+  total_players INT DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS rr_stats (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT,
+  user_id TEXT NOT NULL,
+  username TEXT,
+  wins INT DEFAULT 0,
+  losses INT DEFAULT 0,
+  games INT DEFAULT 0,
+  UNIQUE(guild_id, user_id)
+);
