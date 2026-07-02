@@ -386,6 +386,36 @@ async function editGame(interaction) {
     if (!isNaN(unix)) { setClauses.push(`started_at=$${idx++}`); vals.push(new Date(unix * 1000)); }
   }
   if (winner) { setClauses.push(`winner_id=$${idx++}`); vals.push(winner.id); }
+
+  // After updating game_logs, also update the #winners channel embed if winner changed
+  if (winner && res.rows.length) {
+    try {
+      const annRes = await query(
+        `SELECT * FROM winner_announcements WHERE game_id=$1 AND guild_id=$2`,
+        [id, interaction.guildId]
+      );
+      if (annRes.rows.length) {
+        const ann = annRes.rows[0];
+        const winnerCh = await interaction.client.channels.fetch(ann.channel_id);
+        const msg = await winnerCh.messages.fetch(ann.message_id);
+        if (msg && msg.embeds[0]) {
+          const { EmbedBuilder } = require('discord.js');
+          const oldEmbed = msg.embeds[0];
+          const fields = oldEmbed.fields.map(f => {
+            if (f.name.includes('Winner') || f.name.includes('winner')) {
+              return { name: f.name, value: `<@${winner.id}>`, inline: f.inline };
+            }
+            return { name: f.name, value: f.value, inline: f.inline };
+          });
+          const updatedEmbed = EmbedBuilder.from(oldEmbed).setFields(fields);
+          await msg.edit({ embeds: [updatedEmbed] });
+          await query(`UPDATE winner_announcements SET winner_id=$1 WHERE game_id=$2 AND guild_id=$3`, [winner.id, id, interaction.guildId]);
+        }
+      }
+    } catch (err) {
+      console.error('[EditGame] Could not update winner embed:', err.message);
+    }
+  }
   vals.push(id, interaction.guildId);
 
   const res = await query(

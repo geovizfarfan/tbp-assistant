@@ -331,6 +331,9 @@ client.on('interactionCreate', async interaction => {
 
       const now = new Date();
       const newStatus = isClaimed ? 'paid' : 'not_claimed';
+      if (game.payout_status === 'n/a') {
+        return interaction.reply({ content: 'This game is marked N/A (host won their own game) — payout status cannot be changed.', ephemeral: true });
+      }
       await query('UPDATE game_logs SET payout_status=$1, payout_confirmed_at=$2 WHERE id=$3', [newStatus, now, gameId]);
       await query(`UPDATE member_wins SET payout_status=$1, paid_at=$2 WHERE ref_id=$3 AND type='game'`, [newStatus, now, gameId]);
       await query(`UPDATE payout_reminders SET resolved=true WHERE type='game' AND ref_id=$1`, [gameId]);
