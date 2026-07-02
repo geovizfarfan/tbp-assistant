@@ -53,6 +53,7 @@ module.exports = {
       .addStringOption(o => o.setName('prize').setDescription('New prize e.g. 500 Goos').setRequired(false))
       .addUserOption(o => o.setName('host').setDescription('Correct host').setRequired(false))
       .addStringOption(o => o.setName('start_time').setDescription('Correct start time e.g. <t:UNIX:F> or unix timestamp').setRequired(false))
+      .addUserOption(o => o.setName('winner').setDescription('Correct winner').setRequired(false))
     )
     .addSubcommand(sub => sub
       .setName('set-board')
@@ -365,9 +366,10 @@ async function editGame(interaction) {
   const prize    = interaction.options.getString('prize');
   const host      = interaction.options.getUser('host');
   const startRaw  = interaction.options.getString('start_time');
+  const winner    = interaction.options.getUser('winner');
   await interaction.deferReply({ ephemeral: true });
 
-  if (!gameName && !link && !prize && !host && !startRaw) {
+  if (!gameName && !link && !prize && !host && !startRaw && !winner) {
     return interaction.editReply({ content: `${e('wrong')} Please provide at least one field to update.` });
   }
 
@@ -383,6 +385,7 @@ async function editGame(interaction) {
     const unix = unixMatch ? parseInt(unixMatch[1]) : parseInt(startRaw);
     if (!isNaN(unix)) { setClauses.push(`started_at=$${idx++}`); vals.push(new Date(unix * 1000)); }
   }
+  if (winner) { setClauses.push(`winner_id=$${idx++}`); vals.push(winner.id); }
   vals.push(id, interaction.guildId);
 
   const res = await query(
