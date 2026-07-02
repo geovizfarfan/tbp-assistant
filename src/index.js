@@ -118,6 +118,12 @@ client.on('messageCreate', async (message) => {
   try { await handleRRMessage(message, client); }
   catch (e) { console.error('[RumbleRoyale]', e.message); }
 });
+client.on('messageUpdate', async (oldMsg, newMsg) => {
+  if (!newMsg.embeds?.length) return;
+  if (oldMsg.embeds?.length) return; // already had embeds, skip
+  try { await handleRRMessage(newMsg, client); }
+  catch (e) { console.error('[RumbleRoyale] update:', e.message); }
+});
 
 // Ticket tracking
 client.on('messageCreate', handleTicketMessage);
