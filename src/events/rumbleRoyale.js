@@ -145,7 +145,7 @@ async function handleMessage(message, client) {
     if (userId && config.reward_amount) {
       try {
         const { adjustBalance } = require('../utils/playAndRegretDb');
-        await adjustBalance(userId, Number(config.reward_amount), 'Rumble Royale win');
+        await adjustBalance(userId, username || 'Unknown', Number(config.reward_amount));
       } catch (e) { console.error('[RumbleRoyale] sins reward error:', e.message); }
     }
 
