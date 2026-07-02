@@ -149,33 +149,58 @@ async function handleMessage(message, client) {
       } catch (e) { console.error('[RumbleRoyale] sins reward error:', e.message); }
     }
 
-    // Assign winner role
-    if (userId && config.winner_role_id) {
-      const member = await message.guild.members.fetch(userId).catch(() => null);
-      if (member) await member.roles.add(config.winner_role_id).catch(() => {});
+    const winnerMention = userId ? `<@${userId}>` : `**${username}**`;
+
+    // Get wallet balance from Play & Regret DB
+    let walletBalance = null;
+    if (userId) {
+      try {
+        const { getBalance } = require('../utils/playAndRegretDb');
+        walletBalance = await getBalance(userId);
+      } catch (e) { console.error('[RumbleRoyale] getBalance error:', e.message); }
     }
 
-    const winnerMention = userId ? `<@${userId}>` : `**${username}**`;
+    // Check if winner already had the role before assigning
+    let alreadyHadRole = false;
+    let member = null;
+    if (userId) {
+      member = await message.guild.members.fetch(userId).catch(() => null);
+      if (member && config.winner_role_id) {
+        alreadyHadRole = member.roles.cache.has(config.winner_role_id);
+        if (!alreadyHadRole) await member.roles.add(config.winner_role_id).catch(() => {});
+      }
+    }
+
+    // Get total server-wide RR wins tracked by this bot
+    const totalServerWinsRes = await query(
+      'SELECT SUM(wins) as total FROM rr_stats WHERE guild_id = $1',
+      [message.guild.id]
+    ).catch(() => null);
+    const totalServerWins = totalServerWinsRes?.rows[0]?.total || 0;
 
     const descLines = [
       `${winnerMention} has won Rumble Royale! <a:confetti:1512912825935335484>`,
+      `<a:moneybag:1522373120147849226> **Reward:** ${config.reward_amount ? Number(config.reward_amount).toLocaleString() : '?'} sins <a:SINS:1522338148380704910>`,
+      walletBalance !== null ? `<:sins:1522291331672703100> **Wallet:** ${Number(walletBalance).toLocaleString()} sins` : null,
+    ].filter(Boolean);
+
+    if (config.winner_role_id) {
+      descLines.push(`<a:trophies:1512912823062364281> **Winner Role:** <@&${config.winner_role_id}>${alreadyHadRole ? ' — already had this role' : ''}`);
+    }
+
+    descLines.push(
       `<a:rumblesword:1522372420894330921> **Server Rumble Wins:** ${serverWins}`,
-      `<:member:1512912827424309278> **Total Players:** ${totalPlayers || '?'}`,
-      '',
-      `<a:moneybag:1522373120147849226> **${config.reward_amount ? Number(config.reward_amount).toLocaleString() : '?'} sins** <:sins:1522291331672703100> added to their balance!`,
-    ];
-    if (config.winner_role_id) descLines.push(`<a:purplesparkle:1512912828489793626> **Role:** <@&${config.winner_role_id}>`);
+    );
+
     if (config.next_channel_id) descLines.push(`\n**Next Channel:** <#${config.next_channel_id}>`);
 
     const winEmbed = new EmbedBuilder()
       .setColor('#d6c2ee')
-      .setTitle('<a:trophies:1512912823062364281> WINNER!')
-      .setDescription(descLines.join('\n'));
+      .setTitle('<:rumble:1522372419338375299> <a:trophies:1512912823062364281> WINNER!')
+      .setDescription(descLines.join('\n'))
+      .setFooter({ text: `${message.guild.name} has tracked ${Number(totalServerWins)} Rumble Royale wins.` });
 
-    if (userId) {
-      const member = await message.guild.members.fetch(userId).catch(() => null);
-      if (member?.user) winEmbed.setThumbnail(member.user.displayAvatarURL({ dynamic: true }));
-    }
+    if (member?.user) winEmbed.setThumbnail(member.user.displayAvatarURL({ dynamic: true }));
 
     await message.channel.send({ embeds: [winEmbed] });
 
