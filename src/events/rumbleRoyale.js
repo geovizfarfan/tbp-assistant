@@ -88,15 +88,15 @@ async function handleMessage(message, client) {
     }
 
     const descLines = [
-      'Time to rumble! Good luck everyone <a:purplesparkle:1479210541691175054> — may the baddest win.',
+      'Time to rumble! Good luck everyone <a:purplesparkle:1512912828489793626> — may the baddest win.',
       '',
-      `<a:moneybag:1479268556687540345> **Reward:** ${config.reward_amount ? Number(config.reward_amount).toLocaleString() : '?'} sins <:sins:1522321533307981945>`,
+      `<a:moneybag:1522373120147849226> **Reward:** ${config.reward_amount ? Number(config.reward_amount).toLocaleString() : '?'} sins <:sins:1522291331672703100>`,
     ];
-    if (config.winner_role_id) descLines.push(`<a:trophies:1507765453299122387> **Winner Role:** <@&${config.winner_role_id}>`);
-    if (config.next_channel_id) descLines.push(`<a:rumblesword:1522338907465842789> **Next Room:** <#${config.next_channel_id}>`);
+    if (config.winner_role_id) descLines.push(`<a:trophies:1512912823062364281> **Winner Role:** <@&${config.winner_role_id}>`);
+    if (config.next_channel_id) descLines.push(`<a:rumblesword:1522372420894330921> **Next Room:** <#${config.next_channel_id}>`);
 
     const battleEmbed = new EmbedBuilder()
-      .setColor(config.embed_color || '#cab2fb')
+      .setColor(config.embed_color || '#d6c2ee')
       .setTitle('<:rumble:1522304913697280160> Rumble Royale — \uD835\uDE31\uD835\uDE22\uD835\uDE31\uD835\uDE31\uD835\uDE2D\uD835\uDE26 \uD835\uDE31\uD835\uDE24\uD835\uDE2C\uD835\uDE26!')
       .setDescription(descLines.join('\n'))
       .setFooter({ text: `${message.guild.name} • Hosted by: ${parsed.host}${parsed.era ? ` • Era: ${parsed.era}` : ''}` });
@@ -147,18 +147,18 @@ async function handleMessage(message, client) {
     const winnerMention = userId ? `<@${userId}>` : `**${username}**`;
 
     const descLines = [
-      `${winnerMention} has won Rumble Royale! <a:confetti:1495667283870089307>`,
-      `<a:rumblesword:1522338907465842789> **Server Rumble Wins:** ${serverWins}`,
-      `<:member:1495666085121491024> **Total Players:** ${totalPlayers || '?'}`,
+      `${winnerMention} has won Rumble Royale! <a:confetti:1512912825935335484>`,
+      `<a:rumblesword:1522372420894330921> **Server Rumble Wins:** ${serverWins}`,
+      `<:member:1512912827424309278> **Total Players:** ${totalPlayers || '?'}`,
       '',
-      `<a:moneybag:1479268556687540345> **${config.reward_amount ? Number(config.reward_amount).toLocaleString() : '?'} sins** <:sins:1522321533307981945> added to their balance!`,
+      `<a:moneybag:1522373120147849226> **${config.reward_amount ? Number(config.reward_amount).toLocaleString() : '?'} sins** <:sins:1522291331672703100> added to their balance!`,
     ];
-    if (config.winner_role_id) descLines.push(`<a:sparkle:1511506717584920696> **Role:** <@&${config.winner_role_id}>`);
-    if (config.next_channel_id) descLines.push(`\n**NEXT:** <#${config.next_channel_id}>`);
+    if (config.winner_role_id) descLines.push(`<a:purplesparkle:1512912828489793626> **Role:** <@&${config.winner_role_id}>`);
+    if (config.next_channel_id) descLines.push(`\n**Next Channel:** <#${config.next_channel_id}>`);
 
     const winEmbed = new EmbedBuilder()
-      .setColor('#5b209a')
-      .setTitle('<a:trophies:1507765453299122387> WINNER!')
+      .setColor('#d6c2ee')
+      .setTitle('<a:trophies:1512912823062364281> WINNER!')
       .setDescription(descLines.join('\n'));
 
     if (userId) {
