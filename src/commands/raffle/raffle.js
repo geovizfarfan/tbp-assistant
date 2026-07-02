@@ -272,6 +272,7 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
       await origMsg.edit({
         embeds: [baseEmbed(`${e('raffle')} RAFFLE — ENDED`, COLORS.grey, guild.name).setDescription(`**Winner:** <@${winner.user_id}>\n**Ended:** ${tsF(now)}`)],
         components: [],
+        attachments: [],
       });
     } catch {}
   } catch (err) {
