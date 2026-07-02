@@ -259,7 +259,9 @@ async function endGame(interaction) {
 
         const boosterRes = await query(`SELECT id FROM boosters WHERE guild_id=$1 AND user_id=$2 AND active=true`, [interaction.guildId, winner.id]);
         const isBooster = boosterRes.rows.length > 0;
-        const claimHours = isBooster ? 12 : 6;
+        const defaultClaim = cfg.claim_hours_default || 6;
+        const boosterClaim = cfg.claim_hours_booster || 12;
+        const claimHours = isBooster ? boosterClaim : defaultClaim;
 
         const annRes = await query(
           `INSERT INTO winner_announcements (guild_id, game_id, channel_id, message_id, winner_id, prize, is_booster)
