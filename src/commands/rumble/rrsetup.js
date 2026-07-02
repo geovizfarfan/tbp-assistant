@@ -58,15 +58,15 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setColor(color)
-      .setTitle('✅ Rumble Royale Channel Configured!')
+      .setTitle('<:checkmark:1495666088417956002> Rumble Royale Channel Configured!')
       .setDescription(`Monitoring <#${channel.id}> for Rumble Royale battles.\nRun \`/rrsetup\` again to update settings.`)
       .addFields(
-        { name: '🏆 Winner Role',    value: winnerRole ? `<@&${winnerRole.id}>` : '—', inline: true },
-        { name: '📣 Ping Roles',     value: pingList,                                   inline: true },
-        { name: '💰 Reward',         value: `${reward.toLocaleString()} sins`,           inline: true },
-        { name: '⚔️ Next Room',      value: nextChannel ? `<#${nextChannel.id}>` : '—', inline: true },
-        { name: '🖼️ Image',          value: image ? '✓ Set' : '—',                       inline: true },
-        { name: '🎨 Embed Color',    value: color,                                        inline: true },
+        { name: '<a:trophies:1507765453299122387> Winner Role',        value: winnerRole ? `<@&${winnerRole.id}>` : '—', inline: true },
+        { name: '<a:purplesparkle:1479210541691175054> Ping Roles',   value: pingList,                                   inline: true },
+        { name: '<a:moneybag:1479268556687540345> Reward',            value: `${reward.toLocaleString()} sins`,           inline: true },
+        { name: '<a:rumblesword:1522338907465842789> Next Room',      value: nextChannel ? `<#${nextChannel.id}>` : '—', inline: true },
+        { name: '<a:Fire:1495641973128691803> Image',                 value: image ? '<:checkmark:1495666088417956002> Set' : '—', inline: true },
+        { name: '🎨 Embed Color',                                     value: color,                                       inline: true },
       );
 
     return interaction.editReply({ embeds: [embed] });
