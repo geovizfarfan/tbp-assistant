@@ -77,10 +77,19 @@ async function handleMessage(message, client) {
     const parsed = parseBattleStartEmbed(message);
     if (!parsed) return;
 
-    // Store host for end-of-battle ping
-    if (parsed.host) {
-      const members = await message.guild.members.fetch({ query: parsed.host, limit: 1 }).catch(() => null);
-      const hostMember = members?.first();
+    // Store host from the interaction that triggered the battle
+    // RR bot messages from slash commands have interaction.user set
+    const hostId = message.interaction?.user?.id || message.interactionMetadata?.user?.id || null;
+    if (hostId) {
+      await query('UPDATE rr_channel_config SET last_host = $1 WHERE channel_id = $2',
+        [hostId, message.channel.id]).catch(() => {});
+    } else if (parsed.host) {
+      // Fallback: search by display name
+      const members = await message.guild.members.search({ query: parsed.host, limit: 5 }).catch(() => null);
+      const hostMember = members?.find(m =>
+        m.displayName.toLowerCase() === parsed.host.toLowerCase() ||
+        m.user.username.toLowerCase() === parsed.host.toLowerCase()
+      );
       if (hostMember) {
         await query('UPDATE rr_channel_config SET last_host = $1 WHERE channel_id = $2',
           [hostMember.id, message.channel.id]).catch(() => {});
