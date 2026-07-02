@@ -286,3 +286,8 @@ CREATE TABLE IF NOT EXISTS afk_status (
   set_at TIMESTAMPTZ DEFAULT NOW(),
   last_notified_at TIMESTAMPTZ
 );
+
+-- Add claim time columns to guild_config if they don't exist
+-- (handled via ALTER TABLE in Railway console since table already exists)
+-- claim_hours_default INTEGER DEFAULT 6
+-- claim_hours_booster INTEGER DEFAULT 12

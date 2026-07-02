@@ -447,18 +447,12 @@ module.exports = {
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     if (sub === 'payroll')         await payroll(interaction);
-    if (sub === 'settings-summary') await settingsSummary(interaction);
     if (sub === 'pay-summary')     await paySummary(interaction);
     if (sub === 'paycheck-check')  await paycheckCheck(interaction);
     if (sub === 'late-payouts')    await latePayouts(interaction);
     if (sub === 'missed-schedules')await missedSchedules(interaction);
-    if (sub === 'set-requirements')await setRequirements(interaction);
     if (sub === 'daily-report')    await dailyReport(interaction);
-    if (sub === 'set-daily-goals') await setDailyGoals(interaction);
     if (sub === 'ping-games')      await pingGames(interaction);
-    if (sub === 'set-timezone')    await setTimezone(interaction);
-    if (sub === 'set-roles')       await setRoles(interaction);
-    if (sub === 'set-channels')    await setChannels(interaction);
     if (sub === 'fix-payout')      await fixPayout(interaction);
     if (sub === 'stop-reminder')   await stopReminder(interaction);
     if (sub === 'mark-paid')       await markPaid(interaction);
