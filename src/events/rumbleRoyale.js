@@ -62,7 +62,9 @@ function parseBattleStartEmbed(message) {
 }
 
 async function handleMessage(message, client) {
+  if (message.author.bot) console.log('[RumbleRoyale] Bot message from:', message.author.id, message.author.username);
   if (message.author.id !== RUMBLE_ROYALE_BOT_ID) return;
+  console.log('[RumbleRoyale] RR bot detected! embeds:', message.embeds?.length, 'channel:', message.channel.id);
   if (!message.embeds?.length) return;
 
   const config = await getConfig(message.channel.id);
