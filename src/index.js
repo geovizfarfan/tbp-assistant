@@ -117,6 +117,71 @@ client.on('messageCreate', handleTicketMessage);
 client.on('channelDelete', handleChannelDelete);
 client.on('threadCreate', (thread) => handleThreadCreate(thread, client));
 
+// AFK system — watch for mentions of AFK users and auto-clear on return
+client.on('messageCreate', async (message) => {
+  if (message.author.bot) return;
+  if (!message.guild) return;
+
+  const { query } = require('./utils/database');
+  const { e } = require('./utils/appEmojis');
+
+  // Helper: format duration since a date
+  function formatDuration(since) {
+    const ms = Date.now() - new Date(since).getTime();
+    const totalMins = Math.floor(ms / 60000);
+    const hours = Math.floor(totalMins / 60);
+    const mins = totalMins % 60;
+    if (hours > 0 && mins > 0) return hours + 'h ' + mins + 'm';
+    if (hours > 0) return hours + 'h';
+    return mins + 'm';
+  }
+
+  // 1. Auto-clear AFK status when the AFK user sends a message
+  try {
+    const selfRes = await query('SELECT * FROM afk_status WHERE user_id=$1', [message.author.id]);
+    if (selfRes.rows.length) {
+      await query('DELETE FROM afk_status WHERE user_id=$1', [message.author.id]);
+      const duration = formatDuration(selfRes.rows[0].set_at);
+      await message.reply({
+        content: e('confetti') + ' Welcome back **' + message.author.username + '**! You were AFK for **' + duration + '**.',
+        allowedMentions: { repliedUser: false },
+      }).catch(() => {});
+    }
+  } catch {}
+
+  // 2. Notify when an AFK user is mentioned (with 2min cooldown per AFK user to avoid spam)
+  if (message.mentions.users.size === 0) return;
+  try {
+    const mentionedIds = [...message.mentions.users.keys()];
+    const placeholders = mentionedIds.map((_, i) => '$' + (i + 1)).join(',');
+    const afkRes = await query(
+      'SELECT * FROM afk_status WHERE user_id IN (' + placeholders + ')',
+      mentionedIds
+    );
+    for (const afk of afkRes.rows) {
+      // 2-minute cooldown per AFK user to prevent spam
+      if (afk.last_notified_at) {
+        const cooldownMs = 2 * 60 * 1000;
+        if (Date.now() - new Date(afk.last_notified_at).getTime() < cooldownMs) continue;
+      }
+      const duration = formatDuration(afk.set_at);
+      const serverName = message.guild.name;
+      const afkUser = message.mentions.users.get(afk.user_id);
+      const username = afkUser ? afkUser.username : 'That user';
+      await message.reply({
+        content:
+          '<a:offline:1522061617213341786> **' + username + '** is AFK\n' +
+          '**Reason:** ' + afk.reason + '\n' +
+          '-# ' + serverName + ' • AFK for ' + duration,
+        allowedMentions: { repliedUser: false },
+      }).catch(() => {});
+      await query('UPDATE afk_status SET last_notified_at=NOW() WHERE user_id=$1', [afk.user_id]);
+    }
+  } catch (err) {
+    console.error('[AFK] Error:', err.message);
+  }
+});
+
 // Private room activity tracking — any message in a tracked private room thread
 // resets its inactivity timer and un-archives it if needed.
 client.on('messageCreate', async (message) => {

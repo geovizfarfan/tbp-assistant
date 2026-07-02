@@ -278,3 +278,11 @@ CREATE TABLE IF NOT EXISTS goosdate_config (
   last_sent_minute_key TEXT,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- AFK status tracking (global across all servers)
+CREATE TABLE IF NOT EXISTS afk_status (
+  user_id TEXT PRIMARY KEY,
+  reason TEXT DEFAULT 'AFK',
+  set_at TIMESTAMPTZ DEFAULT NOW(),
+  last_notified_at TIMESTAMPTZ
+);
