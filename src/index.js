@@ -84,10 +84,10 @@ client.once('ready', async () => {
   const commands = [...client.commands.values()].map(c => c.data.toJSON());
   try {
     await rest.put(
-      Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID),
+      Routes.applicationCommands(client.user.id),
       { body: commands }
     );
-    console.log(`[Commands] Registered ${commands.length} commands to guild ${process.env.GUILD_ID}`);
+    console.log(`[Commands] Registered ${commands.length} commands globally`);
   } catch (err) {
     console.error('[Commands] Failed to register:', err);
   }
@@ -170,8 +170,8 @@ client.on('messageCreate', async (message) => {
       const username = afkUser ? afkUser.username : 'That user';
       await message.reply({
         content:
-          '<a:offline:1522061617213341786> **' + username + '** is AFK\n' +
-          '**Reason:** ' + afk.reason + '\n' +
+          '<a:afk:1522096882036510791> **' + username + '** is AFK\n' +
+          '> **Reason:** ' + afk.reason + '\n' +
           '-# ' + serverName + ' • AFK for ' + duration,
         allowedMentions: { repliedUser: false },
       }).catch(() => {});
