@@ -55,8 +55,10 @@ function parseBattleStartEmbed(message) {
   const hostMatch = embed.title.match(/hosted by (.+)$/i);
   const host = hostMatch ? hostMatch[1].trim() : null;
 
-  const eraMatch = (embed.description || '').match(/(?:Random\s+)?Era:\s*[^\s]*\s*(.+)/i);
-  const era = eraMatch ? eraMatch[1].trim() : null;
+  const eraLines = (embed.description || '').split('\n');
+  const eraLine = eraLines.find(l => /era:/i.test(l));
+  const eraMatch2 = eraLine?.match(/Era:\s*[^\s]*\s*(.+)/i);
+  const era = eraMatch2 ? eraMatch2[1].trim() : null;
 
   return { host, era };
 }
@@ -106,7 +108,7 @@ async function handleMessage(message, client) {
 
     const battleEmbed = new EmbedBuilder()
       .setColor(config.embed_color || '#d6c2ee')
-      .setTitle('<:rumble:1522304913697280160> Rumble Royale — \uD835\uDE31\uD835\uDE22\uD835\uDE31\uD835\uDE31\uD835\uDE2D\uD835\uDE26 \uD835\uDE31\uD835\uDE24\uD835\uDE2C\uD835\uDE26!')
+      .setTitle(`<a:rumblesword:1522372420894330921> Rumble Royale — BATTLE TIME!`)
       .setDescription(descLines.join('\n'))
       .setFooter({ text: `${message.guild.name} • Hosted by: ${parsed.host}${parsed.era ? ` • Era: ${parsed.era}` : ''}` });
 
