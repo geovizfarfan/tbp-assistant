@@ -4,6 +4,7 @@ const {
 } = require('discord.js');
 const { e } = require('../../utils/appEmojis');
 const { query } = require('../../utils/database');
+const { adjustBalance } = require('../../utils/playAndRegretDb');
 const { baseEmbed, tsF, tsR, COLORS } = require('../../utils/embeds');
 const { getPrizeImage, getPrizeLabel } = require('../../utils/prizeImages');
 const { refreshScheduleBoard, removeFromBoard } = require('../../utils/scheduleBoard');
@@ -173,7 +174,21 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
 
     const winner = entries[Math.floor(Math.random() * entries.length)];
     const hostWonOwnRaffle = raffle.host_id === winner.user_id;
-    await query(`UPDATE raffles SET status='ended', ended_at=$1, winner_id=$2, payout_status=$3 WHERE id=$4`, [now, winner.user_id, hostWonOwnRaffle ? 'n/a' : 'pending', raffleId]);
+
+    // Auto-award Sins immediately if this raffle's prize is a Sins amount
+    const isSinsRaffle = raffle.currency === 'SINS' && raffle.prize_amount;
+    let sinsAwarded = false;
+    if (isSinsRaffle && !hostWonOwnRaffle) {
+      try {
+        await adjustBalance(winner.user_id, winner.username, raffle.prize_amount);
+        sinsAwarded = true;
+        console.log(`[Raffle] Auto-awarded ${raffle.prize_amount} Sins to ${winner.username}`);
+      } catch (err) {
+        console.error('[Raffle] Sins award failed:', err.message);
+      }
+    }
+
+    await query(`UPDATE raffles SET status='ended', ended_at=$1, winner_id=$2, payout_status=$3 WHERE id=$4`, [now, winner.user_id, hostWonOwnRaffle ? 'n/a' : (sinsAwarded ? 'paid' : 'pending'), raffleId]);
 
     await query(
       `INSERT INTO member_wins (guild_id, user_id, username, type, ref_id, prize, prize_amount, currency, host_id, won_at)
@@ -181,7 +196,7 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
       [guildId, winner.user_id, winner.username, raffleId, raffle.prize, raffle.prize_amount, raffle.currency, raffle.host_id, now]
     );
 
-    if (!hostWonOwnRaffle) {
+    if (!hostWonOwnRaffle && !sinsAwarded) {
       await query(
         `INSERT INTO payout_reminders (type, ref_id, host_id, winner_id, prize, guild_id, channel_id)
          VALUES ('raffle',$1,$2,$3,$4,$5,$6)`,
@@ -199,13 +214,18 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
     } catch {}
 
     const prizeText = raffle.prize_amount ? `${raffle.prize_amount} ${raffle.prize}` : raffle.prize;
+    const payoutFieldValue = hostWonOwnRaffle
+      ? 'N/A'
+      : (sinsAwarded
+        ? `${e('checkmark')} Automatically added to your Sins balance!`
+        : `${e('Loading')} Pending — please open a ticket in ${ticketMention} to claim your prize!`);
     const winnerImageData = await getPrizeImage(guildId, raffle.prize_key);
     const winEmbed = baseEmbed(`${e('confetti')} Raffle Winner — ${prizeText} Raffle`, COLORS.tbppurple, guild.name)
       .addFields(
         { name: `${e('trophies')} Winner`,     value: `<@${winner.user_id}>`, inline: true },
         { name: `${e('purplesparkle')} Prize`,  value: prizeText, inline: true },
         { name: `${e('members')} Host`,         value: `<@${raffle.host_id}>`, inline: true },
-        { name: `${e('payout')} Payout`,        value: hostWonOwnRaffle ? 'N/A' : `${e('Loading')} Pending — please open a ticket in ${ticketMention} to claim your prize!`, inline: false },
+        { name: `${e('payout')} Payout`,        value: payoutFieldValue, inline: false },
       );
 
     let winMsgPayload = { content: `${e('confetti')} Congratulations <@${winner.user_id}>!`, embeds: [winEmbed] };
@@ -229,7 +249,7 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
             { name: `${e('trophies')} Winner`,    value: `<@${winner.user_id}>`, inline: true },
             { name: `${e('purplesparkle')} Prize`, value: prizeText, inline: true },
             { name: `${e('members')} Host`,        value: `<@${raffle.host_id}>`, inline: true },
-            { name: `${e('payout')} Payout`,       value: hostWonOwnRaffle ? 'N/A' : `${e('Loading')} Pending — please open a ticket in ${ticketMention} to claim your prize!`, inline: false },
+            { name: `${e('payout')} Payout`,       value: payoutFieldValue, inline: false },
             { name: `${e('receipt')} Raffle ID`,   value: `#${raffleId}`, inline: true },
           );
         let winnersMsgPayload = { content: `${e('confetti')} Congratulations <@${winner.user_id}>!`, embeds: [winnersEmbed] };
@@ -240,7 +260,7 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
         } else if (winnerImageData.type === 'url') {
           winnersEmbed.setThumbnail(winnerImageData.url);
         }
-        if (!hostWonOwnRaffle) {
+        if (!hostWonOwnRaffle && !sinsAwarded) {
           const raffleClaimedButton = new ButtonBuilder()
             .setCustomId('rafflewin_claimed_' + raffleId)
             .setLabel('Claimed')

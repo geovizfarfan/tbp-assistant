@@ -6,6 +6,7 @@ const { baseEmbed, COLORS } = require('../../utils/embeds');
 const { spinWheel } = require('../../utils/wheelRenderer');
 const { getPaletteColors, getPaletteChoices } = require('../../utils/wheelPalettes');
 const { query } = require('../../utils/database');
+const { adjustBalance } = require('../../utils/playAndRegretDb');
 
 function buildPaletteOption(opt) {
   return opt.setName('palette').setDescription('Wheel color theme').setRequired(false).addChoices(...getPaletteChoices());
@@ -13,6 +14,13 @@ function buildPaletteOption(opt) {
 
 function parseManualEntries(raw) {
   return raw.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+}
+
+// Detects prize text like "50 Sins" or "50 sin" and returns the amount, or null if it's not a Sins prize.
+function parseSinsAmount(text) {
+  if (!text) return null;
+  const match = text.trim().match(/^(\d+)\s*sins?$/i);
+  return match ? parseInt(match[1], 10) : null;
 }
 
 async function resolveMentionsToEntries(interaction, rawEntries) {
@@ -365,12 +373,23 @@ async function spinPrizes(interaction) {
     return interaction.reply({ content: e('wrong') + ' No prizes provided.', ephemeral: true });
   }
 
-  await sendWheelResult(
+  const prizeWon = await sendWheelResult(
     interaction, prizes, colors,
     e('purplesparkle') + ' Prize Wheel \u2014 ' + winner.username,
     e('trophies') + ' Prize Won',
     [{ name: e('members') + ' Winner', value: '<@' + winner.id + '>', inline: true }]
   );
+
+  const sinsAmount = parseSinsAmount(prizeWon);
+  if (sinsAmount) {
+    try {
+      const newBalance = await adjustBalance(winner.id, winner.username, sinsAmount);
+      await interaction.followUp({ content: e('checkmark') + ' Awarded **' + sinsAmount + '** Sins to <@' + winner.id + '>! New balance: **' + newBalance.toLocaleString() + '**' });
+    } catch (err) {
+      console.error('[Wheel] Sins award failed:', err.message);
+      await interaction.followUp({ content: e('wrong') + ' Wheel landed on Sins but the award failed to process. Please award manually with /sins give.' });
+    }
+  }
 }
 
 async function spinCombo(interaction) {
@@ -425,4 +444,19 @@ async function spinCombo(interaction) {
     );
 
   await interaction.followUp({ embeds: [prizeEmbed], files: [prizeAttachment] });
+
+  const sinsAmount = parseSinsAmount(prizeName);
+  if (sinsAmount) {
+    if (winnerEntry && winnerEntry.userId) {
+      try {
+        const newBalance = await adjustBalance(winnerEntry.userId, winnerEntry.text, sinsAmount);
+        await interaction.followUp({ content: e('checkmark') + ' Awarded **' + sinsAmount + '** Sins to ' + winnerDisplay + '! New balance: **' + newBalance.toLocaleString() + '**' });
+      } catch (err) {
+        console.error('[Wheel] Sins award failed:', err.message);
+        await interaction.followUp({ content: e('wrong') + ' Wheel landed on Sins but the award failed to process. Please award manually with /sins give.' });
+      }
+    } else {
+      await interaction.followUp({ content: e('atention') + ' Wheel landed on Sins, but the winner wasn\u2019t a recognized Discord member \u2014 please award manually with /sins give.' });
+    }
+  }
 }
