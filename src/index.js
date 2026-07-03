@@ -114,6 +114,9 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isButton() && interaction.customId.startsWith('grind_')) {
     return grindModule.handleButton(interaction, client);
   }
+  if (interaction.isButton() && interaction.customId.startsWith('pingpanel_')) {
+    return pingPanelModule.handleButton(interaction);
+  }
   if (!interaction.isChatInputCommand()) return;
 
   const command = client.commands.get(interaction.commandName);
@@ -135,6 +138,7 @@ client.on('interactionCreate', async (interaction) => {
 // Rumble Royale integration
 const { handleMessage: handleRRMessage, handleReaction: handleRRReaction } = require('./events/rumbleRoyale');
 const grindModule = require('./commands/grind/grind');
+const pingPanelModule = require('./commands/pingpanel/pingpanel');
 client.on('messageCreate', async (message) => {
   try { await handleRRMessage(message, client); }
   catch (e) { console.error('[RumbleRoyale]', e.message); }
