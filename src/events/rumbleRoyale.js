@@ -61,12 +61,20 @@ function parseBattleStartEmbed(message) {
 }
 
 async function checkAllRolesAchievement(guild, member, client, guildConfig) {
-  // Get all configured winner roles across all channels in this guild
+  // Get active season for this guild
+  const seasonRes = await query('SELECT id FROM rr_seasons WHERE guild_id = $1 AND status = $2', [guild.id, 'active']);
+  const season = seasonRes.rows[0];
+  if (!season) return; // No active season — no achievement tracking
+
+  // Get channels defined in this season that have both role+reaction
   const res = await query(
-    'SELECT winner_role_id, reaction_emoji FROM rr_channel_config WHERE guild_id = $1 AND winner_role_id IS NOT NULL AND reaction_emoji IS NOT NULL',
-    [guild.id]
+    `SELECT rc.winner_role_id, rc.reaction_emoji
+     FROM rr_season_channels sc
+     JOIN rr_channel_config rc ON rc.channel_id = sc.channel_id
+     WHERE sc.season_id = $1 AND rc.winner_role_id IS NOT NULL AND rc.reaction_emoji IS NOT NULL`,
+    [season.id]
   );
-  if (!res.rows.length) return;
+  if (!res.rows.length) return; // No channels in season
 
   const allWinnerRoles = res.rows.map(r => r.winner_role_id);
   const hasAll = allWinnerRoles.every(roleId => member.roles.cache.has(roleId));

@@ -340,3 +340,21 @@ ALTER TABLE rr_achievements ADD COLUMN IF NOT EXISTS completions INT DEFAULT 1;
 
 ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS battle_title TEXT DEFAULT NULL;
 ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS battle_description TEXT DEFAULT NULL;
+
+-- RR Seasons
+CREATE TABLE IF NOT EXISTS rr_seasons (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  status TEXT DEFAULT 'active',
+  started_at TIMESTAMPTZ DEFAULT NOW(),
+  ended_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS rr_season_channels (
+  id SERIAL PRIMARY KEY,
+  season_id INT NOT NULL,
+  channel_id TEXT NOT NULL,
+  guild_id TEXT NOT NULL,
+  UNIQUE(season_id, channel_id)
+);
