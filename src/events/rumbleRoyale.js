@@ -142,22 +142,17 @@ async function handleMessage(message, client) {
     }
 
     // Give sins via Play & Regret DB if reward configured
-    if (userId && config.reward_amount) {
-      try {
-        const { adjustBalance } = require('../utils/playAndRegretDb');
-        await adjustBalance(userId, username || 'Unknown', Number(config.reward_amount));
-      } catch (e) { console.error('[RumbleRoyale] sins reward error:', e.message); }
-    }
-
     const winnerMention = userId ? `<@${userId}>` : `**${username}**`;
 
-    // Get wallet balance from Play & Regret DB
+    // Give sins and get updated balance
     let walletBalance = null;
-    if (userId) {
+    if (userId && config.reward_amount) {
       try {
-        const { getBalance } = require('../utils/playAndRegretDb');
-        walletBalance = await getBalance(userId);
-      } catch (e) { console.error('[RumbleRoyale] getBalance error:', e.message); }
+        console.log('[RumbleRoyale] Giving sins to', userId, username, 'amount:', Number(config.reward_amount));
+        const { adjustBalance, getBalance } = require('../utils/playAndRegretDb');
+        walletBalance = await adjustBalance(userId, username || 'Unknown', Number(config.reward_amount));
+        console.log('[RumbleRoyale] Sins given! New balance:', walletBalance);
+      } catch (e) { console.error('[RumbleRoyale] sins error:', e); }
     }
 
     // Check if winner already had the role before assigning
