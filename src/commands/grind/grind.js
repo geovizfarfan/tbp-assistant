@@ -24,26 +24,25 @@ async function getUserChannel(guildId, userId) {
 function buildPanelEmbeds(config, count) {
   const subEmbed = new EmbedBuilder()
     .setColor(config.embed_color || '#d6c2ee')
-    .setTitle('<:rumble:1522372419338375299> Rumble Grind Subscription ⚔️')
-    .setDescription(`Want to be notified whenever a **Grind** battle starts?\nClick below to subscribe or unsubscribe!`);
+    .setTitle('<a:rumblesword:1522372420894330921> Rumble Grind Notifications')
+    .setDescription(`Want to get notified when a **Grind** battle starts?\nClick Below! <a:whitesparkle:1512912831761092740>`);
 
   const chEmbed = new EmbedBuilder()
     .setColor(config.embed_color || '#d6c2ee')
-    .setTitle('<:rumble:1522372419338375299> Create Your Own Rumble Grind Channel! ⚔️')
+    .setTitle(`<:rumble:1522372419338375299> Create Your Own Grind Channel <:rumble:1522372419338375299>`)
     .setDescription(
       `Click the button below to get your own rumble grind channel.\n` +
-      `After **${config.duration_hours || 1} hour(s)**, it will self-delete.\n` +
-      `Pressing the button again will reset the timer.\n\n` +
-      `**Current Grind Channel Capacity: ${count}/${config.max_channels || 50}**`
+      `After **${config.duration_hours || 1} hour(s)**, it will self-delete. Pressing the button again will reset the timer.\n\n` +
+      `**Current Active Grind Channels: ${count}/${config.max_channels || 50}**`
     );
 
   const subRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('grind_subscribe').setLabel('Subscribe').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('grind_unsubscribe').setLabel('Unsubscribe').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('grind_subscribe').setLabel('Get Notified').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('grind_unsubscribe').setLabel('Remove Notifications').setStyle(ButtonStyle.Secondary),
   );
 
   const chRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('grind_create').setLabel('Create Grind Channel').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('grind_create').setLabel('Create Grind Channel').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('grind_delete').setLabel('Delete Grind Channel').setStyle(ButtonStyle.Danger),
   );
 
