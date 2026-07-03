@@ -38,7 +38,7 @@ function buildPanelEmbeds(config, count) {
 
   const subRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('grind_subscribe').setLabel('Get Notified').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('grind_unsubscribe').setLabel('Remove Notifications').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('grind_unsubscribe').setLabel('Remove Notifications').setStyle(ButtonStyle.Danger),
   );
 
   const chRow = new ActionRowBuilder().addComponents(
