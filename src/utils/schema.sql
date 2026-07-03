@@ -337,3 +337,6 @@ CREATE TABLE IF NOT EXISTS rr_achievements (
 );
 
 ALTER TABLE rr_achievements ADD COLUMN IF NOT EXISTS completions INT DEFAULT 1;
+
+ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS battle_title TEXT DEFAULT NULL;
+ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS battle_description TEXT DEFAULT NULL;

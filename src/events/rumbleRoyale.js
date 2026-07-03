@@ -155,17 +155,21 @@ async function handleMessage(message, client) {
       }
     }
 
-    const descLines = [
-      'Time to rumble! Good luck everyone <a:purplesparkle:1512912828489793626> — may the baddest win.',
-      '',
-      `<a:moneybag:1522373120147849226> **Reward:** ${config.reward_amount ? Number(config.reward_amount).toLocaleString() : '?'} sins <:sins:1522291331672703100>`,
-    ];
+    const descLines = [];
+    if (config.battle_description) {
+      descLines.push(config.battle_description, '');
+    }
+    descLines.push(`<a:moneybag:1522373120147849226> **Reward:** ${config.reward_amount ? Number(config.reward_amount).toLocaleString() : '?'} sins <:sins:1522291331672703100>`);
     if (config.winner_role_id) descLines.push(`<a:trophies:1512912823062364281> **Winner Role:** <@&${config.winner_role_id}>`);
     if (config.next_channel_id) descLines.push(`<a:rumblesword:1522372420894330921> **Next Room:** <#${config.next_channel_id}>`);
 
+    // Channel name without # for author field
+    const channelName = message.channel.name || '';
+
     const battleEmbed = new EmbedBuilder()
       .setColor(config.embed_color || '#d6c2ee')
-      .setTitle(`<:rumble:1522372419338375299> Rumble Royale — BATTLE TIME!`)
+      .setAuthor({ name: channelName })
+      .setTitle(config.battle_title || 'Rumble Royale — BATTLE TIME!')
       .setDescription(descLines.join('\n'))
       .setFooter({ text: `${message.guild.name} • Hosted by: ${parsed.host}${parsed.era ? ` • Era: ${parsed.era}` : ''}` });
 

@@ -15,7 +15,9 @@ module.exports = {
     .addAttachmentOption(o => o.setName('image').setDescription('Upload image or GIF for battle start announcement'))
     .addStringOption(o => o.setName('image_url').setDescription('Or paste an image URL instead of uploading'))
     .addStringOption(o => o.setName('embed_color').setDescription('Embed color hex (default: #d6c2ee)'))
-    .addStringOption(o => o.setName('reaction_emoji').setDescription('Emoji to auto-react to winner messages (e.g. <:rumble:123> or 🏆)')),
+    .addStringOption(o => o.setName('reaction_emoji').setDescription('Emoji to auto-react to winner messages (e.g. <:rumble:123> or 🏆)'))
+    .addStringOption(o => o.setName('battle_title').setDescription('Custom title line shown in battle announcement'))
+    .addStringOption(o => o.setName('description').setDescription('Custom description for battle announcement (use \\n for new lines)')),
 
   async execute(interaction) {
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
@@ -35,12 +37,14 @@ module.exports = {
     const image         = imageAttach?.url || interaction.options.getString('image_url') || null;
     const color         = interaction.options.getString('embed_color') || '#d6c2ee';
     const reactionEmoji = interaction.options.getString('reaction_emoji') || null;
+    const battleTitle   = interaction.options.getString('battle_title') || null;
+    const description   = interaction.options.getString('description')?.replace(/\\n/g, '\n') || null;
 
     await query(`
       INSERT INTO rr_channel_config
         (channel_id, guild_id, winner_role_id, ping_role1_id, ping_role2_id, ping_role3_id,
-         next_channel_id, reward_amount, battle_image, embed_color, reaction_emoji, total_games, total_players)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0,0)
+         next_channel_id, reward_amount, battle_image, embed_color, reaction_emoji, battle_title, battle_description, total_games, total_players)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,0,0)
       ON CONFLICT (channel_id) DO UPDATE SET
         winner_role_id  = EXCLUDED.winner_role_id,
         ping_role1_id   = EXCLUDED.ping_role1_id,
@@ -50,12 +54,14 @@ module.exports = {
         reward_amount   = EXCLUDED.reward_amount,
         battle_image    = EXCLUDED.battle_image,
         embed_color     = EXCLUDED.embed_color,
-        reaction_emoji  = EXCLUDED.reaction_emoji
+        reaction_emoji      = EXCLUDED.reaction_emoji,
+        battle_title        = EXCLUDED.battle_title,
+        battle_description  = EXCLUDED.battle_description
     `, [
       channel.id, interaction.guild.id,
       winnerRole?.id || null,
       pingRole1?.id || null, pingRole2?.id || null, pingRole3?.id || null,
-      nextChannel?.id || null, reward, image || null, color, reactionEmoji,
+      nextChannel?.id || null, reward, image || null, color, reactionEmoji, battleTitle, description,
     ]);
 
     const pingList = [pingRole1, pingRole2, pingRole3].filter(Boolean)
