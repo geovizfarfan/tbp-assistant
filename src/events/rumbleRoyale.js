@@ -156,8 +156,11 @@ async function handleMessage(message, client) {
     }
 
     const descLines = [];
+    descLines.push(`<:rumble:1522372419338375299> Rumble Royale — BATTLE TIME!`);
     if (config.battle_description) {
-      descLines.push(config.battle_description, '');
+      descLines.push('', config.battle_description, '');
+    } else {
+      descLines.push('');
     }
     descLines.push(`<a:moneybag:1522373120147849226> **Reward:** ${config.reward_amount ? Number(config.reward_amount).toLocaleString() : '?'} sins <:sins:1522291331672703100>`);
     if (config.winner_role_id) descLines.push(`<a:trophies:1512912823062364281> **Winner Role:** <@&${config.winner_role_id}>`);
