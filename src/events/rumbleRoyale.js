@@ -108,7 +108,7 @@ async function handleMessage(message, client) {
 
     const battleEmbed = new EmbedBuilder()
       .setColor(config.embed_color || '#d6c2ee')
-      .setTitle(`<a:rumblesword:1522372420894330921> Rumble Royale — BATTLE TIME!`)
+      .setTitle(`<:rumble:1522304913697280160> Rumble Royale — BATTLE TIME!`)
       .setDescription(descLines.join('\n'))
       .setFooter({ text: `${message.guild.name} • Hosted by: ${parsed.host}${parsed.era ? ` • Era: ${parsed.era}` : ''}` });
 
