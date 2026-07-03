@@ -320,3 +320,20 @@ CREATE TABLE IF NOT EXISTS rr_stats (
   games INT DEFAULT 0,
   UNIQUE(guild_id, user_id)
 );
+
+-- RR guild config (log channel)
+CREATE TABLE IF NOT EXISTS rr_guild_config (
+  guild_id TEXT PRIMARY KEY,
+  log_channel_id TEXT
+);
+
+-- RR achievements (tracks who collected all roles)
+CREATE TABLE IF NOT EXISTS rr_achievements (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  achieved_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(guild_id, user_id)
+);
+
+ALTER TABLE rr_achievements ADD COLUMN IF NOT EXISTS completions INT DEFAULT 1;

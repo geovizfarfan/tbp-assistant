@@ -1,6 +1,6 @@
 /**
- * src/events/rumbleRoyale.js (tbp-assistant)
- * Monitors Rumble Royale bot messages and fires announcements + rewards
+ * src/events/rumbleRoyale.js (tbp-assistant / Veloura)
+ * Monitors Rumble Royale bot messages — announcements, wins, reactions, achievement logs
  */
 const { EmbedBuilder } = require('discord.js');
 const { query } = require('../utils/database');
@@ -9,6 +9,11 @@ const RUMBLE_ROYALE_BOT_ID = '693167035068317736';
 
 async function getConfig(channelId) {
   const res = await query('SELECT * FROM rr_channel_config WHERE channel_id = $1', [channelId]);
+  return res.rows[0] || null;
+}
+
+async function getGuildConfig(guildId) {
+  const res = await query('SELECT * FROM rr_guild_config WHERE guild_id = $1', [guildId]);
   return res.rows[0] || null;
 }
 
@@ -31,19 +36,14 @@ function parseWinnerEmbed(message) {
   const embed = message.embeds[0];
   if (!embed) return null;
   if (!embed.title?.includes('WINNER')) return null;
-
   const desc = embed.description || '';
   const mentionMatch = message.content?.match(/<@!?(\d+)>/);
   const userId = mentionMatch ? mentionMatch[1] : null;
-
   const usernameMatch = desc.match(/^([^\n]+?)(?:\s+the\s+\w+)?(?:\n|$)/);
   const username = usernameMatch ? usernameMatch[1].trim() : null;
-
-  // RR posts total players in a separate embed field or description line
   const playersMatch = desc.match(/Total Players:\s*(\d+)/i) ||
     embed.fields?.find(f => f.name?.includes('Player'))?.value?.match(/(\d+)/);
   const totalPlayers = playersMatch ? parseInt(playersMatch[1] || playersMatch[0]) : null;
-
   return { userId, username, totalPlayers };
 }
 
@@ -51,16 +51,80 @@ function parseBattleStartEmbed(message) {
   const embed = message.embeds[0];
   if (!embed) return null;
   if (!embed.title?.toLowerCase().includes('rumble royale hosted by')) return null;
-
   const hostMatch = embed.title.match(/hosted by (.+)$/i);
   const host = hostMatch ? hostMatch[1].trim() : null;
-
   const eraLines = (embed.description || '').split('\n');
   const eraLine = eraLines.find(l => /era:/i.test(l));
-  const eraMatch2 = eraLine?.match(/Era:\s*[^\s]*\s*(.+)/i);
-  const era = eraMatch2 ? eraMatch2[1].trim() : null;
-
+  const eraMatch = eraLine?.match(/Era:\s*[^\s]*\s*(.+)/i);
+  const era = eraMatch ? eraMatch[1].trim() : null;
   return { host, era };
+}
+
+async function checkAllRolesAchievement(guild, member, client, guildConfig) {
+  // Get all configured winner roles across all channels in this guild
+  const res = await query(
+    'SELECT winner_role_id, reaction_emoji FROM rr_channel_config WHERE guild_id = $1 AND winner_role_id IS NOT NULL',
+    [guild.id]
+  );
+  if (!res.rows.length) return;
+
+  const allWinnerRoles = res.rows.map(r => r.winner_role_id);
+  const hasAll = allWinnerRoles.every(roleId => member.roles.cache.has(roleId));
+  if (!hasAll) return;
+
+  // Check if already notified
+  const alreadyRes = await query(
+    'SELECT 1 FROM rr_achievements WHERE guild_id = $1 AND user_id = $2',
+    [guild.id, member.id]
+  );
+  if (alreadyRes.rows.length) return; // already logged
+
+  // Increment completion count (or insert first time)
+  await query(
+    `INSERT INTO rr_achievements (guild_id, user_id, completions)
+     VALUES ($1, $2, 1)
+     ON CONFLICT (guild_id, user_id)
+     DO UPDATE SET completions = rr_achievements.completions + 1, achieved_at = NOW()`,
+    [guild.id, member.id]
+  );
+
+  const countRes = await query(
+    'SELECT completions FROM rr_achievements WHERE guild_id = $1 AND user_id = $2',
+    [guild.id, member.id]
+  );
+  const completions = countRes.rows[0]?.completions || 1;
+
+  const allEmojis = res.rows.map(r => r.reaction_emoji).filter(Boolean).join(' ');
+  const ordinal = completions === 1 ? '1st' : completions === 2 ? '2nd' : completions === 3 ? '3rd' : `${completions}th`;
+
+  // Remove all winner roles (prestige reset)
+  for (const roleId of allWinnerRoles) {
+    await member.roles.remove(roleId).catch(() => {});
+  }
+
+  const achieveEmbed = new EmbedBuilder()
+    .setColor('#d6c2ee')
+    .setTitle('<a:trophies:1512912823062364281> ALL RUMBLE ROLES COLLECTED!')
+    .setDescription(`<@${member.id}> has collected **all ${allWinnerRoles.length} Rumble Royale winner roles** for the **${ordinal} time**! ${allEmojis}\n\nAll roles have been reset — the hunt begins again! 🔄`)
+    .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+    .addFields({ name: 'Total Completions', value: `**${completions}**`, inline: true })
+    .setTimestamp();
+
+  // Post to log channel
+  if (guildConfig?.log_channel_id) {
+    const logChannel = client.channels.cache.get(guildConfig.log_channel_id);
+    if (logChannel) await logChannel.send({ embeds: [achieveEmbed] }).catch(() => {});
+  }
+
+  // DM the member
+  await member.send({
+    embeds: [new EmbedBuilder()
+      .setColor('#d6c2ee')
+      .setTitle('<a:trophies:1512912823062364281> You collected all Rumble Royale roles!')
+      .setDescription(`Congratulations! You've completed the full set for the **${ordinal} time** in **${guild.name}**! ${allEmojis}\n\nYour roles have been reset — can you collect them all again? 🔄`)
+      .addFields({ name: 'Your Completions', value: `**${completions}**`, inline: true })
+      .setTimestamp()]
+  }).catch(() => {}); // DM might be closed
 }
 
 async function handleMessage(message, client) {
@@ -77,14 +141,12 @@ async function handleMessage(message, client) {
     const parsed = parseBattleStartEmbed(message);
     if (!parsed) return;
 
-    // Store host from the interaction that triggered the battle
-    // RR bot messages from slash commands have interaction.user set
+    // Store host from interaction metadata
     const hostId = message.interaction?.user?.id || message.interactionMetadata?.user?.id || null;
     if (hostId) {
       await query('UPDATE rr_channel_config SET last_host = $1 WHERE channel_id = $2',
         [hostId, message.channel.id]).catch(() => {});
     } else if (parsed.host) {
-      // Fallback: search by display name
       const members = await message.guild.members.search({ query: parsed.host, limit: 5 }).catch(() => null);
       const hostMember = members?.find(m =>
         m.displayName.toLowerCase() === parsed.host.toLowerCase() ||
@@ -139,19 +201,18 @@ async function handleMessage(message, client) {
       ).catch(() => {});
     }
 
-    // Give sins via Play & Regret DB if reward configured
     const winnerMention = userId ? `<@${userId}>` : `**${username}**`;
 
     // Give sins and get updated balance
     let walletBalance = null;
     if (userId && config.reward_amount) {
       try {
-        const { adjustBalance, getBalance } = require('../utils/playAndRegretDb');
+        const { adjustBalance } = require('../utils/playAndRegretDb');
         walletBalance = await adjustBalance(userId, username || 'Unknown', Number(config.reward_amount));
-      } catch (e) { console.error('[RumbleRoyale] sins error:', e); }
+      } catch (e) { console.error('[RumbleRoyale] sins error:', e.message); }
     }
 
-    // Check if winner already had the role before assigning
+    // Check if winner already had the role, then assign
     let alreadyHadRole = false;
     let member = null;
     if (userId) {
@@ -162,12 +223,12 @@ async function handleMessage(message, client) {
       }
     }
 
-    // Get total server-wide RR wins tracked by this bot
-    const totalServerWinsRes = await query(
+    // Get total server-wide RR wins
+    const totalWinsRes = await query(
       'SELECT SUM(wins) as total FROM rr_stats WHERE guild_id = $1',
       [message.guild.id]
     ).catch(() => null);
-    const totalServerWins = totalServerWinsRes?.rows[0]?.total || 0;
+    const totalServerWins = totalWinsRes?.rows[0]?.total || 0;
 
     const descLines = [
       `${winnerMention} has won Rumble Royale! <a:confetti:1512912825935335484>`,
@@ -179,10 +240,7 @@ async function handleMessage(message, client) {
       descLines.push(`<a:trophies:1512912823062364281> **Winner Role:** <@&${config.winner_role_id}>${alreadyHadRole ? ' — already had this role' : ''}`);
     }
 
-    descLines.push(
-      `<a:rumblesword:1522372420894330921> **Server Rumble Wins:** ${serverWins}`,
-    );
-
+    descLines.push(`<a:rumblesword:1522372420894330921> **Server Rumble Wins:** ${serverWins}`);
     if (config.next_channel_id) descLines.push(`\n**Next Channel:** <#${config.next_channel_id}>`);
 
     const winEmbed = new EmbedBuilder()
@@ -197,7 +255,38 @@ async function handleMessage(message, client) {
 
     const hostPing = config.last_host ? `<@${config.last_host}>` : winnerMention;
     await message.channel.send(`${hostPing} Battle Finished! You can start a new \`/battle\` now!`);
+
+    // Check all-roles achievement after role assignment
+    if (member) {
+      // Re-fetch member to get updated roles
+      await member.fetch().catch(() => {});
+      const guildConfig = await getGuildConfig(message.guild.id);
+      await checkAllRolesAchievement(message.guild, member, client, guildConfig);
+    }
   }
 }
 
-module.exports = { handleMessage };
+// Auto-react to messages from members who have winner roles
+async function handleReaction(message, client) {
+  if (message.author.bot) return;
+  if (!message.guild) return;
+
+  try {
+    const res = await query(
+      'SELECT winner_role_id, reaction_emoji FROM rr_channel_config WHERE guild_id = $1 AND winner_role_id IS NOT NULL AND reaction_emoji IS NOT NULL',
+      [message.guild.id]
+    );
+    if (!res.rows.length) return;
+
+    const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
+    if (!member) return;
+
+    for (const row of res.rows) {
+      if (member.roles.cache.has(row.winner_role_id)) {
+        await message.react(row.reaction_emoji).catch(() => {});
+      }
+    }
+  } catch (e) { /* ignore */ }
+}
+
+module.exports = { handleMessage, handleReaction };
