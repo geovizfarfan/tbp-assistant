@@ -221,7 +221,16 @@ async function handleMessage(message, client) {
       member = await message.guild.members.fetch(userId).catch(() => null);
       if (member && config.winner_role_id) {
         alreadyHadRole = member.roles.cache.has(config.winner_role_id);
-        if (!alreadyHadRole) await member.roles.add(config.winner_role_id).catch(() => {});
+        console.log('[RumbleRoyale] Role assign - userId:', userId, 'roleId:', config.winner_role_id, 'alreadyHad:', alreadyHadRole);
+        if (!alreadyHadRole) {
+          const roleResult = await member.roles.add(config.winner_role_id).catch(e => {
+            console.error('[RumbleRoyale] role add error:', e.message);
+            return null;
+          });
+          console.log('[RumbleRoyale] Role add result:', roleResult ? 'SUCCESS' : 'FAILED');
+        }
+      } else {
+        console.log('[RumbleRoyale] Skipping role - member:', !!member, 'winner_role_id:', config.winner_role_id);
       }
     }
 
