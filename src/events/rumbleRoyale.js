@@ -115,8 +115,9 @@ async function checkAllRolesAchievement(guild, member, client, guildConfig) {
     .setTimestamp();
 
   // Post to log channel
-  if (guildConfig?.log_channel_id) {
-    const logChannel = client.channels.cache.get(guildConfig.log_channel_id);
+  const achieveLogId = guildConfig?.achievement_log_channel_id || guildConfig?.log_channel_id;
+  if (achieveLogId) {
+    const logChannel = client.channels.cache.get(achieveLogId);
     if (logChannel) await logChannel.send({ embeds: [achieveEmbed] }).catch(() => {});
   }
 
