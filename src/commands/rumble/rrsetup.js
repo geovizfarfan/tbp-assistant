@@ -75,6 +75,29 @@ module.exports = {
         { name: '✨ Reaction Emoji',                                value: reactionEmoji || '—',                        inline: true },
       );
 
+    // Post to log channel
+    const guildCfg = await query('SELECT log_channel_id FROM rr_guild_config WHERE guild_id = $1', [interaction.guild.id]);
+    const logChId = guildCfg.rows[0]?.log_channel_id;
+    if (logChId) {
+      const logCh = interaction.client.channels.cache.get(logChId);
+      if (logCh) await logCh.send({ embeds: [
+        new EmbedBuilder()
+          .setColor('#d6c2ee')
+          .setTitle('<:rumble:1522372419338375299> RR Channel Configured')
+          .setDescription(`<#${channel.id}> was configured by <@${interaction.user.id}>.`)
+          .addFields(
+            { name: 'Winner Role',  value: winnerRole ? `<@&${winnerRole.id}>` : '—', inline: true },
+            { name: 'Reward',       value: `${reward.toLocaleString()} sins`,          inline: true },
+            { name: 'Ping Roles',   value: pingList,                                   inline: true },
+            { name: 'Next Room',    value: nextChannel ? `<#${nextChannel.id}>` : '—', inline: true },
+            { name: 'Reaction',     value: reactionEmoji || '—',                       inline: true },
+            { name: 'Color',        value: color,                                       inline: true },
+          )
+          .setTimestamp()
+          .setFooter({ text: interaction.guild.name })
+      ]}).catch(() => {});
+    }
+
     return interaction.editReply({ embeds: [embed] });
   },
 };
