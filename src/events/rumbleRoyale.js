@@ -63,7 +63,7 @@ function parseBattleStartEmbed(message) {
 async function checkAllRolesAchievement(guild, member, client, guildConfig) {
   // Get all configured winner roles across all channels in this guild
   const res = await query(
-    'SELECT winner_role_id, reaction_emoji FROM rr_channel_config WHERE guild_id = $1 AND winner_role_id IS NOT NULL',
+    'SELECT winner_role_id, reaction_emoji FROM rr_channel_config WHERE guild_id = $1 AND winner_role_id IS NOT NULL AND reaction_emoji IS NOT NULL',
     [guild.id]
   );
   if (!res.rows.length) return;
