@@ -72,12 +72,7 @@ async function checkAllRolesAchievement(guild, member, client, guildConfig) {
   const hasAll = allWinnerRoles.every(roleId => member.roles.cache.has(roleId));
   if (!hasAll) return;
 
-  // Check if already notified
-  const alreadyRes = await query(
-    'SELECT 1 FROM rr_achievements WHERE guild_id = $1 AND user_id = $2',
-    [guild.id, member.id]
-  );
-  if (alreadyRes.rows.length) return; // already logged
+  // No early return — we always fire and increment completions
 
   // Increment completion count (or insert first time)
   await query(
