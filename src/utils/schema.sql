@@ -358,3 +358,25 @@ CREATE TABLE IF NOT EXISTS rr_season_channels (
   guild_id TEXT NOT NULL,
   UNIQUE(season_id, channel_id)
 );
+
+-- Rumble Grind temp channels
+CREATE TABLE IF NOT EXISTS grind_config (
+  guild_id TEXT PRIMARY KEY,
+  panel_channel_id TEXT,
+  panel_message_id1 TEXT,
+  panel_message_id2 TEXT,
+  role_id TEXT,
+  max_channels INT DEFAULT 50,
+  duration_hours INT DEFAULT 1,
+  embed_color TEXT DEFAULT '#d6c2ee'
+);
+
+CREATE TABLE IF NOT EXISTS grind_channels (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  expires_at TIMESTAMPTZ,
+  UNIQUE(guild_id, user_id)
+);

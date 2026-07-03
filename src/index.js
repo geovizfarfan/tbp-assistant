@@ -73,6 +73,23 @@ client.once('ready', async () => {
   await loadAppEmojis(client.user.id, process.env.DISCORD_TOKEN);
   await restoreRaffles(client);
   await initDB();
+  // Restore grind auto-delete timers
+  try {
+    const { query: q } = require('./utils/database');
+    const { scheduleDelete } = require('./commands/grind/grind');
+    const res = await q('SELECT * FROM grind_channels', []);
+    for (const row of res.rows) {
+      const ms = new Date(row.expires_at).getTime() - Date.now();
+      if (ms > 0) {
+        const ch = client.channels.cache.get(row.channel_id);
+        if (ch) {
+          const cfgRes = await q('SELECT * FROM grind_config WHERE guild_id = $1', [row.guild_id]);
+          scheduleDelete(ch, row.guild_id, row.user_id, ms, client, cfgRes.rows[0] || {});
+        }
+      }
+    }
+    console.log('[Grind] Restored auto-delete timers.');
+  } catch(e) { console.error('[Grind] restore error:', e.message); }
   startReminderLoop(client);
   const { startPrivateRoomCleanupLoop } = require('./utils/privateRooms');
   startPrivateRoomCleanupLoop(client);
@@ -94,6 +111,9 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async (interaction) => {
+  if (interaction.isButton() && interaction.customId.startsWith('grind_')) {
+    return grindModule.handleButton(interaction, client);
+  }
   if (!interaction.isChatInputCommand()) return;
 
   const command = client.commands.get(interaction.commandName);
@@ -114,6 +134,7 @@ client.on('interactionCreate', async (interaction) => {
 
 // Rumble Royale integration
 const { handleMessage: handleRRMessage, handleReaction: handleRRReaction } = require('./events/rumbleRoyale');
+const grindModule = require('./commands/grind/grind');
 client.on('messageCreate', async (message) => {
   try { await handleRRMessage(message, client); }
   catch (e) { console.error('[RumbleRoyale]', e.message); }
