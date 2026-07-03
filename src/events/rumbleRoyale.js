@@ -246,7 +246,7 @@ async function handleMessage(message, client) {
     const descLines = [
       `${winnerMention} has won Rumble Royale! <a:confetti:1512912825935335484>`,
       `<a:moneybag:1522373120147849226> **Reward:** ${config.reward_amount ? Number(config.reward_amount).toLocaleString() : '?'} <a:SINS:1522338148380704910> (sins)`,
-      walletBalance !== null ? `<:sins:1522291331672703100> **Wallet:** ${Number(walletBalance).toLocaleString()} <:sins:1522291331672703100> (sins)` : null,
+      walletBalance !== null ? `<a:atm:1522656210439114902> **Wallet:** ${Number(walletBalance).toLocaleString()} <a:SINS:1522338148380704910> (sins)` : null,
     ].filter(Boolean);
 
     if (config.winner_role_id) {
