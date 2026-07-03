@@ -137,6 +137,28 @@ async function handleMessage(message, client) {
   if (message.author.id !== RUMBLE_ROYALE_BOT_ID) return;
   if (!message.embeds?.length) return;
 
+  // Check if battle started in a personal grind channel
+  const grindChRes = await query(
+    'SELECT gc.user_id, cfg.role_id, cfg.embed_color FROM grind_channels gc JOIN grind_config cfg ON cfg.guild_id = gc.guild_id WHERE gc.channel_id = $1',
+    [message.channel.id]
+  );
+  if (grindChRes.rows.length) {
+    const title = message.embeds[0]?.title || '';
+    if (title.toLowerCase().includes('rumble royale hosted by')) {
+      const g = grindChRes.rows[0];
+      const rolePing = g.role_id ? `<@&${g.role_id}>` : '';
+      await message.channel.send({
+        content: rolePing,
+        embeds: [new EmbedBuilder()
+          .setColor(g.embed_color || '#d6c2ee')
+          .setTitle('<:rumble:1522372419338375299> New Battle!')
+          .setDescription(`A Rumble Royale grind battle <a:rumblesword:1522372420894330921> has started! ${rolePing}`)
+        ]
+      }).catch(() => {});
+    }
+    return;
+  }
+
   const config = await getConfig(message.channel.id);
   if (!config) return;
 
