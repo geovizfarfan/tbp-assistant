@@ -162,7 +162,7 @@ async function handleMessage(message, client) {
     } else {
       descLines.push('');
     }
-    descLines.push(`<a:moneybag:1522373120147849226> **Reward:** ${config.reward_amount ? Number(config.reward_amount).toLocaleString() : '?'} sins <:sins:1522291331672703100>`);
+    descLines.push(`<a:moneybag:1522373120147849226> **Reward:** ${config.reward_amount ? Number(config.reward_amount).toLocaleString() : '?'} <:sins:1522291331672703100> (sins)`);
     if (config.winner_role_id) descLines.push(`<a:trophies:1512912823062364281> **Winner Role:** <@&${config.winner_role_id}>`);
     if (config.next_channel_id) descLines.push(`<a:rumblesword:1522372420894330921> **Next Room:** <#${config.next_channel_id}>`);
 
@@ -245,8 +245,8 @@ async function handleMessage(message, client) {
 
     const descLines = [
       `${winnerMention} has won Rumble Royale! <a:confetti:1512912825935335484>`,
-      `<a:moneybag:1522373120147849226> **Reward:** ${config.reward_amount ? Number(config.reward_amount).toLocaleString() : '?'} sins <a:SINS:1522338148380704910>`,
-      walletBalance !== null ? `<:sins:1522291331672703100> **Wallet:** ${Number(walletBalance).toLocaleString()} sins` : null,
+      `<a:moneybag:1522373120147849226> **Reward:** ${config.reward_amount ? Number(config.reward_amount).toLocaleString() : '?'} <a:SINS:1522338148380704910> (sins)`,
+      walletBalance !== null ? `<:sins:1522291331672703100> **Wallet:** ${Number(walletBalance).toLocaleString()} <:sins:1522291331672703100> (sins)` : null,
     ].filter(Boolean);
 
     if (config.winner_role_id) {
