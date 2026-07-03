@@ -64,9 +64,7 @@ function parseBattleStartEmbed(message) {
 }
 
 async function handleMessage(message, client) {
-  if (message.author.bot) console.log('[RumbleRoyale] Bot message from:', message.author.id, message.author.username);
   if (message.author.id !== RUMBLE_ROYALE_BOT_ID) return;
-  console.log('[RumbleRoyale] RR bot detected! embeds:', message.embeds?.length, 'channel:', message.channel.id);
   if (!message.embeds?.length) return;
 
   const config = await getConfig(message.channel.id);
@@ -148,10 +146,8 @@ async function handleMessage(message, client) {
     let walletBalance = null;
     if (userId && config.reward_amount) {
       try {
-        console.log('[RumbleRoyale] Giving sins to', userId, username, 'amount:', Number(config.reward_amount));
         const { adjustBalance, getBalance } = require('../utils/playAndRegretDb');
         walletBalance = await adjustBalance(userId, username || 'Unknown', Number(config.reward_amount));
-        console.log('[RumbleRoyale] Sins given! New balance:', walletBalance);
       } catch (e) { console.error('[RumbleRoyale] sins error:', e); }
     }
 
