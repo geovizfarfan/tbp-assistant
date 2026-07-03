@@ -165,7 +165,7 @@ async function handleMessage(message, client) {
     }
 
     const descLines = [];
-    descLines.push(`<:rumble:1522372419338375299> Rumble Royale — BATTLE TIME!`);
+    if (!config.battle_title) descLines.push(`<:rumble:1522372419338375299> Rumble Royale — BATTLE TIME!`);
     if (config.battle_description) {
       descLines.push('', config.battle_description, '');
     } else {
