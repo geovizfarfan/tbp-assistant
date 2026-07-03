@@ -289,15 +289,20 @@ async function handleReaction(message, client) {
     );
     if (!res.rows.length) return;
 
-    const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
+    // Force fetch member to get fresh role cache
+    const member = await message.guild.members.fetch(message.author.id).catch(() => null);
     if (!member) return;
 
     for (const row of res.rows) {
-      if (member.roles.cache.has(row.winner_role_id)) {
-        await message.react(row.reaction_emoji).catch(() => {});
+      const hasRole = member.roles.cache.has(row.winner_role_id);
+      if (hasRole) {
+        console.log('[RumbleRoyale] Reacting to message from', message.author.username, 'with', row.reaction_emoji);
+        await message.react(row.reaction_emoji).catch(e => {
+          console.error('[RumbleRoyale] react error:', e.message);
+        });
       }
     }
-  } catch (e) { /* ignore */ }
+  } catch (e) { console.error('[RumbleRoyale] handleReaction error:', e.message); }
 }
 
 module.exports = { handleMessage, handleReaction };
