@@ -104,10 +104,11 @@ async function checkAllRolesAchievement(guild, member, client, guildConfig) {
 
   const achieveEmbed = new EmbedBuilder()
     .setColor('#d6c2ee')
-    .setTitle('<a:trophies:1512912823062364281> ALL RUMBLE ROLES COLLECTED!')
-    .setDescription(`<@${member.id}> has collected **all ${allWinnerRoles.length} Rumble Royale winner roles** for the **${ordinal} time**! ${allEmojis}\n\nAll roles have been reset — the hunt begins again! 🔄`)
+    .setTitle('<:rumble:1522372419338375299> ALL RUMBLE ROLES COLLECTED!')
+    .setDescription(`<@${member.id}> has collected all ${allWinnerRoles.length} Rumble Royale winner roles for the **${ordinal} time**! <a:confetti:1512912825935335484> <a:rumblesword:1522372420894330921>\n\nAll roles have been reset — the hunt begins again! <a:again:1522458630795034694>`)
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-    .addFields({ name: 'Total Completions', value: `**${completions}**`, inline: true })
+    .addFields({ name: `Total Completions <a:purplesparkle:1512912828489793626>`, value: `**${completions}**`, inline: true })
+    .setFooter({ text: `${guild.name}` })
     .setTimestamp();
 
   // Post to log channel
@@ -121,8 +122,9 @@ async function checkAllRolesAchievement(guild, member, client, guildConfig) {
     embeds: [new EmbedBuilder()
       .setColor('#d6c2ee')
       .setTitle('<a:trophies:1512912823062364281> You collected all Rumble Royale roles!')
-      .setDescription(`Congratulations! You've completed the full set for the **${ordinal} time** in **${guild.name}**! ${allEmojis}\n\nYour roles have been reset — can you collect them all again? 🔄`)
+      .setDescription(`Congratulations! You've collected all reaction roles for the **${ordinal} time** in **${guild.name}**! <a:rumblesword:1522372420894330921> <a:purplesparkle:1512912828489793626>\n\nYour roles have been reset — can you collect them all again? <a:again:1522458630795034694>`)
       .addFields({ name: 'Your Completions', value: `**${completions}**`, inline: true })
+      .setFooter({ text: `${guild.name} • Receipt` })
       .setTimestamp()]
   }).catch(() => {}); // DM might be closed
 }
