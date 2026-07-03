@@ -12,7 +12,7 @@ module.exports = {
     .addRoleOption(o => o.setName('ping_role2').setDescription('Second role to ping on battle start'))
     .addRoleOption(o => o.setName('ping_role3').setDescription('Third role to ping on battle start'))
     .addChannelOption(o => o.setName('next_channel').setDescription('Next battle room to link'))
-    .addStringOption(o => o.setName('image').setDescription('Image or GIF URL for battle start announcement'))
+    .addAttachmentOption(o => o.setName('image').setDescription('Image or GIF for battle start announcement (saved permanently)'))
     .addStringOption(o => o.setName('embed_color').setDescription('Embed color hex (default: #cab2fb)')),
 
   async execute(interaction) {
@@ -29,7 +29,8 @@ module.exports = {
     const pingRole3  = interaction.options.getRole('ping_role3');
     const nextChannel = interaction.options.getChannel('next_channel');
     const reward     = interaction.options.getInteger('reward');
-    const image      = interaction.options.getString('image');
+    const imageAttachment = interaction.options.getAttachment('image');
+    const image = imageAttachment?.url || interaction.options.getString('image') || null;
     const color      = interaction.options.getString('embed_color') || '#d6c2ee';
 
     await query(`
