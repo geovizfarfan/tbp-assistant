@@ -25,14 +25,30 @@ module.exports = {
       return interaction.editReply({
         embeds: [new EmbedBuilder()
           .setColor('#ff4444')
-          .setDescription(`<:wrong:1495666083594502174> No config found for <#${channel.id}> — nothing to clear.`)]
+          .setDescription(`❌ No config found for <#${channel.id}> — nothing to clear.`)]
       });
+    }
+
+    // Post to log channel
+    const guildConfig = await query('SELECT log_channel_id FROM rr_guild_config WHERE guild_id = $1', [interaction.guild.id]);
+    const logChannelId = guildConfig.rows[0]?.log_channel_id;
+    if (logChannelId) {
+      const logChannel = interaction.client.channels.cache.get(logChannelId);
+      if (logChannel) await logChannel.send({ embeds: [
+        new EmbedBuilder()
+          .setColor('#ff4444')
+          .setTitle('<:rumble:1522372419338375299> RR Config Cleared')
+          .setDescription(`<#${channel.id}> config was cleared by <@${interaction.user.id}>.
+VELOURA will no longer monitor that channel.`)
+          .setTimestamp()
+          .setFooter({ text: interaction.guild.name })
+      ]}).catch(() => {});
     }
 
     return interaction.editReply({
       embeds: [new EmbedBuilder()
         .setColor('#d6c2ee')
-        .setTitle('<a:trophies:1512912823062364281> Config Cleared')
+        .setTitle('<:rumble:1522372419338375299> Config Cleared')
         .setDescription(`All Rumble Royale config for <#${channel.id}> has been removed.\nVELOURA will no longer monitor that channel.`)]
     });
   },
