@@ -14,6 +14,7 @@ module.exports = {
       .addChannelOption(o => o.setName('winners').setDescription('Winner announcements channel').setRequired(false))
       .addChannelOption(o => o.setName('ticket').setDescription('Ticket channel').setRequired(false))
       .addChannelOption(o => o.setName('staff_notif').setDescription('Staff notifications channel').setRequired(false))
+      .addChannelOption(o => o.setName('boost').setDescription('Server boost announcement channel').setRequired(false))
       .addChannelOption(o => o.setName('transcript').setDescription('Game transcripts channel').setRequired(false))
     )
     .addSubcommand(sub => sub
@@ -90,25 +91,28 @@ async function setChannels(interaction) {
   const winners   = interaction.options.getChannel('winners');
   const ticket    = interaction.options.getChannel('ticket');
   const staffNotif = interaction.options.getChannel('staff_notif');
+  const boost      = interaction.options.getChannel('boost');
   const transcript = interaction.options.getChannel('transcript');
-  if (!schedule && !winners && !ticket && !staffNotif && !transcript) {
+  if (!schedule && !winners && !ticket && !staffNotif && !transcript && !boost) {
     return interaction.editReply({ content: e('wrong') + ' Please provide at least one channel.' });
   }
   await query(
-    `INSERT INTO guild_config (guild_id, schedule_channel_id, winner_channel_id, ticket_channel_id, staff_notif_channel_id, game_transcript_channel_id)
+    `INSERT INTO guild_config (guild_id, schedule_channel_id, winner_channel_id, ticket_channel_id, staff_notif_channel_id, game_transcript_channel_id, boost_channel_id)
      VALUES ($1,$2,$3,$4,$5,$6)
      ON CONFLICT (guild_id) DO UPDATE SET
        schedule_channel_id        = COALESCE($2, guild_config.schedule_channel_id),
        winner_channel_id          = COALESCE($3, guild_config.winner_channel_id),
        ticket_channel_id          = COALESCE($4, guild_config.ticket_channel_id),
        staff_notif_channel_id     = COALESCE($5, guild_config.staff_notif_channel_id),
+       boost_channel_id           = COALESCE($7, guild_config.boost_channel_id),
        game_transcript_channel_id = COALESCE($6, guild_config.game_transcript_channel_id),
        updated_at = NOW()`,
-    [interaction.guildId, schedule?.id||null, winners?.id||null, ticket?.id||null, staffNotif?.id||null, transcript?.id||null]
+    [interaction.guildId, schedule?.id||null, winners?.id||null, ticket?.id||null, staffNotif?.id||null, transcript?.id||null, boost?.id||null]
   );
   const lines = [];
   if (schedule)    lines.push(e('checkmark') + ' Game schedule board → <#' + schedule.id + '>');
   if (winners)     lines.push(e('checkmark') + ' Winner announcements → <#' + winners.id + '>');
+  if (boost)       lines.push(e('checkmark') + ' Boost announcements → <#' + boost.id + '>');
   if (ticket)      lines.push(e('checkmark') + ' Ticket channel → <#' + ticket.id + '>');
   if (staffNotif)  lines.push(e('checkmark') + ' Staff notifications → <#' + staffNotif.id + '>');
   if (transcript)  lines.push(e('checkmark') + ' Game transcripts → <#' + transcript.id + '>');

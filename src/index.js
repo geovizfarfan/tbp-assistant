@@ -162,6 +162,68 @@ client.on('messageCreate', async (message) => {
   catch (e) { /* ignore */ }
 });
 
+// Boost detection
+client.on('guildMemberUpdate', async (oldMember, newMember) => {
+  try {
+    const wasBooster = oldMember.premiumSince;
+    const isBooster  = newMember.premiumSince;
+    if (!wasBooster && isBooster) {
+      const { query: q } = require('./utils/database');
+      const res = await q('SELECT boost_channel_id FROM guild_config WHERE guild_id = $1', [newMember.guild.id]);
+      const channelId = res.rows[0]?.boost_channel_id;
+      if (!channelId) return;
+      const ch = client.channels.cache.get(channelId);
+      if (!ch) return;
+      const { EmbedBuilder } = require('discord.js');
+      await ch.send({ embeds: [
+        new EmbedBuilder()
+          .setColor('#d6c2ee')
+          .setTitle('<a:purplesparkle:1512912828489793626> A huge thank you to our Server Booster! <a:purplesparkle:1512912828489793626>')
+          .setDescription(
+            `Your support helps make **${newMember.guild.name}** an even better place for everyone. Every boost helps us unlock awesome perks, improve the server, and continue growing this amazing community.
+
+We truly appreciate you being part of the community. <a:TeamHands:1523082734182989918>
+
+Thank you <@${newMember.id}> for helping us keep the magic alive! <a:BunnyLove:1523082730185691348>`
+          )
+          .setThumbnail(newMember.user.displayAvatarURL({ dynamic: true }))
+          .setTimestamp()
+      ]});
+    }
+  } catch(e) { console.error('[Boost]', e.message); }
+});
+
+// Boost detection
+client.on('guildMemberUpdate', async (oldMember, newMember) => {
+  try {
+    const wasBooster = oldMember.premiumSince;
+    const isBooster  = newMember.premiumSince;
+    if (!wasBooster && isBooster) {
+      const { query: q } = require('./utils/database');
+      const res = await q('SELECT boost_channel_id FROM guild_config WHERE guild_id = $1', [newMember.guild.id]);
+      const channelId = res.rows[0]?.boost_channel_id;
+      if (!channelId) return;
+      const ch = client.channels.cache.get(channelId);
+      if (!ch) return;
+      const { EmbedBuilder } = require('discord.js');
+      await ch.send({ embeds: [
+        new EmbedBuilder()
+          .setColor('#d6c2ee')
+          .setTitle('<a:purplesparkle:1512912828489793626> A huge thank you to our Server Booster! <a:purplesparkle:1512912828489793626>')
+          .setDescription(
+            `Your support helps make **${newMember.guild.name}** an even better place for everyone. Every boost helps us unlock awesome perks, improve the server, and continue growing this amazing community.
+
+We truly appreciate you being part of the community. <a:TeamHands:1523082734182989918>
+
+Thank you <@${newMember.id}> for helping us keep the magic alive! <a:BunnyLove:1523082730185691348>`
+          )
+          .setThumbnail(newMember.user.displayAvatarURL({ dynamic: true }))
+          .setTimestamp()
+      ]});
+    }
+  } catch(e) { console.error('[Boost]', e.message); }
+});
+
 // Ticket tracking
 client.on('messageCreate', handleTicketMessage);
 client.on('channelDelete', handleChannelDelete);
