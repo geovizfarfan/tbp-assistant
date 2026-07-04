@@ -29,9 +29,10 @@ module.exports = {
     .addSubcommand(sub => sub
       .setName('post')
       .setDescription('Post a sticky Get Ping / Remove Ping panel')
-      .addChannelOption(o => o.setName('channel').setDescription('Channel to post in (default: current channel)'))
+      
       .addRoleOption(o => o.setName('role').setDescription('Role to give/remove').setRequired(true))
       .addStringOption(o => o.setName('title').setDescription('Embed title').setRequired(true))
+      .addChannelOption(o => o.setName('channel').setDescription('Channel to post in (default: current channel)'))
       .addStringOption(o => o.setName('description').setDescription('Custom description (leave empty for default)'))
       .addStringOption(o => o.setName('color').setDescription('Embed color hex (default: #d6c2ee)')))
     .addSubcommand(sub => sub
