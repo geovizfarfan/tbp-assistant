@@ -291,7 +291,7 @@ async function handleMessage(message, client) {
       .setColor('#d6c2ee')
       .setTitle('<:rumble:1522372419338375299> <a:trophies:1512912823062364281> WINNER!')
       .setDescription(descLines.join('\n'))
-      .setFooter({ text: `${message.guild.name} has tracked ${Number(totalServerWins)} Rumble Royale wins.` });
+      .setFooter({ text: `VELOURA has tracked ${Number(totalServerWins)} Rumble Royale wins globally.` });
 
     if (member?.user) winEmbed.setThumbnail(member.user.displayAvatarURL({ dynamic: true }));
 
