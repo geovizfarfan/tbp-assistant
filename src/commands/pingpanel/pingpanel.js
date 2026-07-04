@@ -29,7 +29,7 @@ module.exports = {
     .addSubcommand(sub => sub
       .setName('post')
       .setDescription('Post a sticky Get Ping / Remove Ping panel')
-      .addChannelOption(o => o.setName('channel').setDescription('Channel to post in').setRequired(true))
+      .addChannelOption(o => o.setName('channel').setDescription('Channel to post in (default: current channel)'))
       .addRoleOption(o => o.setName('role').setDescription('Role to give/remove').setRequired(true))
       .addStringOption(o => o.setName('title').setDescription('Embed title').setRequired(true))
       .addStringOption(o => o.setName('description').setDescription('Custom description (leave empty for default)'))
@@ -49,7 +49,7 @@ module.exports = {
     const sub = interaction.options.getSubcommand();
 
     if (sub === 'post') {
-      const channel     = interaction.options.getChannel('channel');
+      const channel     = interaction.options.getChannel('channel') || interaction.channel;
       const role        = interaction.options.getRole('role');
       const title       = interaction.options.getString('title');
       const description = interaction.options.getString('description') ||

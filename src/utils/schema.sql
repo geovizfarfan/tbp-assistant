@@ -394,3 +394,14 @@ CREATE TABLE IF NOT EXISTS pingpanel_sticky (
 );
 
 ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS boost_channel_id TEXT DEFAULT NULL;
+
+CREATE TABLE IF NOT EXISTS sticky_messages (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  message_id TEXT,
+  content TEXT NOT NULL,
+  title TEXT,
+  color TEXT DEFAULT '#d6c2ee',
+  UNIQUE(guild_id, channel_id)
+);

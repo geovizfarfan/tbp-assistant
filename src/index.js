@@ -139,6 +139,7 @@ client.on('interactionCreate', async (interaction) => {
 const { handleMessage: handleRRMessage, handleReaction: handleRRReaction } = require('./events/rumbleRoyale');
 const grindModule = require('./commands/grind/grind');
 const pingPanelModule = require('./commands/pingpanel/pingpanel');
+const stickyModule    = require('./commands/sticky/sticky');
 client.on('messageCreate', async (message) => {
   try { await handleRRMessage(message, client); }
   catch (e) { console.error('[RumbleRoyale]', e.message); }
@@ -159,6 +160,12 @@ client.on('messageCreate', async (message) => {
 // Sticky ping panel repost
 client.on('messageCreate', async (message) => {
   try { await pingPanelModule.handleStickyRepost(message, client); }
+  catch (e) { /* ignore */ }
+});
+
+// Sticky notes repost
+client.on('messageCreate', async (message) => {
+  try { await stickyModule.handleStickyRepost(message, client); }
   catch (e) { /* ignore */ }
 });
 
