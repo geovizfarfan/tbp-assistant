@@ -156,6 +156,12 @@ client.on('messageCreate', async (message) => {
   catch (e) { /* ignore reaction errors */ }
 });
 
+// Sticky ping panel repost
+client.on('messageCreate', async (message) => {
+  try { await pingPanelModule.handleStickyRepost(message, client); }
+  catch (e) { /* ignore */ }
+});
+
 // Ticket tracking
 client.on('messageCreate', handleTicketMessage);
 client.on('channelDelete', handleChannelDelete);

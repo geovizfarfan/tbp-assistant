@@ -380,3 +380,15 @@ CREATE TABLE IF NOT EXISTS grind_channels (
   expires_at TIMESTAMPTZ,
   UNIQUE(guild_id, user_id)
 );
+
+CREATE TABLE IF NOT EXISTS pingpanel_sticky (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  role_id TEXT NOT NULL,
+  message_id TEXT,
+  title TEXT,
+  description TEXT,
+  color TEXT DEFAULT '#d6c2ee',
+  UNIQUE(guild_id, channel_id)
+);
