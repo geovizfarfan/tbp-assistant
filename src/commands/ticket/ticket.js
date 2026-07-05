@@ -501,7 +501,9 @@ module.exports = {
     const channelName = `ticket-${interaction.user.username}-${typeName}`.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 100);
 
     // Create ticket channel
-    const ticketChannel = await interaction.guild.channels.create({
+    let ticketChannel;
+    try {
+      ticketChannel = await interaction.guild.channels.create({
       name: channelName,
       type: ChannelType.GuildText,
       parent: config.category_id || null,
@@ -512,6 +514,10 @@ module.exports = {
         ...(config.staff_role_id ? [{ id: config.staff_role_id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] }] : []),
       ],
     });
+    } catch (e) {
+      console.error('[Ticket] channel create error:', e.message);
+      return interaction.editReply('❌ Failed to create ticket channel. Make sure the category in `/ticket setup` is an actual Discord category (not a text channel).');
+    }
 
     // Save ticket to DB
     const ticketRes = await query(
