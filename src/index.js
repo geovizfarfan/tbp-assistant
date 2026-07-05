@@ -2,6 +2,10 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord.js');
+
+process.on('unhandledRejection', (error) => {
+  console.error('[UnhandledRejection]', error?.message || error);
+});
 const { initDB } = require('./utils/database');
 const { startReminderLoop } = require('./utils/reminders');
 const { handleTicketMessage, handleThreadCreate, handleChannelDelete } = require('./events/ticketTracker');
