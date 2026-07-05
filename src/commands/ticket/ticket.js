@@ -111,7 +111,17 @@ module.exports = {
     // list panels
     .addSubcommand(sub => sub
       .setName('panels')
-      .setDescription('List all ticket panels and their IDs')),
+      .setDescription('List all ticket panels and their IDs'))
+
+    // edit panel
+    .addSubcommand(sub => sub
+      .setName('edit')
+      .setDescription('Edit an existing ticket panel')
+      .addStringOption(o => o.setName('panel_id').setDescription('Panel ID to edit').setRequired(true))
+      .addStringOption(o => o.setName('title').setDescription('New title'))
+      .addStringOption(o => o.setName('description').setDescription('New description'))
+      .addStringOption(o => o.setName('color').setDescription('New embed color hex'))
+      .addStringOption(o => o.setName('open_message').setDescription('New default open message'))),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
@@ -249,6 +259,44 @@ module.exports = {
       }
 
       return interaction.editReply(`✅ Ticket type **${name}** removed.`);
+    }
+
+    // ── /ticket edit ──────────────────────────────────────────────────────
+    if (sub === 'edit') {
+      if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
+          interaction.user.id !== process.env.OWNER_ID)
+        return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
+      await interaction.deferReply({ ephemeral: true });
+
+      const panelId    = interaction.options.getString('panel_id');
+      const title      = interaction.options.getString('title');
+      const description = interaction.options.getString('description');
+      const color      = interaction.options.getString('color');
+      const openMsg    = interaction.options.getString('open_message');
+
+      const panelRes = await query('SELECT * FROM ticket_panels WHERE id = $1 AND guild_id = $2', [panelId, interaction.guild.id]);
+      if (!panelRes.rows.length) return interaction.editReply('❌ Panel not found.');
+      const panel = panelRes.rows[0];
+
+      const newTitle   = title       ?? panel.title;
+      const newDesc    = description ?? panel.description;
+      const newColor   = color       ?? panel.color;
+      const newOpenMsg = openMsg     ?? panel.open_message;
+
+      await query('UPDATE ticket_panels SET title = $1, description = $2, color = $3, open_message = $4 WHERE id = $5',
+        [newTitle, newDesc, newColor, newOpenMsg, panelId]);
+
+      // Update the actual panel message
+      const ch = interaction.client.channels.cache.get(panel.channel_id);
+      if (ch && panel.message_id) {
+        const msg = await ch.messages.fetch(panel.message_id).catch(() => null);
+        if (msg) {
+          const embed = new EmbedBuilder().setColor(newColor).setTitle(newTitle).setDescription(newDesc);
+          await msg.edit({ embeds: [embed] }).catch(() => {});
+        }
+      }
+
+      return interaction.editReply(`✅ Panel \`${panelId}\` updated!`);
     }
 
     // ── /ticket panels ────────────────────────────────────────────────────
