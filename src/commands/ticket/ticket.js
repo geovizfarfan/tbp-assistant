@@ -256,8 +256,7 @@ module.exports = {
       await interaction.deferReply({ ephemeral: true });
       const res = await query('SELECT * FROM ticket_panels WHERE guild_id = $1 ORDER BY id', [interaction.guild.id]);
       if (!res.rows.length) return interaction.editReply('No ticket panels found. Run `/ticket panel` to create one.');
-      const lines = res.rows.map(p => `**ID \`${p.id}\`** — ${p.title} in <#${p.channel_id}>`).join('
-');
+      const lines = res.rows.map(p => `**ID \`${p.id}\`** — ${p.title} in <#${p.channel_id}>`).join('\n');
       return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
         .setTitle('🎫 Ticket Panels')
         .setDescription(lines)]});
