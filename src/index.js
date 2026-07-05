@@ -117,10 +117,10 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isButton() && interaction.customId.startsWith('pingpanel_')) {
     return pingPanelModule.handleButton(interaction);
   }
-  if (interaction.isButton() && (interaction.customId.startsWith('ticket_open') || interaction.customId.startsWith('ticket_rate'))) {
+  if (interaction.isButton() && interaction.customId.startsWith('ticket_')) {
     return ticketModule.handleButton(interaction, client);
   }
-  if (interaction.isModalSubmit() && interaction.customId.startsWith('ticket_modal')) {
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('ticket_')) {
     return ticketModule.handleModal(interaction, client);
   }
   if (!interaction.isChatInputCommand()) return;

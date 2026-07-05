@@ -448,6 +448,51 @@ module.exports = {
       return interaction.showModal(modal);
     }
 
+    // ── Claim ticket ───────────────────────────────────────────────────────
+    if (action === 'ticket_claim') {
+      const ticketId = parts[0];
+      const config = await getConfig(interaction.guild.id);
+      if (!await isStaff(interaction.member, config))
+        return interaction.reply({ content: '❌ Staff only.', ephemeral: true });
+
+      await query('UPDATE tickets SET claimed_by = $1 WHERE id = $2 AND claimed_by IS NULL', [interaction.user.id, ticketId]);
+      const ticketRes = await query('SELECT claimed_by FROM tickets WHERE id = $1', [ticketId]);
+      const claimedBy = ticketRes.rows[0]?.claimed_by;
+
+      if (claimedBy !== interaction.user.id) {
+        return interaction.reply({ content: `❌ This ticket is already claimed by <@${claimedBy}>.`, ephemeral: true });
+      }
+      await interaction.reply({ content: `✅ <@${interaction.user.id}> has claimed this ticket!` });
+
+      // Disable claim button, keep close button
+      const newRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`ticket_claim:${ticketId}`).setLabel('Claimed').setEmoji('✅').setStyle(ButtonStyle.Secondary).setDisabled(true),
+        new ButtonBuilder().setCustomId(`ticket_close_btn:${ticketId}`).setLabel('Close Ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger),
+      );
+      await interaction.message.edit({ components: [newRow] }).catch(() => {});
+      return;
+    }
+
+    // ── Close ticket button ────────────────────────────────────────────────
+    if (action === 'ticket_close_btn') {
+      const config = await getConfig(interaction.guild.id);
+      if (!await isStaff(interaction.member, config))
+        return interaction.reply({ content: '❌ Staff only.', ephemeral: true });
+
+      const modal = new ModalBuilder()
+        .setCustomId(`ticket_close_modal:${parts[0]}`)
+        .setTitle('Close Ticket');
+      modal.addComponents(new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('reason')
+          .setLabel('Reason for closing')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(false)
+          .setPlaceholder('e.g. Issue resolved, Oos given, No response...')
+      ));
+      return interaction.showModal(modal);
+    }
+
     // ── Rating ─────────────────────────────────────────────────────────────
     if (action === 'ticket_rate') {
       const [ticketId, rating] = parts;
@@ -468,6 +513,82 @@ module.exports = {
 
   // ── Modal submit handler ──────────────────────────────────────────────────
   async handleModal(interaction, client) {
+    // ── Close ticket modal ─────────────────────────────────────────────────
+    if (interaction.customId.startsWith('ticket_close_modal')) {
+      await interaction.deferReply({ ephemeral: true });
+      const ticketId = interaction.customId.split(':')[1];
+      const reason   = interaction.fields.getTextInputValue('reason') || 'No reason provided';
+      const config   = await getConfig(interaction.guild.id);
+
+      const ticketRes = await query('SELECT * FROM tickets WHERE id = $1', [ticketId]);
+      if (!ticketRes.rows.length) return interaction.editReply('❌ Ticket not found.');
+      const ticket = ticketRes.rows[0];
+
+      // Generate transcript
+      const transcript = await generateTranscript(interaction.channel);
+      const openTime = new Date(ticket.created_at);
+
+      const transcriptEmbed = new EmbedBuilder()
+        .setColor('#d6c2ee')
+        .setTitle('Ticket Closed')
+        .addFields(
+          { name: '# Ticket ID',    value: `${ticket.id}`,                                     inline: true },
+          { name: '✅ Opened By',   value: `<@${ticket.user_id}>`,                             inline: true },
+          { name: '🔒 Closed By',   value: `<@${interaction.user.id}>`,                        inline: true },
+          { name: '🕐 Open Time',   value: `<t:${Math.floor(openTime.getTime()/1000)}:F>`,     inline: true },
+          { name: '👤 Claimed By',  value: ticket.claimed_by ? `<@${ticket.claimed_by}>` : 'Not claimed', inline: true },
+          { name: '❓ Reason',      value: reason, inline: false },
+        )
+        .setTimestamp();
+
+      const { AttachmentBuilder } = require('discord.js');
+      const buffer = Buffer.from(transcript, 'utf-8');
+      const attachment = new AttachmentBuilder(buffer, { name: `transcript-${interaction.channel.name}.txt` });
+
+      // Send to transcript channel
+      if (config?.transcript_channel_id) {
+        const tCh = client.channels.cache.get(config.transcript_channel_id);
+        if (tCh) await tCh.send({ embeds: [transcriptEmbed], files: [attachment] }).catch(() => {});
+      }
+
+      // DM opener
+      const opener = await interaction.guild.members.fetch(ticket.user_id).catch(() => null);
+      if (opener) {
+        const buffer2 = Buffer.from(transcript, 'utf-8');
+        const att2 = new AttachmentBuilder(buffer2, { name: `transcript-${interaction.channel.name}.txt` });
+        await opener.send({
+          embeds: [new EmbedBuilder().setColor('#d6c2ee')
+            .setTitle('🎫 Your Ticket Has Been Closed')
+            .setDescription(`Your ticket in **${interaction.guild.name}** has been closed.
+Please find your transcript attached.`)
+            .setTimestamp()],
+          files: [att2]
+        }).catch(() => {});
+
+        // Rating prompt
+        const ratingRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:1`).setLabel('⭐').setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:2`).setLabel('⭐⭐').setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:3`).setLabel('⭐⭐⭐').setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:4`).setLabel('⭐⭐⭐⭐').setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:5`).setLabel('⭐⭐⭐⭐⭐').setStyle(ButtonStyle.Secondary),
+        );
+        await opener.send({
+          embeds: [new EmbedBuilder().setColor('#d6c2ee')
+            .setTitle('How was your experience?')
+            .setDescription('Please rate your support experience by clicking a star rating below.')],
+          components: [ratingRow]
+        }).catch(() => {});
+      }
+
+      await query('UPDATE tickets SET status = $1, closed_at = NOW(), closed_by = $2, close_reason = $3 WHERE id = $4',
+        ['closed', interaction.user.id, reason, ticket.id]);
+
+      await interaction.editReply('✅ Ticket closed. Transcript sent.');
+      setTimeout(() => interaction.channel.delete().catch(() => {}), 3000);
+      return;
+    }
+
     if (!interaction.customId.startsWith('ticket_modal')) return;
     await interaction.deferReply({ ephemeral: true });
 
@@ -540,13 +661,22 @@ module.exports = {
         .addFields(
           { name: '📋 Your Information', value: answers.join('\n') || '—' },
         )
-        .setFooter({ text: `Ticket #${ticketId} • Staff: /ticket close` })
+        .setFooter({ text: `Ticket #${ticketId}` })
         .setTimestamp()
     ]});
 
-    // Ping staff
+    // Ping staff with claim/close buttons
+    const actionRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`ticket_claim:${ticketId}`).setLabel('Claim Ticket').setEmoji('👤').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`ticket_close_btn:${ticketId}`).setLabel('Close Ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger),
+    );
     if (config.staff_role_id) {
-      await ticketChannel.send(`<@&${config.staff_role_id}> — New ticket opened by <@${interaction.user.id}>`);
+      await ticketChannel.send({
+        content: `<@&${config.staff_role_id}> — New ticket opened by <@${interaction.user.id}>`,
+        components: [actionRow]
+      });
+    } else {
+      await ticketChannel.send({ components: [actionRow] });
     }
 
     return interaction.editReply(`✅ Your ticket has been created: <#${ticketChannel.id}>`);
