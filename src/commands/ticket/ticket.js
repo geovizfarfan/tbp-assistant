@@ -325,7 +325,7 @@ module.exports = {
       const transcript = await generateTranscript(interaction.channel);
       const transcriptEmbed = new EmbedBuilder()
         .setColor('#d6c2ee')
-        .setTitle(`🎫 Ticket Transcript — #${interaction.channel.name}`)
+        .setTitle(`<a:tickets:1523139713278672996> Ticket Transcript — #${interaction.channel.name}`)
         .setDescription(`**Opened by:** <@${ticket.user_id}>\n**Closed by:** <@${interaction.user.id}>\n**Type:** ${ticket.type_name || 'General'}`)
         .setTimestamp();
 
@@ -418,7 +418,7 @@ module.exports = {
       // Show modal with questions
       const modal = new ModalBuilder()
         .setCustomId(`ticket_modal:${typeId}`)
-        .setTitle(`${type.name} Ticket`);
+        .setTitle(`<a:tickets:1523139713278672996> ${type.name} Ticket`);
 
       const questions = type.questions ? type.questions.split('|').slice(0, 5) : ['Please describe your issue'];
       for (let i = 0; i < questions.length; i++) {
