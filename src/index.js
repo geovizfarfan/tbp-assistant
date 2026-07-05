@@ -180,6 +180,12 @@ client.on('messageCreate', async (message) => {
   catch (e) { /* ignore */ }
 });
 
+// Sticky ticket action row
+client.on('messageCreate', async (message) => {
+  try { await ticketModule.handleStickyActionRow(message, client); }
+  catch (e) { /* ignore */ }
+});
+
 // Boost detection
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
   try {
