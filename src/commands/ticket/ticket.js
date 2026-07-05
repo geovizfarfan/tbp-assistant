@@ -131,7 +131,12 @@ module.exports = {
     .addSubcommand(sub => sub
       .setName('remove')
       .setDescription('Remove a user from the current ticket thread')
-      .addUserOption(o => o.setName('user').setDescription('User to remove').setRequired(true))),
+      .addUserOption(o => o.setName('user').setDescription('User to remove').setRequired(true)))
+
+    .addSubcommand(sub => sub
+      .setName('removepanel')
+      .setDescription('Remove a ticket panel and all its types')
+      .addStringOption(o => o.setName('panel_id').setDescription('Panel ID to remove').setRequired(true))),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
@@ -308,6 +313,34 @@ module.exports = {
       return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
         .setTitle('<a:tickets:1523139713278672996> Ticket Panels')
         .setDescription(lines)]});
+    }
+
+    // ── /ticket removepanel ──────────────────────────────────────────────
+    if (sub === 'removepanel') {
+      if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
+          interaction.user.id !== process.env.OWNER_ID)
+        return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
+      await interaction.deferReply({ ephemeral: true });
+
+      const panelId = interaction.options.getString('panel_id');
+      const panelRes = await query('SELECT * FROM ticket_panels WHERE id=$1 AND guild_id=$2', [panelId, interaction.guild.id]);
+      if (!panelRes.rows.length) return interaction.editReply('❌ Panel not found.');
+      const panel = panelRes.rows[0];
+
+      // Delete panel message from channel
+      if (panel.channel_id && panel.message_id) {
+        const ch = interaction.client.channels.cache.get(panel.channel_id);
+        if (ch) {
+          const msg = await ch.messages.fetch(panel.message_id).catch(() => null);
+          if (msg) await msg.delete().catch(() => {});
+        }
+      }
+
+      // Delete types and panel from DB
+      await query('DELETE FROM ticket_types WHERE panel_id=$1', [panelId]);
+      await query('DELETE FROM ticket_panels WHERE id=$1', [panelId]);
+
+      return interaction.editReply(`✅ Panel \`${panelId}\` — **${panel.title}** removed.`);
     }
 
     // ── /ticket add ───────────────────────────────────────────────────────
