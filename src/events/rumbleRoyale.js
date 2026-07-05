@@ -202,9 +202,9 @@ async function handleMessage(message, client) {
 
     const battleEmbed = new EmbedBuilder()
       .setColor(config.embed_color || '#d6c2ee')
-      .setAuthor({ name: channelName })
-      .setTitle(config.battle_title || 'Rumble Royale — BATTLE TIME!')
-      .setDescription(descLines.join('\n'))
+      .setAuthor({ name: channelName.slice(0, 256) })
+      .setTitle((config.battle_title || 'Rumble Royale — BATTLE TIME!').slice(0, 256))
+      .setDescription(descLines.join('\n').slice(0, 4096))
       .setFooter({ text: `${message.guild.name} • Hosted by: ${parsed.host}${parsed.era ? ` • Era: ${parsed.era}` : ''}` });
 
     if (config.battle_image) battleEmbed.setImage(config.battle_image);
