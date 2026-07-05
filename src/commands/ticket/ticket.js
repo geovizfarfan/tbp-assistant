@@ -669,7 +669,7 @@ Please find your transcript attached.`)
     // Ping staff with claim/close buttons
     const actionRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`ticket_claim:${ticketId}`).setLabel('Claim Ticket').setEmoji('<:staff:1523146914701512764>').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`ticket_close_btn:${ticketId}`).setLabel('Close Ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`ticket_close_btn:${ticketId}`).setLabel('Close Ticket').setEmoji('<a:lock:1520456965245898903>').setStyle(ButtonStyle.Danger),
     );
     if (config.staff_role_id) {
       await ticketChannel.send({
