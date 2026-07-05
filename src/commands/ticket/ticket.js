@@ -660,7 +660,7 @@ Please find your transcript attached.`)
         .setTitle(`<a:tickets:1523139713278672996> ${typeName} Ticket`)
         .setDescription(openMsg)
         .addFields(
-          { name: '📋 Your Information', value: answers.join('\n') || '—' },
+          { name: '<a:InfoSticker:1523152442437664879> Your Information', value: answers.join('\n') || '—' },
         )
         .setFooter({ text: `Ticket #${ticketId}` })
         .setTimestamp()
