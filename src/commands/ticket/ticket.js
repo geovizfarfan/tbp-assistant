@@ -462,7 +462,7 @@ module.exports = {
       if (claimedBy !== interaction.user.id) {
         return interaction.reply({ content: `❌ This ticket is already claimed by <@${claimedBy}>.`, ephemeral: true });
       }
-      await interaction.reply({ content: `✅ <@${interaction.user.id}> has claimed this ticket!` });
+      await interaction.reply({ content: `<:checkmark:1512916161493205165> <@${interaction.user.id}> has claimed this ticket!` });
 
       // Disable claim button, keep close button
       const newRow = new ActionRowBuilder().addComponents(
