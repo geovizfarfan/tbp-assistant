@@ -445,14 +445,31 @@ module.exports = {
       const [ticketId, rating] = parts;
       await query('UPDATE tickets SET rating = $1 WHERE id = $2', [parseInt(rating), ticketId]);
 
-      const ticketRes = await query('SELECT t.*, tc.transcript_channel_id FROM tickets t JOIN ticket_config tc ON tc.guild_id = t.guild_id WHERE t.id = $1', [ticketId]);
-      if (ticketRes.rows.length && ticketRes.rows[0].transcript_channel_id) {
-        const tCh = client.channels.cache.get(ticketRes.rows[0].transcript_channel_id);
-        if (tCh) await tCh.send({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
-          .setDescription(`<a:review:1523148059427471461> <@${interaction.user.id}> rated their ticket ${'<:star:1523150031698264104>'.repeat(parseInt(rating))} (${rating}/5)`)
-        ]}).catch(() => {});
+      // Edit the transcript embed to add the rating
+      const ticketRes = await query('SELECT * FROM tickets WHERE id=$1', [ticketId]);
+      if (ticketRes.rows.length) {
+        const t = ticketRes.rows[0];
+        if (t.transcript_message_id && t.transcript_channel_id) {
+          const tCh = client.channels.cache.get(t.transcript_channel_id);
+          if (tCh) {
+            const tMsg = await tCh.messages.fetch(t.transcript_message_id).catch(() => null);
+            if (tMsg) {
+              const existingEmbed = tMsg.embeds[0];
+              const { EmbedBuilder: EB } = require('discord.js');
+              const updatedEmbed = EB.from(existingEmbed);
+              // Update rating field
+              const fields = existingEmbed.fields.map(f =>
+                f.name.includes('Rating') 
+                  ? { ...f, value: Array(parseInt(rating)).fill('<:star:1523150031698264104>').join('') + ` (${rating}/5)` }
+                  : f
+              );
+              updatedEmbed.setFields(fields);
+              await tMsg.edit({ embeds: [updatedEmbed] }).catch(() => {});
+            }
+          }
+        }
       }
-      return interaction.update({ content: `Thank you for your rating: ${'<:star:1523150031698264104>'.repeat(parseInt(rating))}`, components: [], embeds: [] });
+      return interaction.update({ content: `Thank you for your rating: ${Array(parseInt(rating)).fill('<:star:1523150031698264104>').join('')}`, components: [], embeds: [] });
     }
   },
 
@@ -493,7 +510,11 @@ module.exports = {
 
       if (config?.transcript_channel_id) {
         const tCh = client.channels.cache.get(config.transcript_channel_id);
-        if (tCh) await tCh.send({ embeds: [transcriptEmbed], files: [attachment] }).catch(() => {});
+        if (tCh) {
+          const tMsg = await tCh.send({ embeds: [transcriptEmbed], files: [attachment] }).catch(() => null);
+          if (tMsg) await query('UPDATE tickets SET transcript_message_id=$1, transcript_channel_id=$2 WHERE id=$3',
+            [tMsg.id, config.transcript_channel_id, ticket.id]).catch(() => {});
+        }
       }
 
       const opener = await interaction.guild.members.fetch(ticket.user_id).catch(() => null);
