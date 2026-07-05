@@ -538,7 +538,7 @@ module.exports = {
           { name: '<a:RojasClock:1512912822613446787> Open Time',   value: `<t:${Math.floor(openTime.getTime()/1000)}:F>`,     inline: true },
           { name: '<:staff:1523146914701512764> Claimed By',  value: ticket.claimed_by ? `<@${ticket.claimed_by}>` : 'Not claimed', inline: true },
           { name: '<a:QuestionMark:1523147105772896426> Reason',      value: reason, inline: false },
-          { name: '<a:review:1523148059427471461> Rating',              value: ticket.rating ? '<:star:1523150031698264104>'.repeat(ticket.rating) + ` (${ticket.rating}/5)` : 'Not yet rated', inline: false },
+          { name: '<a:review:1523148059427471461> Rating',              value: ticket.rating ? Array(ticket.rating).fill('<:star:1523150031698264104>').join('') + ` (${ticket.rating}/5)` : 'Not yet rated', inline: false },
         )
         .setTimestamp();
 
@@ -568,11 +568,11 @@ Please find your transcript attached.`)
 
         // Rating prompt
         const ratingRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:1`).setLabel('⭐').setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:2`).setLabel('⭐⭐').setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:3`).setLabel('⭐⭐⭐').setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:4`).setLabel('⭐⭐⭐⭐').setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:5`).setLabel('⭐⭐⭐⭐⭐').setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:1`).setEmoji('<:star:1523150031698264104>').setLabel('1').setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:2`).setEmoji('<:star:1523150031698264104>').setLabel('2').setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:3`).setEmoji('<:star:1523150031698264104>').setLabel('3').setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:4`).setEmoji('<:star:1523150031698264104>').setLabel('4').setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:5`).setEmoji('<:star:1523150031698264104>').setLabel('5').setStyle(ButtonStyle.Secondary),
         );
         await opener.send({
           embeds: [new EmbedBuilder().setColor('#d6c2ee')
