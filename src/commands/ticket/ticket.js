@@ -149,7 +149,7 @@ module.exports = {
       `, [interaction.guild.id, staffRole.id, category?.id||null, transcript?.id||null, maxOpen]);
 
       return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
-        .setTitle('✅ Ticket System Configured!')
+        .setTitle('<:checkmark:1512916161493205165> Ticket System Configured!')
         .addFields(
           { name: 'Staff Role',       value: `<@&${staffRole.id}>`,                          inline: true },
           { name: 'Category',         value: category ? `<#${category.id}>` : '—',           inline: true },
@@ -186,7 +186,7 @@ module.exports = {
           new ButtonBuilder()
             .setCustomId(`ticket_open_single:${panelId}`)
             .setLabel('Open Ticket')
-            .setEmoji('🎫')
+            .setEmoji('<a:tickets:1523139713278672996>')
             .setStyle(ButtonStyle.Secondary)
         )];
       }
@@ -306,7 +306,7 @@ module.exports = {
       if (!res.rows.length) return interaction.editReply('No ticket panels found. Run `/ticket panel` to create one.');
       const lines = res.rows.map(p => `**ID \`${p.id}\`** — ${p.title} in <#${p.channel_id}>`).join('\n');
       return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
-        .setTitle('🎫 Ticket Panels')
+        .setTitle('<a:tickets:1523139713278672996> Ticket Panels')
         .setDescription(lines)]});
     }
 
@@ -350,7 +350,7 @@ module.exports = {
         // Send transcript DM
         await opener.send({
           embeds: [new EmbedBuilder().setColor('#d6c2ee')
-            .setTitle('🎫 Your Ticket Has Been Closed')
+            .setTitle('<a:tickets:1523139713278672996> Your Ticket Has Been Closed')
             .setDescription(`Your ticket in **${interaction.guild.name}** has been closed.\nPlease find your transcript attached.`)
             .setTimestamp()],
           files: [attachment]
@@ -358,11 +358,11 @@ module.exports = {
 
         // Send rating prompt
         const ratingRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:1`).setLabel('⭐').setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:2`).setLabel('⭐⭐').setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:3`).setLabel('⭐⭐⭐').setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:4`).setLabel('⭐⭐⭐⭐').setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:5`).setLabel('⭐⭐⭐⭐⭐').setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:1`).setEmoji('<:star:1523150031698264104>').setLabel('1').setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:2`).setEmoji('<:star:1523150031698264104>').setLabel('2').setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:3`).setEmoji('<:star:1523150031698264104>').setLabel('3').setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:4`).setEmoji('<:star:1523150031698264104>').setLabel('4').setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:5`).setEmoji('<:star:1523150031698264104>').setLabel('5').setStyle(ButtonStyle.Secondary),
         );
         await opener.send({
           embeds: [new EmbedBuilder().setColor('#d6c2ee')
@@ -466,8 +466,8 @@ module.exports = {
 
       // Disable claim button, keep close button
       const newRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`ticket_claim:${ticketId}`).setLabel('Claimed').setEmoji('✅').setStyle(ButtonStyle.Secondary).setDisabled(true),
-        new ButtonBuilder().setCustomId(`ticket_close_btn:${ticketId}`).setLabel('Close Ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId(`ticket_claim:${ticketId}`).setLabel('Claimed').setEmoji('<:checkmark:1512916161493205165>').setStyle(ButtonStyle.Secondary).setDisabled(true),
+        new ButtonBuilder().setCustomId(`ticket_close_btn:${ticketId}`).setLabel('Close Ticket').setEmoji('<a:lock:1520456965245898903>').setStyle(ButtonStyle.Danger),
       );
       await interaction.message.edit({ components: [newRow] }).catch(() => {});
       return;
@@ -532,12 +532,13 @@ module.exports = {
         .setColor('#d6c2ee')
         .setTitle('Ticket Closed')
         .addFields(
-          { name: '# Ticket ID',    value: `${ticket.id}`,                                     inline: true },
-          { name: '✅ Opened By',   value: `<@${ticket.user_id}>`,                             inline: true },
-          { name: '🔒 Closed By',   value: `<@${interaction.user.id}>`,                        inline: true },
-          { name: '🕐 Open Time',   value: `<t:${Math.floor(openTime.getTime()/1000)}:F>`,     inline: true },
-          { name: '👤 Claimed By',  value: ticket.claimed_by ? `<@${ticket.claimed_by}>` : 'Not claimed', inline: true },
-          { name: '❓ Reason',      value: reason, inline: false },
+          { name: '<a:tickets:1523139713278672996> Ticket ID',    value: `${ticket.id}`,                                     inline: true },
+          { name: '<:member:1512912827424309278> Opened By',   value: `<@${ticket.user_id}>`,                             inline: true },
+          { name: '<a:lock:1520456965245898903> Closed By',   value: `<@${interaction.user.id}>`,                        inline: true },
+          { name: '<a:RojasClock:1512912822613446787> Open Time',   value: `<t:${Math.floor(openTime.getTime()/1000)}:F>`,     inline: true },
+          { name: '<:staff:1523146914701512764> Claimed By',  value: ticket.claimed_by ? `<@${ticket.claimed_by}>` : 'Not claimed', inline: true },
+          { name: '<a:QuestionMark:1523147105772896426> Reason',      value: reason, inline: false },
+          { name: '<a:review:1523148059427471461> Rating',              value: ticket.rating ? '<:star:1523150031698264104>'.repeat(ticket.rating) + ` (${ticket.rating}/5)` : 'Not yet rated', inline: false },
         )
         .setTimestamp();
 
@@ -667,7 +668,7 @@ Please find your transcript attached.`)
 
     // Ping staff with claim/close buttons
     const actionRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`ticket_claim:${ticketId}`).setLabel('Claim Ticket').setEmoji('👤').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`ticket_claim:${ticketId}`).setLabel('Claim Ticket').setEmoji('<:staff:1523146914701512764>').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(`ticket_close_btn:${ticketId}`).setLabel('Close Ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger),
     );
     if (config.staff_role_id) {
