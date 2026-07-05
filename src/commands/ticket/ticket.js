@@ -106,7 +106,12 @@ module.exports = {
     .addSubcommand(sub => sub
       .setName('remove')
       .setDescription('Remove a user from the current ticket')
-      .addUserOption(o => o.setName('user').setDescription('User to remove').setRequired(true))),
+      .addUserOption(o => o.setName('user').setDescription('User to remove').setRequired(true)))
+
+    // list panels
+    .addSubcommand(sub => sub
+      .setName('panels')
+      .setDescription('List all ticket panels and their IDs')),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
@@ -244,6 +249,18 @@ module.exports = {
       }
 
       return interaction.editReply(`✅ Ticket type **${name}** removed.`);
+    }
+
+    // ── /ticket panels ────────────────────────────────────────────────────
+    if (sub === 'panels') {
+      await interaction.deferReply({ ephemeral: true });
+      const res = await query('SELECT * FROM ticket_panels WHERE guild_id = $1 ORDER BY id', [interaction.guild.id]);
+      if (!res.rows.length) return interaction.editReply('No ticket panels found. Run `/ticket panel` to create one.');
+      const lines = res.rows.map(p => `**ID \`${p.id}\`** — ${p.title} in <#${p.channel_id}>`).join('
+');
+      return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
+        .setTitle('🎫 Ticket Panels')
+        .setDescription(lines)]});
     }
 
     // ── /ticket close ─────────────────────────────────────────────────────

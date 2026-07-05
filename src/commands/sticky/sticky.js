@@ -13,7 +13,13 @@ module.exports = {
       .addStringOption(o => o.setName('title').setDescription('Optional embed title')))
     .addSubcommand(sub => sub
       .setName('remove')
-      .setDescription('Remove the sticky message from the current channel')),
+      .setDescription('Remove the sticky message from the current channel'))
+    .addSubcommand(sub => sub
+      .setName('edit')
+      .setDescription('Edit the sticky message in the current channel')
+      .addStringOption(o => o.setName('message').setDescription('New message content').setRequired(true))
+      .addStringOption(o => o.setName('title').setDescription('New title (leave empty to keep current)'))
+      .addStringOption(o => o.setName('color').setDescription('New embed color hex'))),
 
   async execute(interaction) {
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
@@ -46,6 +52,33 @@ module.exports = {
       `, [interaction.guild.id, channel.id, msg.id, text, title, color]);
 
       return interaction.editReply(`✅ Sticky message set in <#${channel.id}>. It will stay at the bottom.`);
+    }
+
+    if (sub === 'edit') {
+      const text  = interaction.options.getString('message').replace(/\\n/g, '\n');
+      const color = interaction.options.getString('color');
+      const title = interaction.options.getString('title');
+
+      const res = await query('SELECT * FROM sticky_messages WHERE guild_id = $1 AND channel_id = $2', [interaction.guild.id, channel.id]);
+      if (!res.rows.length) return interaction.editReply('❌ No sticky message found in this channel. Use `/sticky set` first.');
+
+      const sticky = res.rows[0];
+      const newColor = color || sticky.color;
+      const newTitle = title !== null ? title : sticky.title;
+
+      // Delete old message
+      const oldMsg = await channel.messages.fetch(sticky.message_id).catch(() => null);
+      if (oldMsg) await oldMsg.delete().catch(() => {});
+
+      // Post updated message
+      const embed = new EmbedBuilder().setColor(newColor).setDescription(text);
+      if (newTitle) embed.setTitle(newTitle);
+      const newMsg = await channel.send({ embeds: [embed] });
+
+      await query('UPDATE sticky_messages SET message_id = $1, content = $2, title = $3, color = $4 WHERE guild_id = $5 AND channel_id = $6',
+        [newMsg.id, text, newTitle, newColor, interaction.guild.id, channel.id]);
+
+      return interaction.editReply('✅ Sticky message updated!');
     }
 
     if (sub === 'remove') {
