@@ -559,7 +559,7 @@ module.exports = {
         const att2 = new AttachmentBuilder(buffer2, { name: `transcript-${interaction.channel.name}.txt` });
         await opener.send({
           embeds: [new EmbedBuilder().setColor('#d6c2ee')
-            .setTitle('🎫 Your Ticket Has Been Closed')
+            .setTitle('<a:tickets:1523139713278672996> Your Ticket Has Been Closed')
             .setDescription(`Your ticket in **${interaction.guild.name}** has been closed.
 Please find your transcript attached.`)
             .setTimestamp()],
@@ -657,7 +657,7 @@ Please find your transcript attached.`)
 
     await ticketChannel.send({ embeds: [
       new EmbedBuilder().setColor(panel?.color || '#d6c2ee')
-        .setTitle(`🎫 ${typeName} Ticket`)
+        .setTitle(`<a:tickets:1523139713278672996> ${typeName} Ticket`)
         .setDescription(openMsg)
         .addFields(
           { name: '📋 Your Information', value: answers.join('\n') || '—' },
