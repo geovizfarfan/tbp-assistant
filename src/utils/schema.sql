@@ -405,3 +405,51 @@ CREATE TABLE IF NOT EXISTS sticky_messages (
   color TEXT DEFAULT '#d6c2ee',
   UNIQUE(guild_id, channel_id)
 );
+
+-- Ticket system
+CREATE TABLE IF NOT EXISTS ticket_config (
+  guild_id TEXT PRIMARY KEY,
+  staff_role_id TEXT,
+  category_id TEXT,
+  transcript_channel_id TEXT,
+  max_open INT DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS ticket_panels (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT,
+  message_id TEXT,
+  title TEXT NOT NULL,
+  description TEXT,
+  color TEXT DEFAULT '#d6c2ee',
+  open_message TEXT,
+  single_button BOOLEAN DEFAULT FALSE
+);
+
+CREATE TABLE IF NOT EXISTS ticket_types (
+  id SERIAL PRIMARY KEY,
+  panel_id INT NOT NULL,
+  guild_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  emoji TEXT,
+  description TEXT,
+  questions TEXT,
+  open_message TEXT
+);
+
+CREATE TABLE IF NOT EXISTS tickets (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  type_name TEXT,
+  panel_id INT,
+  status TEXT DEFAULT 'open',
+  rating INT,
+  closed_at TIMESTAMPTZ,
+  closed_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS purge_role_id TEXT DEFAULT NULL;

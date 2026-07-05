@@ -117,6 +117,12 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isButton() && interaction.customId.startsWith('pingpanel_')) {
     return pingPanelModule.handleButton(interaction);
   }
+  if (interaction.isButton() && (interaction.customId.startsWith('ticket_open') || interaction.customId.startsWith('ticket_rate'))) {
+    return ticketModule.handleButton(interaction, client);
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('ticket_modal')) {
+    return ticketModule.handleModal(interaction, client);
+  }
   if (!interaction.isChatInputCommand()) return;
 
   const command = client.commands.get(interaction.commandName);
@@ -140,6 +146,7 @@ const { handleMessage: handleRRMessage, handleReaction: handleRRReaction } = req
 const grindModule = require('./commands/grind/grind');
 const pingPanelModule = require('./commands/pingpanel/pingpanel');
 const stickyModule    = require('./commands/sticky/sticky');
+const ticketModule    = require('./commands/ticket/ticket');
 client.on('messageCreate', async (message) => {
   try { await handleRRMessage(message, client); }
   catch (e) { console.error('[RumbleRoyale]', e.message); }
