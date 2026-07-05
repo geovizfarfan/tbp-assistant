@@ -418,7 +418,7 @@ module.exports = {
       // Show modal with questions
       const modal = new ModalBuilder()
         .setCustomId(`ticket_modal:${typeId}`)
-        .setTitle(`<a:tickets:1523139713278672996> ${type.name} Ticket`);
+        .setTitle(`${type.name} Ticket`.slice(0, 45));
 
       const questions = type.questions ? type.questions.split('|').slice(0, 5) : ['Please describe your issue'];
       for (let i = 0; i < questions.length; i++) {
