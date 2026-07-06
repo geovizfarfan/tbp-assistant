@@ -76,7 +76,7 @@ async function handleWheelButton(interaction, client) {
     const winnerDisplay = formatWinnerMention(winnerEntry);
 
     const attachment = new AttachmentBuilder(result.buffer, { name: 'wheel.gif' });
-    const embed = baseEmbed(e('reroll') + ' Re-roll', session.embedColor || COLORS.tbppurple, null)
+    const embed = baseEmbed('<a:reroll:1523809294867234886>' + ' Re-roll', session.embedColor || COLORS.tbppurple, null)
       .setImage('attachment://wheel.gif')
       .addFields({ name: e('trophies') + ' Winner', value: winnerDisplay, inline: false })
       .setFooter({ text: entries.length + ' entries remaining' });
@@ -110,10 +110,10 @@ async function handleWheelButton(interaction, client) {
     if (session.entries.length === 1) {
       const last = session.entries[0];
       const lastDisplay = formatWinnerMention(last);
-      const embed = baseEmbed(e('purplesparkle') + ' Last Man Standing', session.embedColor || COLORS.tbppurple, null)
+      const embed = baseEmbed('<a:purplesparkle:1512912828489793626>' + ' Last Man Standing', session.embedColor || COLORS.tbppurple, null)
         .addFields(
           { name: '🏆 WINNER', value: lastDisplay, inline: false },
-          { name: e('xemoji') + ' Eliminated', value: session.eliminated.join(', ').slice(0, 1024), inline: false },
+          { name: '<a:x_:1523809293756010517>' + ' Eliminated', value: session.eliminated.join(', ').slice(0, 1024), inline: false },
         )
         .setFooter({ text: 'Last one standing!' });
       wheelSessions.delete(sessionId);
@@ -129,11 +129,11 @@ async function handleWheelButton(interaction, client) {
     const winnerDisplay = formatWinnerMention(winnerEntry);
 
     const attachment = new AttachmentBuilder(result.buffer, { name: 'wheel.gif' });
-    const embed = baseEmbed(e('xemoji') + ' Remove & Spin', session.embedColor || COLORS.tbppurple, null)
+    const embed = baseEmbed('<a:x_:1523809293756010517>' + ' Remove & Spin', session.embedColor || COLORS.tbppurple, null)
       .setImage('attachment://wheel.gif')
       .addFields(
         { name: e('trophies') + ' Eliminated Next', value: winnerDisplay, inline: false },
-        { name: e('xemoji') + ' Eliminated So Far', value: session.eliminated.join(', ').slice(0, 1024), inline: false },
+        { name: '<a:x_:1523809293756010517>' + ' Eliminated So Far', value: session.eliminated.join(', ').slice(0, 1024), inline: false },
       )
       .setFooter({ text: session.entries.length + ' entries remaining' });
 
@@ -287,7 +287,7 @@ async function spinMembers(interaction) {
   setTimeout(() => wheelSessions.delete(sessionId), 30 * 60 * 1000);
 
   const attachment = new AttachmentBuilder(result.buffer, { name: 'wheel.gif' });
-  const embed = baseEmbed(e('wheelspin') + ' Wheel Spin \u2014 Members', COLORS.tbppurple, interaction.guild ? interaction.guild.name : null)
+  const embed = baseEmbed('<a:wheelspin:1523809296465526824>' + ' Wheel Spin \u2014 Members', COLORS.tbppurple, interaction.guild ? interaction.guild.name : null)
     .setImage('attachment://wheel.gif')
     .addFields({ name: e('trophies') + ' Winner', value: winnerDisplay, inline: false })
     .setFooter({ text: (interaction.guild?.name || '') + ' • ' + entryObjects.length + ' entries' });
@@ -500,7 +500,7 @@ async function spinPrizes(interaction) {
 
   const prizeWon = await sendWheelResult(
     interaction, prizes, colors,
-    e('purplesparkle') + ' Prize Wheel \u2014 ' + winner.username,
+    '<a:purplesparkle:1512912828489793626>' + ' Prize Wheel \u2014 ' + winner.username,
     e('trophies') + ' Prize Won',
     [{ name: e('members') + ' Winner', value: '<@' + winner.id + '>', inline: true }]
   );
@@ -561,7 +561,7 @@ async function spinCombo(interaction) {
   const prizeName = prizeResult.winner;
 
   const prizeAttachment = new AttachmentBuilder(prizeResult.buffer, { name: 'wheel-prize.gif' });
-  const prizeEmbed = baseEmbed(e('purplesparkle') + ' Step 2 \u2014 ' + winnerPlainText + '\u2019s Prize', COLORS.tbppurple, interaction.guild ? interaction.guild.name : null)
+  const prizeEmbed = baseEmbed('<a:purplesparkle:1512912828489793626>' + ' Step 2 \u2014 ' + winnerPlainText + '\u2019s Prize', COLORS.tbppurple, interaction.guild ? interaction.guild.name : null)
     .setImage('attachment://wheel-prize.gif')
     .addFields(
       { name: e('members') + ' Winner', value: winnerDisplay, inline: true },
