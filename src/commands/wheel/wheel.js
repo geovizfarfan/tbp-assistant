@@ -1,5 +1,6 @@
 const {
   SlashCommandBuilder, AttachmentBuilder, EmbedBuilder,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle,
 } = require('discord.js');
 const { e } = require('../../utils/appEmojis');
 const { baseEmbed, COLORS } = require('../../utils/embeds');
@@ -7,6 +8,10 @@ const { spinWheel } = require('../../utils/wheelRenderer');
 const { getPaletteColors, getPaletteChoices } = require('../../utils/wheelPalettes');
 const { query } = require('../../utils/database');
 const { adjustBalance } = require('../../utils/playAndRegretDb');
+
+
+// Temporary wheel session store for re-roll/remove
+const wheelSessions = new Map();
 
 function buildPaletteOption(opt) {
   return opt.setName('palette').setDescription('Wheel color theme').setRequired(false).addChoices(...getPaletteChoices());
@@ -47,6 +52,94 @@ function formatWinnerMention(winnerEntry) {
 }
 
 const DEFAULT_COLORS = ['#ff00c1', '#9600ff', '#4900ff', '#00b8ff', '#00fff9', '#fff200'];
+
+async function handleWheelButton(interaction, client) {
+  const [action, sessionId] = interaction.customId.split(':');
+  const session = wheelSessions.get(sessionId);
+
+  if (!session) {
+    return interaction.reply({ content: 'Session expired. Please spin again.', ephemeral: true });
+  }
+
+  await interaction.deferUpdate();
+
+  // Reroll — keep same pool, just respin
+  if (action === 'wheel_reroll') {
+    const entries = session.entries;
+    const textEntries = entries.map(o => o.text);
+
+    let result;
+    try { result = await spinWheel(textEntries, session.colors); }
+    catch(err) { return interaction.followUp({ content: 'Spin failed: ' + err.message, ephemeral: true }); }
+
+    const winnerEntry = entries[result.winnerIndex];
+    const winnerDisplay = formatWinnerMention(winnerEntry);
+
+    const attachment = new AttachmentBuilder(result.buffer, { name: 'wheel.gif' });
+    const embed = baseEmbed(e('reroll') + ' Re-roll', COLORS.tbppurple, null)
+      .setImage('attachment://wheel.gif')
+      .addFields({ name: e('trophies') + ' Winner', value: winnerDisplay, inline: false })
+      .setFooter({ text: entries.length + ' entries remaining' });
+
+    await interaction.editReply({ embeds: [embed], files: [attachment], components: [buildWheelButtons(sessionId, entries.length)] });
+  }
+
+  // Remove & Spin — remove winner from pool, respin
+  if (action === 'wheel_remove') {
+    // Get current winner from last message embed
+    const lastEmbed = interaction.message.embeds[0];
+    const winnerField = lastEmbed?.fields?.find(f => f.name.includes('Winner') || f.name.includes('Standing'));
+    const winnerText = winnerField?.value || '';
+
+    // Remove winner from entries
+    const beforeCount = session.entries.length;
+    const userIdMatch = winnerText.match(/<@(d+)>/);
+    if (userIdMatch) {
+      session.entries = session.entries.filter(e => e.userId !== userIdMatch[1]);
+      session.eliminated.push(winnerText);
+    } else {
+      session.entries = session.entries.filter(e => e.text !== winnerText.trim());
+      session.eliminated.push(winnerText);
+    }
+
+    if (session.entries.length === 0) {
+      return interaction.editReply({ content: 'No entries remaining!', components: [] });
+    }
+
+    // Last man standing — only 1 left
+    if (session.entries.length === 1) {
+      const last = session.entries[0];
+      const lastDisplay = formatWinnerMention(last);
+      const embed = baseEmbed(e('trophies') + ' Last Man Standing', COLORS.tbppurple, null)
+        .addFields(
+          { name: '🏆 WINNER', value: lastDisplay, inline: false },
+          { name: '<a:x_:1523784948685733960> Eliminated', value: session.eliminated.join(', ').slice(0, 1024), inline: false },
+        )
+        .setFooter({ text: 'Last one standing!' });
+      wheelSessions.delete(sessionId);
+      return interaction.editReply({ embeds: [embed], files: [], components: [] });
+    }
+
+    const textEntries = session.entries.map(o => o.text);
+    let result;
+    try { result = await spinWheel(textEntries, session.colors); }
+    catch(err) { return interaction.followUp({ content: 'Spin failed: ' + err.message, ephemeral: true }); }
+
+    const winnerEntry = session.entries[result.winnerIndex];
+    const winnerDisplay = formatWinnerMention(winnerEntry);
+
+    const attachment = new AttachmentBuilder(result.buffer, { name: 'wheel.gif' });
+    const embed = baseEmbed('<a:x_:1523784948685733960> Remove & Spin', COLORS.tbppurple, null)
+      .setImage('attachment://wheel.gif')
+      .addFields(
+        { name: e('trophies') + ' Eliminated Next', value: winnerDisplay, inline: false },
+        { name: '<a:x_:1523784948685733960> Eliminated So Far', value: session.eliminated.join(', ').slice(0, 1024), inline: false },
+      )
+      .setFooter({ text: session.entries.length + ' entries remaining' });
+
+    await interaction.editReply({ embeds: [embed], files: [attachment], components: [buildWheelButtons(sessionId, session.entries.length)] });
+  }
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -138,6 +231,25 @@ async function sendWheelResult(interaction, entries, colors, embedTitle, fieldLa
   return result.winner;
 }
 
+
+function buildWheelButtons(sessionId, remaining) {
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`wheel_reroll:${sessionId}`)
+      .setLabel('Re-roll')
+      .setEmoji('<a:reroll:1523784999877349577>')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(remaining < 1),
+    new ButtonBuilder()
+      .setCustomId(`wheel_remove:${sessionId}`)
+      .setLabel('Remove & Spin')
+      .setEmoji('<a:x_:1523784948685733960>')
+      .setStyle(ButtonStyle.Danger)
+      .setDisabled(remaining <= 1),
+  );
+  return row;
+}
+
 async function spinMembers(interaction) {
   const raw = interaction.options.getString('entries');
   const paletteKey = interaction.options.getString('palette');
@@ -162,12 +274,22 @@ async function spinMembers(interaction) {
   const winnerEntry = entryObjects[result.winnerIndex];
   const winnerDisplay = formatWinnerMention(winnerEntry);
 
+  const sessionId = `${interaction.id}`;
+  wheelSessions.set(sessionId, {
+    entries: entryObjects,
+    colors,
+    eliminated: [],
+    guildId: interaction.guild?.id,
+  });
+  setTimeout(() => wheelSessions.delete(sessionId), 30 * 60 * 1000); // 30min TTL
+
   const attachment = new AttachmentBuilder(result.buffer, { name: 'wheel.gif' });
   const embed = baseEmbed(e('controller') + ' Wheel Spin \u2014 Members', COLORS.tbppurple, interaction.guild ? interaction.guild.name : null)
     .setImage('attachment://wheel.gif')
-    .addFields({ name: e('trophies') + ' Winner', value: winnerDisplay, inline: false });
+    .addFields({ name: e('trophies') + ' Winner', value: winnerDisplay, inline: false })
+    .setFooter({ text: (interaction.guild?.name || '') + ' • ' + entryObjects.length + ' entries' });
 
-  await interaction.editReply({ embeds: [embed], files: [attachment] });
+  await interaction.editReply({ embeds: [embed], files: [attachment], components: [buildWheelButtons(sessionId, entryObjects.length)] });
 }
 
 async function spinReactions(interaction) {
