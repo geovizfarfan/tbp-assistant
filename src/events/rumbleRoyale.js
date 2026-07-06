@@ -213,6 +213,11 @@ async function handleMessage(message, client) {
       .filter(Boolean).map(id => `<@&${id}>`).join(' ');
 
     await message.channel.send({ content: pings || '', embeds: [battleEmbed] });
+
+    // Clear one-time host description and other reward after posting
+    if (config.host_description || config.other_reward) {
+      await query('UPDATE rr_channel_config SET host_description = NULL, other_reward = NULL WHERE channel_id = $1', [message.channel.id]).catch(() => {});
+    }
     return;
   }
 
