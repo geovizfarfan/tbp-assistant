@@ -289,7 +289,7 @@ async function spinMembers(interaction) {
     [sessionId, interaction.guild?.id || null, JSON.stringify(entryObjects), JSON.stringify(colors), embedColor, JSON.stringify([])]).catch(() => {});
 
   const attachment = new AttachmentBuilder(result.buffer, { name: 'wheel.gif' });
-  const embed = baseEmbed('<a:wheelspin:1523809296465526824>' + ' Wheel Spin \u2014 Members', COLORS.tbppurple, interaction.guild ? interaction.guild.name : null)
+  const embed = baseEmbed('<a:wheelspin:1523809296465526824>' + ' Wheel Spin \u2014 Members', embedColor, interaction.guild ? interaction.guild.name : null)
     .setImage('attachment://wheel.gif')
     .addFields({ name: e('trophies') + ' Winner', value: winnerDisplay, inline: false })
     .setFooter({ text: (interaction.guild?.name || '') + ' • ' + entryObjects.length + ' entries' });
