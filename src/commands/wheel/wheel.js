@@ -81,7 +81,7 @@ async function handleWheelButton(interaction, client) {
       .addFields({ name: e('trophies') + ' Winner', value: winnerDisplay, inline: false })
       .setFooter({ text: entries.length + ' entries remaining' });
 
-    await interaction.editReply({ embeds: [embed], files: [attachment], components: [buildWheelButtons(sessionId, entries.length, true)] });
+    await interaction.editReply({ embeds: [embed], files: [attachment], components: [buildWheelButtons(sessionId, entries.length, 'rerolled')] });
   }
 
   // Remove & Spin — remove winner from pool, respin
@@ -137,7 +137,7 @@ async function handleWheelButton(interaction, client) {
       )
       .setFooter({ text: session.entries.length + ' entries remaining' });
 
-    await interaction.editReply({ embeds: [embed], files: [attachment], components: [buildWheelButtons(sessionId, session.entries.length, true)] });
+    await interaction.editReply({ embeds: [embed], files: [attachment], components: [buildWheelButtons(sessionId, session.entries.length, 'removed')] });
   }
 }
 
