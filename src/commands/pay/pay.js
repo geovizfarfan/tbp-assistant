@@ -255,7 +255,7 @@ module.exports = {
       }
 
       return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
-        .setDescription(`${E.check} Payment logged for <@${user.id}>\n${E.receipt} **Service:** ${service}\n${E.money} **Amount:** $${amount.toFixed(2)}\n**Status:** ${paid ? '✅ Paid' : '❌ Unpaid'}\n**ID:** #${payId}`)]});
+        .setDescription(`${E.check} Payment logged for <@${user.id}>\n${E.receipt} **Service:** ${service}\n${E.money} **Amount:** $${amount.toFixed(2)}\n**Status:** ${paid ? '<:checkmark:1512916161493205165> Paid' : '<:wrong:1512916350375301160> Unpaid'}\n**ID:** #${payId}`)]});
     }
 
     // ── /pay mark ─────────────────────────────────────────────────────────
