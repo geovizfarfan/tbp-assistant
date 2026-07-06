@@ -239,7 +239,7 @@ module.exports = {
                 { name: `${E.receipt} Service`,     value: service,              inline: true },
                 { name: `${E.money} Amount`,        value: `$${amount.toFixed(2)}`, inline: true },
                 { name: `${E.sparkle} Method`,      value: method,               inline: true },
-                { name: `${E.check} Status`,        value: 'Paid in full',        inline: true },
+                { name: `<a:status:1523726617850024006> Status`,        value: 'Paid in full',        inline: true },
               ).setFooter({ text: `${interaction.guild.name} • ID: #${payId}` }).setTimestamp()
           : new EmbedBuilder().setColor('#ff4444')
               .setTitle(`${E.payout} Payment Due`)
@@ -282,7 +282,7 @@ module.exports = {
           .addFields(
             { name: `${E.receipt} Service`,  value: p.service,                    inline: true },
             { name: `${E.money} Amount`,     value: `$${Number(p.amount).toFixed(2)}`, inline: true },
-            { name: `${E.check} Status`,     value: 'Paid in full',                inline: true },
+            { name: `<a:status:1523726617850024006> Status`,     value: 'Paid in full',                inline: true },
             { name: '📝 Notes',             value: notes || '—',                  inline: true },
           ).setFooter({ text: `${interaction.guild.name} • ID: #${id}` }).setTimestamp()
         ]}).catch(() => {});
