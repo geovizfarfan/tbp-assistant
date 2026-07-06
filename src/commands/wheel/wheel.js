@@ -244,7 +244,7 @@ function buildWheelButtons(sessionId, remaining) {
     new ButtonBuilder()
       .setCustomId(`wheel_remove:${sessionId}`)
       .setLabel('Remove & Spin')
-      .setEmoji({ id: '1523784948685733960', name: 'xemoji', animated: true })
+      .setEmoji('1523784948685733960')
       .setStyle(ButtonStyle.Danger)
       .setDisabled(remaining <= 1),
   );
