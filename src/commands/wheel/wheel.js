@@ -276,6 +276,7 @@ async function spinMembers(interaction) {
   const winnerDisplay = formatWinnerMention(winnerEntry);
 
   // Store session temporarily
+  const embedColor = (paletteKey && WHEEL_PALETTES[paletteKey]?.embedColor) || (colors && colors[0]) || COLORS.tbppurple;
   const sessionId = `wheel_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
   wheelSessions.set(sessionId, {
     entries: entryObjects,
