@@ -476,3 +476,36 @@ ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS host_description TEXT DEF
 
 ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS other_reward TEXT DEFAULT NULL;
 ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS host_description TEXT DEFAULT NULL;
+
+CREATE TABLE IF NOT EXISTS pay_sellers (
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  PRIMARY KEY (guild_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS payment_methods (
+  guild_id TEXT NOT NULL,
+  seller_id TEXT NOT NULL,
+  paypal TEXT,
+  venmo TEXT,
+  cashapp TEXT,
+  applepay TEXT,
+  zelle TEXT,
+  PRIMARY KEY (guild_id, seller_id)
+);
+
+CREATE TABLE IF NOT EXISTS payments (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  seller_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  amount NUMERIC NOT NULL,
+  amount_paid NUMERIC DEFAULT 0,
+  service TEXT NOT NULL,
+  method TEXT NOT NULL,
+  notes TEXT,
+  status TEXT DEFAULT 'unpaid',
+  paid_at TIMESTAMPTZ,
+  paid_notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
