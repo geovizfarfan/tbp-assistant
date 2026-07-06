@@ -198,10 +198,27 @@ module.exports = {
 
       if (sub === 'show') {
         await interaction.deferReply({ ephemeral: true });
-        const m = await getMethods(interaction.guild.id, interaction.user.id);
+        const seller = interaction.options.getUser('seller') || interaction.user;
+        const method = interaction.options.getString('method');
+        const m = await getMethods(interaction.guild.id, seller.id);
+
+        if (!m) return interaction.editReply(`No payment methods set for ${seller.username}.`);
+
+        let description;
+        if (method) {
+          const methodEmojis = { paypal: E.paypal, venmo: E.venmo, cashapp: E.cashapp, applepay: E.applepay, zelle: E.zelle };
+          const methodNames  = { paypal: 'PayPal', venmo: 'Venmo', cashapp: 'CashApp', applepay: 'Apple Pay', zelle: 'Zelle' };
+          const val = m[method];
+          if (!val) return interaction.editReply(`No ${methodNames[method]} set for ${seller.username}.`);
+          const isLink = val.startsWith('http');
+          description = `${methodEmojis[method]} **${methodNames[method]}:** ${isLink ? `[Pay Here](${val})` : val}`;
+        } else {
+          description = formatMethods(m);
+        }
+
         return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
-          .setTitle(`${E.payout} Your Payment Methods`)
-          .setDescription(formatMethods(m))]});
+          .setTitle(`${E.payout} ${seller.username}'s Payment Methods`)
+          .setDescription(description)]});
       }
     }
 
