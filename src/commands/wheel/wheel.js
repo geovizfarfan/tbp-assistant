@@ -93,14 +93,14 @@ async function handleWheelButton(interaction, client) {
 
     // Remove winner from entries
     const beforeCount = session.entries.length;
-    const userIdMatch = winnerText.match(/<@(d+)>/);
+    const userIdMatch = winnerText.match(/<@!?(\d+)>/);
     if (userIdMatch) {
-      session.entries = session.entries.filter(e => e.userId !== userIdMatch[1]);
-      session.eliminated.push(winnerText);
+      session.entries = session.entries.filter(en => en.userId !== userIdMatch[1]);
     } else {
-      session.entries = session.entries.filter(e => e.text !== winnerText.trim());
-      session.eliminated.push(winnerText);
+      session.entries = session.entries.filter(en => en.text !== winnerText.trim());
     }
+    session.eliminated.push(winnerText);
+    wheelSessions.set(sessionId, session);
 
     if (session.entries.length === 0) {
       return interaction.editReply({ content: 'No entries remaining!', components: [] });
@@ -113,7 +113,7 @@ async function handleWheelButton(interaction, client) {
       const embed = baseEmbed(e('trophies') + ' Last Man Standing', COLORS.tbppurple, null)
         .addFields(
           { name: '🏆 WINNER', value: lastDisplay, inline: false },
-          { name: '<a:x_:1523784948685733960> Eliminated', value: session.eliminated.join(', ').slice(0, 1024), inline: false },
+          { name: '<a:xemoji:1523784948685733960> Eliminated', value: session.eliminated.join(', ').slice(0, 1024), inline: false },
         )
         .setFooter({ text: 'Last one standing!' });
       wheelSessions.delete(sessionId);
@@ -129,11 +129,11 @@ async function handleWheelButton(interaction, client) {
     const winnerDisplay = formatWinnerMention(winnerEntry);
 
     const attachment = new AttachmentBuilder(result.buffer, { name: 'wheel.gif' });
-    const embed = baseEmbed('<a:x_:1523784948685733960> Remove & Spin', COLORS.tbppurple, null)
+    const embed = baseEmbed('<a:xemoji:1523784948685733960> Remove & Spin', COLORS.tbppurple, null)
       .setImage('attachment://wheel.gif')
       .addFields(
         { name: e('trophies') + ' Eliminated Next', value: winnerDisplay, inline: false },
-        { name: '<a:x_:1523784948685733960> Eliminated So Far', value: session.eliminated.join(', ').slice(0, 1024), inline: false },
+        { name: '<a:xemoji:1523784948685733960> Eliminated So Far', value: session.eliminated.join(', ').slice(0, 1024), inline: false },
       )
       .setFooter({ text: session.entries.length + ' entries remaining' });
 
@@ -244,7 +244,7 @@ function buildWheelButtons(sessionId, remaining) {
     new ButtonBuilder()
       .setCustomId(`wheel_remove:${sessionId}`)
       .setLabel('Remove & Spin')
-      .setEmoji('<a:x_:1523784948685733960>')
+      .setEmoji('<a:xemoji:1523784948685733960>')
       .setStyle(ButtonStyle.Danger)
       .setDisabled(remaining <= 1),
   );
