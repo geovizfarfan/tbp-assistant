@@ -197,7 +197,7 @@ module.exports = {
       }
 
       if (sub === 'show') {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply();
         const seller = interaction.options.getUser('seller') || interaction.user;
         const method = interaction.options.getString('method');
         const m = await getMethods(interaction.guild.id, seller.id);
