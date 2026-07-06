@@ -11,7 +11,6 @@ const { adjustBalance } = require('../../utils/playAndRegretDb');
 
 
 // Temporary wheel session store for re-roll/remove
-const wheelSessions = new Map();
 
 function buildPaletteOption(opt) {
   return opt.setName('palette').setDescription('Wheel color theme').setRequired(false).addChoices(...getPaletteChoices());
@@ -55,11 +54,18 @@ const DEFAULT_COLORS = ['#efbbff', '#d896ff', '#be29ec', '#800080', '#660066'];
 
 async function handleWheelButton(interaction, client) {
   const [action, sessionId] = interaction.customId.split(':');
-  const session = wheelSessions.get(sessionId);
-
-  if (!session) {
-    return interaction.reply({ content: 'Session expired. Please spin again.', ephemeral: true });
+  const sessionRes = await query('SELECT * FROM wheel_sessions WHERE session_id=$1', [sessionId]).catch(() => null);
+  const sessionRow = sessionRes?.rows?.[0];
+  if (!sessionRow) {
+    return interaction.reply({ content: 'Session expired — please spin again.', ephemeral: true });
   }
+  const session = {
+    entries: sessionRow.entries,
+    colors: sessionRow.colors,
+    embedColor: sessionRow.embed_color,
+    eliminated: sessionRow.eliminated,
+    guildId: sessionRow.guild_id,
+  };
 
   await interaction.deferUpdate();
 
@@ -100,7 +106,8 @@ async function handleWheelButton(interaction, client) {
       session.entries = session.entries.filter(en => en.text !== winnerText.trim());
     }
     session.eliminated.push(winnerText);
-    wheelSessions.set(sessionId, session);
+    await query('UPDATE wheel_sessions SET entries=$1, eliminated=$2 WHERE session_id=$3',
+      [JSON.stringify(session.entries), JSON.stringify(session.eliminated), sessionId]).catch(() => {});
 
     if (session.entries.length === 0) {
       return interaction.editReply({ content: 'No entries remaining!', components: [] });
@@ -116,7 +123,7 @@ async function handleWheelButton(interaction, client) {
           { name: '<a:x_:1523809293756010517>' + ' Eliminated', value: session.eliminated.join(', ').slice(0, 1024), inline: false },
         )
         .setFooter({ text: 'Last one standing!' });
-      wheelSessions.delete(sessionId);
+      await query('DELETE FROM wheel_sessions WHERE session_id=$1', [sessionId]).catch(() => {});
       return interaction.editReply({ embeds: [embed], files: [], components: [] });
     }
 
@@ -233,20 +240,20 @@ async function sendWheelResult(interaction, entries, colors, embedTitle, fieldLa
 }
 
 
-function buildWheelButtons(sessionId, remaining, removeUsed = false) {
+function buildWheelButtons(sessionId, remaining, mode = 'normal') {
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`wheel_reroll:${sessionId}`)
       .setLabel('Re-roll')
-      .setEmoji('<a:reroll:1523784999877349577>')
+      .setEmoji({ id: '1523809294867234886', name: 'reroll', animated: true })
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(remaining < 1 || removeUsed),
+      .setDisabled(remaining < 1 || mode === 'removed'),
     new ButtonBuilder()
       .setCustomId(`wheel_remove:${sessionId}`)
       .setLabel('Remove & Spin')
-      .setEmoji('1523784948685733960')
+      .setEmoji({ id: '1523809293756010517', name: 'x_', animated: true })
       .setStyle(ButtonStyle.Danger)
-      .setDisabled(remaining <= 1 || removeUsed),
+      .setDisabled(remaining <= 1 || mode === 'rerolled'),
   );
   return row;
 }
@@ -278,14 +285,8 @@ async function spinMembers(interaction) {
   // Store session temporarily
   const embedColor = (paletteKey && WHEEL_PALETTES[paletteKey]?.embedColor) || (colors && colors[0]) || COLORS.tbppurple;
   const sessionId = `wheel_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
-  wheelSessions.set(sessionId, {
-    entries: entryObjects,
-    colors,
-    embedColor,
-    eliminated: [],
-    guildId: interaction.guild?.id,
-  });
-  setTimeout(() => wheelSessions.delete(sessionId), 30 * 60 * 1000);
+  await query('INSERT INTO wheel_sessions (session_id, guild_id, entries, colors, embed_color, eliminated) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (session_id) DO UPDATE SET entries=$3, colors=$4, embed_color=$5, eliminated=$6',
+    [sessionId, interaction.guild?.id || null, JSON.stringify(entryObjects), JSON.stringify(colors), embedColor, JSON.stringify([])]).catch(() => {});
 
   const attachment = new AttachmentBuilder(result.buffer, { name: 'wheel.gif' });
   const embed = baseEmbed('<a:wheelspin:1523809296465526824>' + ' Wheel Spin \u2014 Members', COLORS.tbppurple, interaction.guild ? interaction.guild.name : null)
