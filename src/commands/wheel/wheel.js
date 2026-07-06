@@ -137,7 +137,7 @@ async function handleWheelButton(interaction, client) {
       )
       .setFooter({ text: session.entries.length + ' entries remaining' });
 
-    await interaction.editReply({ embeds: [embed], files: [attachment], components: [buildWheelButtons(sessionId, session.entries.length)] });
+    await interaction.editReply({ embeds: [embed], files: [attachment], components: [buildWheelButtons(sessionId, session.entries.length, true)] });
   }
 }
 
@@ -233,14 +233,14 @@ async function sendWheelResult(interaction, entries, colors, embedTitle, fieldLa
 }
 
 
-function buildWheelButtons(sessionId, remaining) {
+function buildWheelButtons(sessionId, remaining, removeUsed = false) {
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`wheel_reroll:${sessionId}`)
       .setLabel('Re-roll')
       .setEmoji('<a:reroll:1523784999877349577>')
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(remaining < 1),
+      .setDisabled(remaining < 1 || removeUsed),
     new ButtonBuilder()
       .setCustomId(`wheel_remove:${sessionId}`)
       .setLabel('Remove & Spin')
