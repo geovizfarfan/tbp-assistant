@@ -420,7 +420,33 @@ module.exports = {
       if (!thread) return interaction.reply({ content: '❌ Ticket thread not found.', ephemeral: true });
 
       await thread.members.add(interaction.user.id);
-      return interaction.reply({ content: `✅ You've joined ticket <#${thread.id}>!`, ephemeral: true });
+      await interaction.reply({ content: `✅ You've joined ticket <#${thread.id}>!`, ephemeral: true });
+
+      // Update staff embed
+      const ticket = ticketRes.rows[0];
+      if (ticket.staff_message_id && ticket.staff_channel_id_ref) {
+        const staffCh = client.channels.cache.get(ticket.staff_channel_id_ref);
+        if (staffCh) {
+          const staffMsg = await staffCh.messages.fetch(ticket.staff_message_id).catch(() => null);
+          if (staffMsg) {
+            const members = await thread.members.fetch().catch(() => null);
+            const staffMembers = members ? [...members.values()].filter(m => !m.guildMember?.user?.bot) : [];
+            const staffCount = staffMembers.length;
+            const staffList = staffMembers.map(m => `<@${m.id}>`).join(' ') || 'None yet';
+            const existingEmbed = staffMsg.embeds[0];
+            const { EmbedBuilder: EB } = require('discord.js');
+            const updatedEmbed = EB.from(existingEmbed);
+            const fields = existingEmbed.fields.map(f => {
+              if (f.name.includes('Staff In Ticket')) return { ...f, value: `${staffCount}` };
+              if (f.name.includes('Staff Members')) return { ...f, value: staffList };
+              return f;
+            });
+            updatedEmbed.setFields(fields);
+            await staffMsg.edit({ embeds: [updatedEmbed] }).catch(() => {});
+          }
+        }
+      }
+      return;
     }
 
     // ── Claim ticket ───────────────────────────────────────────────────────
@@ -682,9 +708,12 @@ module.exports = {
           .setTitle('<a:tickets:1523139713278672996> New Ticket Opened')
           .setDescription(`A new ticket has been opened by <@${interaction.user.id}>.`)
           .addFields(
-            { name: '<:member:1512912827424309278> Opened By', value: `<@${interaction.user.id}>`,  inline: true },
-            { name: '<a:tickets:1523139713278672996> Type',    value: typeName,                      inline: true },
-            { name: '<a:InfoSticker:1523152442437664879> Info', value: answers.join('\n') || '—',   inline: false },
+            { name: '<:member:1512912827424309278> Opened By',          value: `<@${interaction.user.id}>`,            inline: true },
+            { name: '<a:tickets:1523139713278672996> Type',             value: typeName,                               inline: true },
+            { name: '<a:RojasClock:1512912822613446787> Created At',    value: `<t:${Math.floor(Date.now()/1000)}:F>`, inline: true },
+            { name: '<:staff:1523146914701512764> Staff In Ticket',     value: '0',                                    inline: true },
+            { name: '<a:memberin:1523491508203032596> Staff Members',   value: 'None yet',                             inline: false },
+            { name: '<a:InfoSticker:1523152442437664879> Info',         value: answers.join('\n') || '—',             inline: false },
           )
           .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
           .setTimestamp();
@@ -697,11 +726,14 @@ module.exports = {
             .setStyle(ButtonStyle.Secondary)
         );
 
+        let staffMsg;
         if (config.staff_role_id) {
-          await staffCh.send({ content: `<@&${config.staff_role_id}>`, embeds: [staffEmbed], components: [joinRow] });
+          staffMsg = await staffCh.send({ content: `<@&${config.staff_role_id}>`, embeds: [staffEmbed], components: [joinRow] });
         } else {
-          await staffCh.send({ embeds: [staffEmbed], components: [joinRow] });
+          staffMsg = await staffCh.send({ embeds: [staffEmbed], components: [joinRow] });
         }
+        if (staffMsg) await query('UPDATE tickets SET staff_message_id=$1, staff_channel_id_ref=$2 WHERE id=$3',
+          [staffMsg.id, config.staff_channel_id, ticketId]).catch(() => {});
       }
     }
 
