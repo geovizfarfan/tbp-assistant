@@ -80,6 +80,14 @@ module.exports = {
         .setName('info')
         .setDescription('View current season info and completions')))
 
+    // ── add (host description/reward) ────────────────────────────────────
+    .addSubcommand(sub => sub
+      .setName('add')
+      .setDescription('Add a one-time reward or description to the next battle (staff/mod)')
+      .addChannelOption(o => o.setName('channel').setDescription('RR channel').setRequired(true))
+      .addStringOption(o => o.setName('other_reward').setDescription('Custom reward (e.g. Sticker, Nitro Basic)'))
+      .addStringOption(o => o.setName('description').setDescription('One-time battle description (use \\n for new lines)')))
+
     // ── stats ──────────────────────────────────────────────────────────────
     .addSubcommand(sub => sub
       .setName('stats')
@@ -347,6 +355,41 @@ module.exports = {
             { name: '<a:trophies:1512912823062364281> Completions', value: achieveLines },
           ).setTimestamp().setFooter({ text: interaction.guild.name })]});
       }
+    }
+
+    // ── /rr add ───────────────────────────────────────────────────────────
+    if (sub === 'add') {
+      await interaction.deferReply({ ephemeral: true });
+
+      // Check mod/admin role
+      const gcRes = await query('SELECT mod_role_id, admin_role_id FROM guild_config WHERE guild_id = $1', [interaction.guild.id]);
+      const gc = gcRes.rows[0];
+      const isAllowed = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
+        interaction.user.id === process.env.OWNER_ID ||
+        (gc?.mod_role_id && interaction.member.roles.cache.has(gc.mod_role_id)) ||
+        (gc?.admin_role_id && interaction.member.roles.cache.has(gc.admin_role_id));
+
+      if (!isAllowed) return interaction.editReply('❌ Staff/Mod only.');
+
+      const channel      = interaction.options.getChannel('channel');
+      const otherReward  = interaction.options.getString('other_reward') || null;
+      const description  = interaction.options.getString('description')?.replace(/\\n/g, '\n') || null;
+
+      // Check channel is configured
+      const cfgRes = await query('SELECT * FROM rr_channel_config WHERE channel_id = $1', [channel.id]);
+      if (!cfgRes.rows.length) return interaction.editReply('❌ That channel is not configured for RR tracking.');
+
+      await query(`UPDATE rr_channel_config SET other_reward = $1, host_description = $2 WHERE channel_id = $3`,
+        [otherReward, description, channel.id]);
+
+      const lines = [];
+      if (otherReward) lines.push(`🎁 **Other Reward:** ${otherReward}`);
+      if (description) lines.push(`📝 **Description:** ${description.slice(0, 50)}...`);
+
+      return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
+        .setTitle('<:rumble:1522372419338375299> Battle Info Added!')
+        .setDescription(lines.join('\n') || 'Nothing added.')
+        .setFooter({ text: 'This will appear in the next battle announcement and clear after.' })]});
     }
 
     // ── /rr stats ──────────────────────────────────────────────────────────
