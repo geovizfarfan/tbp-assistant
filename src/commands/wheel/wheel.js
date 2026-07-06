@@ -275,14 +275,16 @@ async function spinMembers(interaction) {
   const winnerEntry = entryObjects[result.winnerIndex];
   const winnerDisplay = formatWinnerMention(winnerEntry);
 
-  const sessionId = `${interaction.id}`;
+  const sessionId = `wheel_${interaction.id}`;
+  // Store session temporarily
+  const sessionId = `wheel_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
   wheelSessions.set(sessionId, {
     entries: entryObjects,
     colors,
     eliminated: [],
     guildId: interaction.guild?.id,
   });
-  setTimeout(() => wheelSessions.delete(sessionId), 30 * 60 * 1000); // 30min TTL
+  setTimeout(() => wheelSessions.delete(sessionId), 30 * 60 * 1000);
 
   const attachment = new AttachmentBuilder(result.buffer, { name: 'wheel.gif' });
   const embed = baseEmbed(e('controller') + ' Wheel Spin \u2014 Members', COLORS.tbppurple, interaction.guild ? interaction.guild.name : null)
