@@ -275,7 +275,6 @@ async function spinMembers(interaction) {
   const winnerEntry = entryObjects[result.winnerIndex];
   const winnerDisplay = formatWinnerMention(winnerEntry);
 
-  const sessionId = `wheel_${interaction.id}`;
   // Store session temporarily
   const sessionId = `wheel_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
   wheelSessions.set(sessionId, {
