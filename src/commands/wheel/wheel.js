@@ -142,6 +142,7 @@ async function handleWheelButton(interaction, client) {
 }
 
 module.exports = {
+  handleButton: handleWheelButton,
   data: new SlashCommandBuilder()
     .setName('wheel')
     .setDescription('Spin a wheel to pick a winner or prize')
