@@ -5,7 +5,7 @@ const {
 const { e } = require('../../utils/appEmojis');
 const { baseEmbed, COLORS } = require('../../utils/embeds');
 const { spinWheel } = require('../../utils/wheelRenderer');
-const { getPaletteColors, getPaletteChoices } = require('../../utils/wheelPalettes');
+const { getPaletteColors, getPaletteChoices, WHEEL_PALETTES } = require('../../utils/wheelPalettes');
 const { query } = require('../../utils/database');
 const { adjustBalance } = require('../../utils/playAndRegretDb');
 
@@ -76,7 +76,7 @@ async function handleWheelButton(interaction, client) {
     const winnerDisplay = formatWinnerMention(winnerEntry);
 
     const attachment = new AttachmentBuilder(result.buffer, { name: 'wheel.gif' });
-    const embed = baseEmbed(e('reroll') + ' Re-roll', COLORS.tbppurple, null)
+    const embed = baseEmbed(e('reroll') + ' Re-roll', session.embedColor || COLORS.tbppurple, null)
       .setImage('attachment://wheel.gif')
       .addFields({ name: e('trophies') + ' Winner', value: winnerDisplay, inline: false })
       .setFooter({ text: entries.length + ' entries remaining' });
@@ -110,7 +110,7 @@ async function handleWheelButton(interaction, client) {
     if (session.entries.length === 1) {
       const last = session.entries[0];
       const lastDisplay = formatWinnerMention(last);
-      const embed = baseEmbed(e('purplesparkle') + ' Last Man Standing', COLORS.tbppurple, null)
+      const embed = baseEmbed(e('purplesparkle') + ' Last Man Standing', session.embedColor || COLORS.tbppurple, null)
         .addFields(
           { name: '🏆 WINNER', value: lastDisplay, inline: false },
           { name: e('xemoji') + ' Eliminated', value: session.eliminated.join(', ').slice(0, 1024), inline: false },
@@ -129,7 +129,7 @@ async function handleWheelButton(interaction, client) {
     const winnerDisplay = formatWinnerMention(winnerEntry);
 
     const attachment = new AttachmentBuilder(result.buffer, { name: 'wheel.gif' });
-    const embed = baseEmbed(e('xemoji') + ' Remove & Spin', COLORS.tbppurple, null)
+    const embed = baseEmbed(e('xemoji') + ' Remove & Spin', session.embedColor || COLORS.tbppurple, null)
       .setImage('attachment://wheel.gif')
       .addFields(
         { name: e('trophies') + ' Eliminated Next', value: winnerDisplay, inline: false },
@@ -280,6 +280,7 @@ async function spinMembers(interaction) {
   wheelSessions.set(sessionId, {
     entries: entryObjects,
     colors,
+    embedColor,
     eliminated: [],
     guildId: interaction.guild?.id,
   });
