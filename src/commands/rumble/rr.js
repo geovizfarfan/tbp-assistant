@@ -196,21 +196,47 @@ module.exports = {
 
       // Log to admin log channel
       const adminLog = await getLogChannel(interaction.client, interaction.guild.id, 'admin');
-      if (adminLog) await adminLog.send({ embeds: [new EmbedBuilder().setColor(newColor)
-        .setTitle('<:rumble:1522372419338375299> RR Channel Configured')
-        .setDescription(`<#${channel.id}> was configured by <@${interaction.user.id}>`)
-        .addFields(
-          { name: '<a:trophies:1512912823062364281> Winner Role',     value: newWinnerRole ? `<@&${newWinnerRole}>` : '—',       inline: true },
-          { name: '<a:purplesparkle:1512912828489793626> Ping Roles', value: newPingRole1 ? `<@&${newPingRole1}>` : '—',         inline: true },
-          { name: '<a:moneybag:1522373120147849226> Reward',          value: newReward ? `${Number(newReward).toLocaleString()} sins` : '—', inline: true },
-          { name: '<a:rumblesword:1522372420894330921> Next Room',    value: newNextChannel ? `<#${newNextChannel}>` : '—',      inline: true },
-          { name: '✨ Reaction',                                      value: newReaction || '—',                                  inline: true },
-          { name: '🎨 Color',                                        value: newColor,                                             inline: true },
-          { name: '📝 Battle Title',                                 value: newTitle || '—',                                     inline: true },
-          { name: '<a:Fire:1522374930681823433> Image',              value: newImage ? '✓ Set' : '—',                            inline: true },
-        )
-        .setTimestamp().setFooter({ text: interaction.guild.name })
-      ]}).catch(() => {});
+      if (adminLog) {
+        if (ex) {
+          // Diff log — only show changed fields
+          const changes = [];
+          if (reward !== null && reward !== Number(ex.reward_amount)) changes.push({ name: '<a:moneybag:1522373120147849226> Reward', value: `${Number(newReward).toLocaleString()} sins`, inline: true });
+          if (winnerRole !== null && winnerRole?.id !== ex.winner_role_id) changes.push({ name: '<a:trophies:1512912823062364281> Winner Role', value: newWinnerRole ? `<@&${newWinnerRole}>` : '—', inline: true });
+          if (pingRole1 !== null && pingRole1?.id !== ex.ping_role1_id) changes.push({ name: '<a:purplesparkle:1512912828489793626> Ping Role 1', value: newPingRole1 ? `<@&${newPingRole1}>` : '—', inline: true });
+          if (nextChannel !== null && nextChannel?.id !== ex.next_channel_id) changes.push({ name: '<a:rumblesword:1522372420894330921> Next Room', value: newNextChannel ? `<#${newNextChannel}>` : '—', inline: true });
+          if (imageUrl && imageUrl !== ex.battle_image) changes.push({ name: '<a:Fire:1522374930681823433> Image', value: '✓ Updated', inline: true });
+          if (color && color !== ex.embed_color) changes.push({ name: '🎨 Color', value: newColor, inline: true });
+          if (reactionEmoji && reactionEmoji !== ex.reaction_emoji) changes.push({ name: '✨ Reaction', value: newReaction || '—', inline: true });
+          if (battleTitle && battleTitle !== ex.battle_title) changes.push({ name: '📝 Battle Title', value: newTitle || '—', inline: true });
+          if (description && description !== ex.battle_description) changes.push({ name: '📄 Description', value: newDesc ? newDesc.slice(0,50)+'...' : '—', inline: true });
+
+          if (changes.length) {
+            await adminLog.send({ embeds: [new EmbedBuilder().setColor(newColor)
+              .setTitle('<:rumble:1522372419338375299> RR Channel Updated')
+              .setDescription(`<#${channel.id}> updated by <@${interaction.user.id}>`)
+              .addFields(changes)
+              .setTimestamp().setFooter({ text: interaction.guild.name })
+            ]}).catch(() => {});
+          }
+        } else {
+          // Full log for new setup
+          await adminLog.send({ embeds: [new EmbedBuilder().setColor(newColor)
+            .setTitle('<:rumble:1522372419338375299> RR Channel Configured')
+            .setDescription(`<#${channel.id}> configured by <@${interaction.user.id}>`)
+            .addFields(
+              { name: '<a:trophies:1512912823062364281> Winner Role',     value: newWinnerRole ? `<@&${newWinnerRole}>` : '—', inline: true },
+              { name: '<a:purplesparkle:1512912828489793626> Ping Roles', value: newPingRole1 ? `<@&${newPingRole1}>` : '—', inline: true },
+              { name: '<a:moneybag:1522373120147849226> Reward',          value: newReward ? `${Number(newReward).toLocaleString()} sins` : '—', inline: true },
+              { name: '<a:rumblesword:1522372420894330921> Next Room',    value: newNextChannel ? `<#${newNextChannel}>` : '—', inline: true },
+              { name: '✨ Reaction',                                      value: newReaction || '—', inline: true },
+              { name: '🎨 Color',                                        value: newColor, inline: true },
+              { name: '📝 Battle Title',                                 value: newTitle || '—', inline: true },
+              { name: '<a:Fire:1522374930681823433> Image',              value: newImage ? '✓ Set' : '—', inline: true },
+            )
+            .setTimestamp().setFooter({ text: interaction.guild.name })
+          ]}).catch(() => {});
+        }
+      }
 
       return interaction.editReply({ embeds: [embed] });
     }
