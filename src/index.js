@@ -121,6 +121,9 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isButton() && interaction.customId.startsWith('pingpanel_')) {
     return pingPanelModule.handleButton(interaction);
   }
+  if (interaction.isStringSelectMenu() && interaction.customId === 'help_category') {
+    return helpModule.handleSelect(interaction, client);
+  }
   if (interaction.isButton() && interaction.customId.startsWith('ticket_')) {
     return ticketModule.handleButton(interaction, client);
   }
@@ -151,6 +154,7 @@ const grindModule = require('./commands/grind/grind');
 const pingPanelModule = require('./commands/pingpanel/pingpanel');
 const stickyModule    = require('./commands/sticky/sticky');
 const ticketModule    = require('./commands/ticket/ticket');
+const helpModule      = require('./commands/help/help');
 client.on('messageCreate', async (message) => {
   try { await handleRRMessage(message, client); }
   catch (e) { console.error('[RumbleRoyale]', e.message); }
