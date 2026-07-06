@@ -198,7 +198,17 @@ module.exports = {
       const adminLog = await getLogChannel(interaction.client, interaction.guild.id, 'admin');
       if (adminLog) await adminLog.send({ embeds: [new EmbedBuilder().setColor(newColor)
         .setTitle('<:rumble:1522372419338375299> RR Channel Configured')
-        .setDescription(`<#${channel.id}> configured by <@${interaction.user.id}>`)
+        .setDescription(`<#${channel.id}> was configured by <@${interaction.user.id}>`)
+        .addFields(
+          { name: '<a:trophies:1512912823062364281> Winner Role',     value: newWinnerRole ? `<@&${newWinnerRole}>` : '—',       inline: true },
+          { name: '<a:purplesparkle:1512912828489793626> Ping Roles', value: newPingRole1 ? `<@&${newPingRole1}>` : '—',         inline: true },
+          { name: '<a:moneybag:1522373120147849226> Reward',          value: newReward ? `${Number(newReward).toLocaleString()} sins` : '—', inline: true },
+          { name: '<a:rumblesword:1522372420894330921> Next Room',    value: newNextChannel ? `<#${newNextChannel}>` : '—',      inline: true },
+          { name: '✨ Reaction',                                      value: newReaction || '—',                                  inline: true },
+          { name: '🎨 Color',                                        value: newColor,                                             inline: true },
+          { name: '📝 Battle Title',                                 value: newTitle || '—',                                     inline: true },
+          { name: '<a:Fire:1522374930681823433> Image',              value: newImage ? '✓ Set' : '—',                            inline: true },
+        )
         .setTimestamp().setFooter({ text: interaction.guild.name })
       ]}).catch(() => {});
 
