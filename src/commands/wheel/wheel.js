@@ -51,7 +51,7 @@ function formatWinnerMention(winnerEntry) {
   return winnerEntry ? winnerEntry.text : 'Unknown';
 }
 
-const DEFAULT_COLORS = ['#ff00c1', '#9600ff', '#4900ff', '#00b8ff', '#00fff9', '#fff200'];
+const DEFAULT_COLORS = ['#efbbff', '#d896ff', '#be29ec', '#800080', '#660066'];
 
 async function handleWheelButton(interaction, client) {
   const [action, sessionId] = interaction.customId.split(':');
