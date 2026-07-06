@@ -88,7 +88,7 @@ async function handleWheelButton(interaction, client) {
   if (action === 'wheel_remove') {
     // Get current winner from last message embed
     const lastEmbed = interaction.message.embeds[0];
-    const winnerField = lastEmbed?.fields?.find(f => f.name.includes('Winner') || f.name.includes('Standing'));
+    const winnerField = lastEmbed?.fields?.find(f => f.name.includes('Winner') || f.name.includes('Standing') || f.name.includes('Eliminated Next'));
     const winnerText = winnerField?.value || '';
 
     // Remove winner from entries
@@ -244,7 +244,7 @@ function buildWheelButtons(sessionId, remaining) {
     new ButtonBuilder()
       .setCustomId(`wheel_remove:${sessionId}`)
       .setLabel('Remove & Spin')
-      .setEmoji('<a:xemoji:1523784948685733960>')
+      .setEmoji({ id: '1523784948685733960', name: 'xemoji', animated: true })
       .setStyle(ButtonStyle.Danger)
       .setDisabled(remaining <= 1),
   );
