@@ -31,8 +31,13 @@ async function setAFK(interaction) {
      ON CONFLICT (user_id) DO UPDATE SET reason=$2, set_at=NOW(), last_notified_at=NULL`,
     [interaction.user.id, reason]
   );
+  const { EmbedBuilder } = require('discord.js');
   await interaction.reply({
-    content: `<a:offline:1522061617213341786> You are now AFK globally — **${reason}**`,
+    embeds: [new EmbedBuilder()
+      .setColor('#d6c2ee')
+      .setDescription(`<a:purplesparkle:1512912828489793626> <@${interaction.user.id}> is <a:afk:1522096882036510791>\n> **Reason:**\n> ${reason}`)
+      .setFooter({ text: '𝚃𝙷𝙴 𝙱𝙾𝙰𝚁𝙳 𝙿𝚁𝙸𝙽𝙲𝙴𝚂𝚂 • AFK' })
+      .setTimestamp()],
     ephemeral: true,
   });
 }
