@@ -81,7 +81,7 @@ async function handleWheelButton(interaction, client) {
       .addFields({ name: e('trophies') + ' Winner', value: winnerDisplay, inline: false })
       .setFooter({ text: entries.length + ' entries remaining' });
 
-    await interaction.editReply({ embeds: [embed], files: [attachment], components: [buildWheelButtons(sessionId, entries.length)] });
+    await interaction.editReply({ embeds: [embed], files: [attachment], components: [buildWheelButtons(sessionId, entries.length, true)] });
   }
 
   // Remove & Spin — remove winner from pool, respin
@@ -246,7 +246,7 @@ function buildWheelButtons(sessionId, remaining, removeUsed = false) {
       .setLabel('Remove & Spin')
       .setEmoji('1523784948685733960')
       .setStyle(ButtonStyle.Danger)
-      .setDisabled(remaining <= 1),
+      .setDisabled(remaining <= 1 || removeUsed),
   );
   return row;
 }
