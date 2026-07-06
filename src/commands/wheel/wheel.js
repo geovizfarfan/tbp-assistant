@@ -136,7 +136,7 @@ async function handleWheelButton(interaction, client) {
     const winnerDisplay = formatWinnerMention(winnerEntry);
 
     const attachment = new AttachmentBuilder(result.buffer, { name: 'wheel.gif' });
-    const embed = baseEmbed('<a:x_:1523809293756010517>' + ' Remove & Spin', session.embedColor || COLORS.tbppurple, null)
+    const embed = baseEmbed('<a:wheelspin:1523809296465526824>' + ' Remove & Spin', session.embedColor || COLORS.tbppurple, null)
       .setImage('attachment://wheel.gif')
       .addFields(
         { name: e('trophies') + ' Eliminated Next', value: winnerDisplay, inline: false },
