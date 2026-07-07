@@ -36,9 +36,11 @@ function buildPanelComponents(types) {
   return rows;
 }
 
-function buildActionRow(ticketId) {
+function buildActionRow(ticketId, claimedBy = null) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`ticket_claim:${ticketId}`).setLabel('Claim Ticket').setEmoji('<:staff:1523146914701512764>').setStyle(ButtonStyle.Secondary),
+    claimedBy
+      ? new ButtonBuilder().setCustomId(`ticket_claim:${ticketId}`).setLabel('Claimed').setEmoji('<:checkmark:1512916161493205165>').setStyle(ButtonStyle.Secondary).setDisabled(true)
+      : new ButtonBuilder().setCustomId(`ticket_claim:${ticketId}`).setLabel('Claim Ticket').setEmoji('<:staff:1523146914701512764>').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`ticket_close_btn:${ticketId}`).setLabel('Close Ticket').setEmoji('<a:lock:1520456965245898903>').setStyle(ButtonStyle.Danger),
   );
 }
@@ -64,9 +66,116 @@ async function repostActionRow(thread, ticketId) {
     const oldMsg = await thread.messages.fetch(oldMsgId).catch(() => null);
     if (oldMsg) await oldMsg.delete().catch(() => {});
   }
+  // Look up current claim status so the reposted row reflects reality
+  const ticketRes = await query('SELECT claimed_by FROM tickets WHERE id = $1', [ticketId]).catch(() => null);
+  const claimedBy = ticketRes?.rows[0]?.claimed_by || null;
+
   // Repost
-  const msg = await thread.send({ components: [buildActionRow(ticketId)] }).catch(() => null);
+  const msg = await thread.send({ components: [buildActionRow(ticketId, claimedBy)] }).catch(() => null);
   if (msg) stickyMessages.set(ticketId, msg.id);
+}
+
+async function renderPanel(client, panel) {
+  const embed = new EmbedBuilder().setColor(panel.color).setTitle(panel.title).setDescription(panel.description);
+  let components = [];
+
+  if (panel.single_button) {
+    components = [new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`ticket_open_single:${panel.id}`)
+        .setLabel('Open Ticket')
+        .setEmoji('<a:tickets:1523139713278672996>')
+        .setStyle(ButtonStyle.Secondary)
+    )];
+  } else {
+    const typesRes = await query('SELECT * FROM ticket_types WHERE panel_id = $1 ORDER BY id', [panel.id]);
+    components = buildPanelComponents(typesRes.rows);
+  }
+
+  const ch = await client.channels.fetch(panel.channel_id).catch(() => null);
+  if (!ch) return null;
+
+  // Best-effort delete of the old message, in case it still exists
+  if (panel.message_id) {
+    const oldMsg = await ch.messages.fetch(panel.message_id).catch(() => null);
+    if (oldMsg) await oldMsg.delete().catch(() => {});
+  }
+
+  const newMsg = await ch.send({ embeds: [embed], components });
+  await query('UPDATE ticket_panels SET message_id = $1 WHERE id = $2', [newMsg.id, panel.id]);
+  return newMsg;
+}
+
+async function closeTicketFlow(interaction, client, ticketId, reason) {
+  const config = await getConfig(interaction.guild.id);
+
+  const ticketRes = await query('SELECT * FROM tickets WHERE id = $1', [ticketId]);
+  if (!ticketRes.rows.length) return interaction.editReply('❌ Ticket not found.');
+  const ticket = ticketRes.rows[0];
+
+  const transcript = await generateTranscript(interaction.channel);
+  const openTime   = new Date(ticket.created_at);
+
+  const transcriptEmbed = new EmbedBuilder()
+    .setColor('#d6c2ee')
+    .setTitle('Ticket Closed')
+    .addFields(
+      { name: '<a:tickets:1523139713278672996> Ticket ID',         value: `${ticket.id}`,                                    inline: true },
+      { name: '<:member:1512912827424309278> Opened By',           value: `<@${ticket.user_id}>`,                            inline: true },
+      { name: '<a:lock:1520456965245898903> Closed By',            value: `<@${interaction.user.id}>`,                       inline: true },
+      { name: '<a:RojasClock:1512912822613446787> Open Time',      value: `<t:${Math.floor(openTime.getTime()/1000)}:F>`,    inline: true },
+      { name: '<:staff:1523146914701512764> Claimed By',           value: ticket.claimed_by ? `<@${ticket.claimed_by}>` : 'Not claimed', inline: true },
+      { name: '<a:QuestionMark:1523147105772896426> Reason',       value: reason, inline: false },
+      { name: '<a:review:1523148059427471461> Rating',             value: ticket.rating ? Array(ticket.rating).fill('<:star:1523150031698264104>').join('') + ` (${ticket.rating}/5)` : 'Not yet rated', inline: false },
+    )
+    .setTimestamp();
+
+  const { AttachmentBuilder } = require('discord.js');
+  const buffer = Buffer.from(transcript, 'utf-8');
+  const attachment = new AttachmentBuilder(buffer, { name: `transcript-${interaction.channel.name}.txt` });
+
+  if (config?.transcript_channel_id) {
+    const tCh = client.channels.cache.get(config.transcript_channel_id);
+    if (tCh) {
+      const tMsg = await tCh.send({ embeds: [transcriptEmbed], files: [attachment] }).catch(() => null);
+      if (tMsg) await query('UPDATE tickets SET transcript_message_id=$1, transcript_channel_id=$2 WHERE id=$3',
+        [tMsg.id, config.transcript_channel_id, ticket.id]).catch(() => {});
+    }
+  }
+
+  const opener = await interaction.guild.members.fetch(ticket.user_id).catch(() => null);
+  if (opener) {
+    const buf2 = Buffer.from(transcript, 'utf-8');
+    const att2 = new AttachmentBuilder(buf2, { name: `transcript-${interaction.channel.name}.txt` });
+    await opener.send({
+      embeds: [new EmbedBuilder().setColor('#d6c2ee')
+        .setTitle('<a:tickets:1523139713278672996> Your Ticket Has Been Closed')
+        .setDescription(`Your ticket in **${interaction.guild.name}** has been closed. Transcript attached.`)
+        .setTimestamp()],
+      files: [att2]
+    }).catch(() => {});
+
+    const ratingRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:1`).setEmoji('<:star:1523150031698264104>').setLabel('1').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:2`).setEmoji('<:star:1523150031698264104>').setLabel('2').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:3`).setEmoji('<:star:1523150031698264104>').setLabel('3').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:4`).setEmoji('<:star:1523150031698264104>').setLabel('4').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:5`).setEmoji('<:star:1523150031698264104>').setLabel('5').setStyle(ButtonStyle.Secondary),
+    );
+    await opener.send({
+      embeds: [new EmbedBuilder().setColor('#d6c2ee')
+        .setTitle('How was your experience?')
+        .setDescription('Please rate your support experience.')],
+      components: [ratingRow]
+    }).catch(() => {});
+  }
+
+  await query('UPDATE tickets SET status=$1, closed_at=NOW(), closed_by=$2, close_reason=$3 WHERE id=$4',
+    ['closed', interaction.user.id, reason, ticket.id]);
+
+  stickyMessages.delete(String(ticket.id));
+  await interaction.editReply('✅ Ticket closed. Transcript sent.');
+  setTimeout(() => interaction.channel.delete().catch(() => {}), 3000);
 }
 
 // ── Module ────────────────────────────────────────────────────────────────────
@@ -143,6 +252,16 @@ module.exports = {
       .setName('remove')
       .setDescription('Remove a user from the current ticket thread')
       .addUserOption(o => o.setName('user').setDescription('User to remove').setRequired(true)))
+
+    .addSubcommand(sub => sub
+      .setName('close')
+      .setDescription('Close the ticket in this thread (run inside the ticket)')
+      .addStringOption(o => o.setName('reason').setDescription('Reason for closing')))
+
+    .addSubcommand(sub => sub
+      .setName('repost')
+      .setDescription('Repost a panel (e.g. if its message was accidentally deleted)')
+      .addStringOption(o => o.setName('panel_id').setDescription('Panel ID').setRequired(true)))
 
     .addSubcommand(sub => sub
       .setName('removepanel')
@@ -400,6 +519,36 @@ module.exports = {
     }
 
     // ── /ticket removepanel ──────────────────────────────────────────────
+    if (sub === 'close') {
+      const config = await getConfig(interaction.guild.id);
+      if (!await isStaff(interaction.member, config))
+        return interaction.reply({ content: '❌ Staff only.', ephemeral: true });
+
+      const ticketRes = await query('SELECT * FROM tickets WHERE channel_id = $1 AND status = $2', [interaction.channel.id, 'open']);
+      if (!ticketRes.rows.length)
+        return interaction.reply({ content: '❌ This isn\'t an open ticket thread.', ephemeral: true });
+
+      await interaction.deferReply({ ephemeral: true });
+      const reason = interaction.options.getString('reason') || 'No reason provided';
+      return closeTicketFlow(interaction, interaction.client, ticketRes.rows[0].id, reason);
+    }
+
+    if (sub === 'repost') {
+      if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
+          interaction.user.id !== process.env.OWNER_ID)
+        return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
+      await interaction.deferReply({ ephemeral: true });
+
+      const panelId = interaction.options.getString('panel_id');
+      const panelRes = await query('SELECT * FROM ticket_panels WHERE id=$1 AND guild_id=$2', [panelId, interaction.guild.id]);
+      if (!panelRes.rows.length) return interaction.editReply('❌ Panel not found.');
+
+      const newMsg = await renderPanel(interaction.client, panelRes.rows[0]);
+      if (!newMsg) return interaction.editReply('❌ Could not find the panel\'s channel — has it been deleted?');
+
+      return interaction.editReply(`✅ Panel \`${panelId}\` reposted in <#${panelRes.rows[0].channel_id}>.`);
+    }
+
     if (sub === 'removepanel') {
       if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
           interaction.user.id !== process.env.OWNER_ID)
@@ -624,76 +773,7 @@ module.exports = {
       await interaction.deferReply({ ephemeral: true });
       const ticketId = interaction.customId.split(':')[1];
       const reason   = interaction.fields.getTextInputValue('reason') || 'No reason provided';
-      const config   = await getConfig(interaction.guild.id);
-
-      const ticketRes = await query('SELECT * FROM tickets WHERE id = $1', [ticketId]);
-      if (!ticketRes.rows.length) return interaction.editReply('❌ Ticket not found.');
-      const ticket = ticketRes.rows[0];
-
-      const transcript = await generateTranscript(interaction.channel);
-      const openTime   = new Date(ticket.created_at);
-
-      const transcriptEmbed = new EmbedBuilder()
-        .setColor('#d6c2ee')
-        .setTitle('Ticket Closed')
-        .addFields(
-          { name: '<a:tickets:1523139713278672996> Ticket ID',         value: `${ticket.id}`,                                    inline: true },
-          { name: '<:member:1512912827424309278> Opened By',           value: `<@${ticket.user_id}>`,                            inline: true },
-          { name: '<a:lock:1520456965245898903> Closed By',            value: `<@${interaction.user.id}>`,                       inline: true },
-          { name: '<a:RojasClock:1512912822613446787> Open Time',      value: `<t:${Math.floor(openTime.getTime()/1000)}:F>`,    inline: true },
-          { name: '<:staff:1523146914701512764> Claimed By',           value: ticket.claimed_by ? `<@${ticket.claimed_by}>` : 'Not claimed', inline: true },
-          { name: '<a:QuestionMark:1523147105772896426> Reason',       value: reason, inline: false },
-          { name: '<a:review:1523148059427471461> Rating',             value: ticket.rating ? Array(ticket.rating).fill('<:star:1523150031698264104>').join('') + ` (${ticket.rating}/5)` : 'Not yet rated', inline: false },
-        )
-        .setTimestamp();
-
-      const { AttachmentBuilder } = require('discord.js');
-      const buffer = Buffer.from(transcript, 'utf-8');
-      const attachment = new AttachmentBuilder(buffer, { name: `transcript-${interaction.channel.name}.txt` });
-
-      if (config?.transcript_channel_id) {
-        const tCh = client.channels.cache.get(config.transcript_channel_id);
-        if (tCh) {
-          const tMsg = await tCh.send({ embeds: [transcriptEmbed], files: [attachment] }).catch(() => null);
-          if (tMsg) await query('UPDATE tickets SET transcript_message_id=$1, transcript_channel_id=$2 WHERE id=$3',
-            [tMsg.id, config.transcript_channel_id, ticket.id]).catch(() => {});
-        }
-      }
-
-      const opener = await interaction.guild.members.fetch(ticket.user_id).catch(() => null);
-      if (opener) {
-        const buf2 = Buffer.from(transcript, 'utf-8');
-        const att2 = new AttachmentBuilder(buf2, { name: `transcript-${interaction.channel.name}.txt` });
-        await opener.send({
-          embeds: [new EmbedBuilder().setColor('#d6c2ee')
-            .setTitle('<a:tickets:1523139713278672996> Your Ticket Has Been Closed')
-            .setDescription(`Your ticket in **${interaction.guild.name}** has been closed. Transcript attached.`)
-            .setTimestamp()],
-          files: [att2]
-        }).catch(() => {});
-
-        const ratingRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:1`).setEmoji('<:star:1523150031698264104>').setLabel('1').setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:2`).setEmoji('<:star:1523150031698264104>').setLabel('2').setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:3`).setEmoji('<:star:1523150031698264104>').setLabel('3').setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:4`).setEmoji('<:star:1523150031698264104>').setLabel('4').setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId(`ticket_rate:${ticket.id}:5`).setEmoji('<:star:1523150031698264104>').setLabel('5').setStyle(ButtonStyle.Secondary),
-        );
-        await opener.send({
-          embeds: [new EmbedBuilder().setColor('#d6c2ee')
-            .setTitle('How was your experience?')
-            .setDescription('Please rate your support experience.')],
-          components: [ratingRow]
-        }).catch(() => {});
-      }
-
-      await query('UPDATE tickets SET status=$1, closed_at=NOW(), closed_by=$2, close_reason=$3 WHERE id=$4',
-        ['closed', interaction.user.id, reason, ticket.id]);
-
-      stickyMessages.delete(String(ticket.id));
-      await interaction.editReply('✅ Ticket closed. Transcript sent.');
-      setTimeout(() => interaction.channel.delete().catch(() => {}), 3000);
-      return;
+      return closeTicketFlow(interaction, client, ticketId, reason);
     }
 
     // ── Open ticket modal ──────────────────────────────────────────────────
