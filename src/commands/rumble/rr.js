@@ -31,6 +31,10 @@ module.exports = {
       .addRoleOption(o => o.setName('ping_role2').setDescription('Second ping role'))
       .addRoleOption(o => o.setName('ping_role3').setDescription('Third ping role'))
       .addChannelOption(o => o.setName('next_channel').setDescription('Next battle room'))
+      .addStringOption(o => o.setName('announce_style').setDescription('Battle announcement format').addChoices(
+        { name: 'Embed (default)', value: 'embed' },
+        { name: 'Ping Only (no embed)', value: 'ping' },
+      ))
       .addAttachmentOption(o => o.setName('image').setDescription('Upload image for battle announcement'))
       .addStringOption(o => o.setName('image_url').setDescription('Or paste image URL'))
       .addStringOption(o => o.setName('embed_color').setDescription('Embed color hex'))
@@ -124,6 +128,7 @@ module.exports = {
       const pingRole2    = interaction.options.getRole('ping_role2');
       const pingRole3    = interaction.options.getRole('ping_role3');
       const nextChannel  = interaction.options.getChannel('next_channel');
+      const announceStyle = interaction.options.getString('announce_style');
       const imageAttach  = interaction.options.getAttachment('image');
       const imageUrl     = imageAttach?.url || interaction.options.getString('image_url');
       const color        = interaction.options.getString('embed_color');
@@ -135,9 +140,9 @@ module.exports = {
       const existing = await query('SELECT * FROM rr_channel_config WHERE channel_id = $1', [channel.id]);
       const ex = existing.rows[0];
 
-      if (!ex && !reward && !pingRole1) {
+      if (!ex && !pingRole1) {
         return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#ff4444')
-          .setDescription('❌ First time setup requires at least `reward` and `ping_role1`.')]});
+          .setDescription('❌ First time setup requires at least `ping_role1`. (`reward` is optional.)')]});
       }
 
       const newReward      = reward ?? ex?.reward_amount;
@@ -146,6 +151,7 @@ module.exports = {
       const newPingRole2   = pingRole2 !== null ? pingRole2?.id : ex?.ping_role2_id;
       const newPingRole3   = pingRole3 !== null ? pingRole3?.id : ex?.ping_role3_id;
       const newNextChannel = nextChannel !== null ? nextChannel?.id : ex?.next_channel_id;
+      const newAnnounceStyle = announceStyle ?? ex?.announce_style ?? 'embed';
       const newImage       = imageUrl ?? ex?.battle_image;
       const newColor       = color ?? ex?.embed_color ?? '#d6c2ee';
       const newReaction    = reactionEmoji ?? ex?.reaction_emoji;
@@ -156,8 +162,8 @@ module.exports = {
         INSERT INTO rr_channel_config
           (channel_id, guild_id, winner_role_id, ping_role1_id, ping_role2_id, ping_role3_id,
            next_channel_id, reward_amount, battle_image, embed_color, reaction_emoji,
-           battle_title, battle_description, total_games, total_players)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,0,0)
+           battle_title, battle_description, announce_style, total_games, total_players)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,0,0)
         ON CONFLICT (channel_id) DO UPDATE SET
           winner_role_id     = EXCLUDED.winner_role_id,
           ping_role1_id      = EXCLUDED.ping_role1_id,
@@ -169,12 +175,13 @@ module.exports = {
           embed_color        = EXCLUDED.embed_color,
           reaction_emoji     = EXCLUDED.reaction_emoji,
           battle_title       = EXCLUDED.battle_title,
-          battle_description = EXCLUDED.battle_description
+          battle_description = EXCLUDED.battle_description,
+          announce_style     = EXCLUDED.announce_style
       `, [
         channel.id, interaction.guild.id,
         newWinnerRole || null, newPingRole1 || null, newPingRole2 || null, newPingRole3 || null,
         newNextChannel || null, newReward || null, newImage || null,
-        newColor, newReaction || null, newTitle || null, newDesc || null,
+        newColor, newReaction || null, newTitle || null, newDesc || null, newAnnounceStyle,
       ]);
 
       const pingList = [newPingRole1, newPingRole2, newPingRole3].filter(Boolean)
@@ -190,6 +197,7 @@ module.exports = {
           { name: '<a:rumblesword:1522372420894330921> Next Room',    value: newNextChannel ? `<#${newNextChannel}>` : '—', inline: true },
           { name: '✨ Reaction',                                      value: newReaction || '—',                           inline: true },
           { name: '🎨 Color',                                        value: newColor,                                      inline: true },
+          { name: '📣 Announce Style',                               value: newAnnounceStyle === 'ping' ? 'Ping Only' : 'Embed', inline: true },
           { name: '📝 Title',                                        value: newTitle || '—',                               inline: false },
           { name: '📄 Description',                                  value: newDesc ? newDesc.slice(0,100) : '—',          inline: false },
         );
@@ -209,6 +217,7 @@ module.exports = {
           if (reactionEmoji && reactionEmoji !== ex.reaction_emoji) changes.push({ name: '✨ Reaction', value: newReaction || '—', inline: true });
           if (battleTitle && battleTitle !== ex.battle_title) changes.push({ name: '📝 Battle Title', value: newTitle || '—', inline: true });
           if (description && description !== ex.battle_description) changes.push({ name: '📄 Description', value: newDesc ? newDesc.slice(0,50)+'...' : '—', inline: true });
+          if (announceStyle && announceStyle !== (ex.announce_style || 'embed')) changes.push({ name: '📣 Announce Style', value: newAnnounceStyle === 'ping' ? 'Ping Only' : 'Embed', inline: true });
 
           if (changes.length) {
             await adminLog.send({ embeds: [new EmbedBuilder().setColor(newColor)
@@ -232,6 +241,7 @@ module.exports = {
               { name: '🎨 Color',                                        value: newColor, inline: true },
               { name: '📝 Battle Title',                                 value: newTitle || '—', inline: true },
               { name: '<a:Fire:1522374930681823433> Image',              value: newImage ? '✓ Set' : '—', inline: true },
+              { name: '📣 Announce Style',                               value: newAnnounceStyle === 'ping' ? 'Ping Only' : 'Embed', inline: true },
             )
             .setTimestamp().setFooter({ text: interaction.guild.name })
           ]}).catch(() => {});

@@ -186,6 +186,23 @@ async function handleMessage(message, client) {
       }
     }
 
+    const pings = [config.ping_role1_id, config.ping_role2_id, config.ping_role3_id]
+      .filter(Boolean).map(id => `<@&${id}>`).join(' ');
+
+    // ── Ping-only announcement (no embed) ──────────────────────────────────
+    if (config.announce_style === 'ping') {
+      const nextLine = config.next_channel_id
+        ? `<a:rumblesword:1522372420894330921> Next Channel: <#${config.next_channel_id}>`
+        : `<a:rumblesword:1522372420894330921> Next Channel: —`;
+      await message.channel.send({ content: `${pings}\n${nextLine}` });
+
+      // Clear one-time host description and other reward after posting
+      if (config.host_description || config.other_reward) {
+        await query('UPDATE rr_channel_config SET host_description = NULL, other_reward = NULL WHERE channel_id = $1', [message.channel.id]).catch(() => {});
+      }
+      return;
+    }
+
     const descLines = [];
     if (!config.battle_title) descLines.push(`<:rumble:1522372419338375299> Rumble Royale — BATTLE TIME!`);
     if (config.battle_description) {
@@ -193,7 +210,7 @@ async function handleMessage(message, client) {
     } else {
       descLines.push('');
     }
-    descLines.push(`<a:moneybag:1522373120147849226> **Reward:** ${config.reward_amount ? Number(config.reward_amount).toLocaleString() : '?'} <:sins:1522291331672703100> (sins)`);
+    if (config.reward_amount) descLines.push(`<a:moneybag:1522373120147849226> **Reward:** ${Number(config.reward_amount).toLocaleString()} <:sins:1522291331672703100> (sins)`);
     if (config.winner_role_id) descLines.push(`<a:trophies:1512912823062364281> **Winner Role:** <@&${config.winner_role_id}>`);
     if (config.next_channel_id) descLines.push(`<a:rumblesword:1522372420894330921> **Next Room:** <#${config.next_channel_id}>`);
 
@@ -208,9 +225,6 @@ async function handleMessage(message, client) {
       .setFooter({ text: `${message.guild.name} • Hosted by: ${parsed.host}${parsed.era ? ` • Era: ${parsed.era}` : ''}` });
 
     if (config.battle_image) battleEmbed.setImage(config.battle_image);
-
-    const pings = [config.ping_role1_id, config.ping_role2_id, config.ping_role3_id]
-      .filter(Boolean).map(id => `<@&${id}>`).join(' ');
 
     await message.channel.send({ content: pings || '', embeds: [battleEmbed] });
 
@@ -281,7 +295,7 @@ async function handleMessage(message, client) {
 
     const descLines = [
       `${winnerMention} has won Rumble Royale! <a:confetti:1512912825935335484>`,
-      `<a:moneybag:1522373120147849226> **Reward:** ${config.reward_amount ? Number(config.reward_amount).toLocaleString() : '?'} <a:SINS:1522338148380704910> (sins)`,
+      config.reward_amount ? `<a:moneybag:1522373120147849226> **Reward:** ${Number(config.reward_amount).toLocaleString()} <a:SINS:1522338148380704910> (sins)` : null,
       walletBalance !== null ? `<a:atm:1522656210439114902> **Wallet:** ${Number(walletBalance).toLocaleString()} <a:SINS:1522338148380704910> (sins)` : null,
     ].filter(Boolean);
 
