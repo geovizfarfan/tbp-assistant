@@ -98,7 +98,7 @@ async function setChannels(interaction) {
   }
   await query(
     `INSERT INTO guild_config (guild_id, schedule_channel_id, winner_channel_id, ticket_channel_id, staff_notif_channel_id, game_transcript_channel_id, boost_channel_id)
-     VALUES ($1,$2,$3,$4,$5,$6)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
      ON CONFLICT (guild_id) DO UPDATE SET
        schedule_channel_id        = COALESCE($2, guild_config.schedule_channel_id),
        winner_channel_id          = COALESCE($3, guild_config.winner_channel_id),
