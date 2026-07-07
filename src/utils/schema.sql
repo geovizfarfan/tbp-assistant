@@ -474,10 +474,30 @@ ALTER TABLE tickets ADD COLUMN IF NOT EXISTS staff_channel_id_ref TEXT DEFAULT N
 ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS other_reward TEXT DEFAULT NULL;
 ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS host_description TEXT DEFAULT NULL;
 
-ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS other_reward TEXT DEFAULT NULL;
-ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS host_description TEXT DEFAULT NULL;
+ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS announce_style TEXT DEFAULT 'embed';
 
-CREATE TABLE IF NOT EXISTS pay_sellers (
+CREATE TABLE IF NOT EXISTS role_panels (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  message_id TEXT,
+  name TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  color TEXT DEFAULT '#d6c2ee',
+  style TEXT NOT NULL DEFAULT 'dropdown',
+  UNIQUE (guild_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS role_panel_options (
+  id SERIAL PRIMARY KEY,
+  panel_id INTEGER NOT NULL REFERENCES role_panels(id) ON DELETE CASCADE,
+  role_id TEXT NOT NULL,
+  emoji TEXT NOT NULL,
+  label TEXT NOT NULL,
+  position INTEGER NOT NULL DEFAULT 0,
+  UNIQUE (panel_id, role_id)
+);
   guild_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   PRIMARY KEY (guild_id, user_id)
