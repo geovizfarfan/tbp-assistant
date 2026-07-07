@@ -474,6 +474,8 @@ ALTER TABLE tickets ADD COLUMN IF NOT EXISTS staff_channel_id_ref TEXT DEFAULT N
 ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS other_reward TEXT DEFAULT NULL;
 ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS host_description TEXT DEFAULT NULL;
 
+ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS other_reward TEXT DEFAULT NULL;
+ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS host_description TEXT DEFAULT NULL;
 ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS announce_style TEXT DEFAULT 'embed';
 
 CREATE TABLE IF NOT EXISTS role_panels (
@@ -498,6 +500,8 @@ CREATE TABLE IF NOT EXISTS role_panel_options (
   position INTEGER NOT NULL DEFAULT 0,
   UNIQUE (panel_id, role_id)
 );
+
+CREATE TABLE IF NOT EXISTS pay_sellers (
   guild_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   PRIMARY KEY (guild_id, user_id)
