@@ -111,6 +111,17 @@ module.exports = {
       .addStringOption(o => o.setName('name').setDescription('Ticket type name to remove').setRequired(true)))
 
     .addSubcommand(sub => sub
+      .setName('edittype')
+      .setDescription('Edit an existing ticket type button (only updates fields you provide)')
+      .addStringOption(o => o.setName('panel_id').setDescription('Panel ID').setRequired(true))
+      .addStringOption(o => o.setName('name').setDescription('Current exact button name to edit').setRequired(true))
+      .addStringOption(o => o.setName('new_name').setDescription('New button label'))
+      .addStringOption(o => o.setName('emoji').setDescription('New emoji for the button'))
+      .addStringOption(o => o.setName('description').setDescription('New modal description'))
+      .addStringOption(o => o.setName('questions').setDescription('New form questions separated by |'))
+      .addStringOption(o => o.setName('open_message').setDescription('New custom message shown when this ticket type opens')))
+
+    .addSubcommand(sub => sub
       .setName('edit')
       .setDescription('Edit an existing ticket panel')
       .addStringOption(o => o.setName('panel_id').setDescription('Panel ID to edit').setRequired(true))
@@ -255,7 +266,11 @@ module.exports = {
 
       const panelId = interaction.options.getString('panel_id');
       const name    = interaction.options.getString('name');
-      await query('DELETE FROM ticket_types WHERE panel_id = $1 AND guild_id = $2 AND name = $3', [panelId, interaction.guild.id, name]);
+      const del = await query('DELETE FROM ticket_types WHERE panel_id = $1 AND guild_id = $2 AND name = $3 RETURNING id', [panelId, interaction.guild.id, name]);
+
+      if (!del.rows.length) {
+        return interaction.editReply(`❌ No ticket type named exactly **${name}** found on panel \`${panelId}\`. Run \`/ticket panels\` to see exact current names.`);
+      }
 
       const panelRes = await query('SELECT * FROM ticket_panels WHERE id = $1', [panelId]);
       if (panelRes.rows.length) {
@@ -269,6 +284,63 @@ module.exports = {
         }
       }
       return interaction.editReply(`✅ Ticket type **${name}** removed.`);
+    }
+
+    // ── /ticket edittype ────────────────────────────────────────────────────
+    if (sub === 'edittype') {
+      if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
+          interaction.user.id !== process.env.OWNER_ID)
+        return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
+      await interaction.deferReply({ ephemeral: true });
+
+      const panelId    = interaction.options.getString('panel_id');
+      const name       = interaction.options.getString('name');
+      const newName    = interaction.options.getString('new_name');
+      const emoji      = interaction.options.getString('emoji');
+      const description = interaction.options.getString('description');
+      const questions  = interaction.options.getString('questions');
+      const openMessage = interaction.options.getString('open_message');
+
+      const existingRes = await query(
+        'SELECT * FROM ticket_types WHERE panel_id = $1 AND guild_id = $2 AND name = $3',
+        [panelId, interaction.guild.id, name]
+      );
+      if (!existingRes.rows.length) {
+        return interaction.editReply(`❌ No ticket type named exactly **${name}** found on panel \`${panelId}\`. Run \`/ticket panels\` to see exact current names.`);
+      }
+      const ex = existingRes.rows[0];
+
+      const updated = {
+        name: newName ?? ex.name,
+        emoji: emoji ?? ex.emoji,
+        description: description ?? ex.description,
+        questions: questions ?? ex.questions,
+        open_message: openMessage ?? ex.open_message,
+      };
+
+      await query(
+        'UPDATE ticket_types SET name = $1, emoji = $2, description = $3, questions = $4, open_message = $5 WHERE id = $6',
+        [updated.name, updated.emoji, updated.description, updated.questions, updated.open_message, ex.id]
+      );
+
+      const panelRes = await query('SELECT * FROM ticket_panels WHERE id = $1', [panelId]);
+      if (panelRes.rows.length) {
+        const panel = panelRes.rows[0];
+        const typesRes = await query('SELECT * FROM ticket_types WHERE panel_id = $1 ORDER BY id', [panelId]);
+        const components = buildPanelComponents(typesRes.rows);
+        const ch = interaction.client.channels.cache.get(panel.channel_id);
+        if (ch && panel.message_id) {
+          const msg = await ch.messages.fetch(panel.message_id).catch(() => null);
+          if (msg) await msg.edit({ components }).catch(() => {});
+        }
+      }
+
+      return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
+        .setDescription(`✅ Ticket type updated.`)
+        .addFields(
+          { name: 'Label', value: updated.name, inline: true },
+          { name: 'Emoji', value: updated.emoji || '—', inline: true },
+        )]});
     }
 
     // ── /ticket edit ──────────────────────────────────────────────────────
