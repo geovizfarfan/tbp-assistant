@@ -381,10 +381,22 @@ module.exports = {
       await interaction.deferReply({ ephemeral: true });
       const res = await query('SELECT * FROM ticket_panels WHERE guild_id = $1 ORDER BY id', [interaction.guild.id]);
       if (!res.rows.length) return interaction.editReply('No ticket panels found.');
-      const lines = res.rows.map(p => `**ID \`${p.id}\`** — ${p.title} in <#${p.channel_id}>`).join('\n');
-      return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
-        .setTitle('<a:tickets:1523139713278672996> Ticket Panels')
-        .setDescription(lines)]});
+
+      const embed = new EmbedBuilder().setColor('#d6c2ee')
+        .setTitle('<a:tickets:1523139713278672996> Ticket Panels');
+
+      for (const p of res.rows) {
+        const typesRes = await query('SELECT * FROM ticket_types WHERE panel_id = $1 ORDER BY id', [p.id]);
+        const typeLines = typesRes.rows.length
+          ? typesRes.rows.map(t => `${t.emoji || ''} \`${t.name}\``).join('\n')
+          : '*No types added yet.*';
+        embed.addFields({
+          name: `ID \`${p.id}\` — ${p.title} (<#${p.channel_id}>)`,
+          value: typeLines,
+        });
+      }
+
+      return interaction.editReply({ embeds: [embed] });
     }
 
     // ── /ticket removepanel ──────────────────────────────────────────────
