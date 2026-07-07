@@ -327,12 +327,28 @@ async function listGames(interaction) {
     : `${e('controller')} Your ${showEnded ? 'Ended' : 'Active'} Games`;
   const embed = baseEmbed(title, COLORS.lightpurple, interaction.guild?.name);
 
+  // Discord hard-caps total embed content at 6000 chars, and 1024 per field value.
+  // Truncate long text and stop adding fields early if we're approaching the limit,
+  // rather than letting the whole reply fail with MAX_EMBED_SIZE_EXCEEDED.
+  const MAX_TOTAL = 5500; // leave headroom for title/footer
+  let runningTotal = title.length;
+  let shown = 0;
+
   for (const g of res.rows) {
     const payout = g.payout_status === 'paid' ? `${e('checkmark')} Paid` : g.payout_status === 'n/a' ? 'N/A' : g.payout_status === 'not_claimed' ? `${e('wrong')} Not Claimed` : g.payout_status === 'late' ? `${e('atention')} Late` : `${e('Loading')} Pending`;
-    embed.addFields({
-      name: `#${g.id} — ${g.game_name}`,
-      value: `${e('purplesparkle')} Prize: ${g.prize || 'N/A'} | Payout: ${payout}${g.message_link ? ` | [Jump](${g.message_link})` : ''}`,
-    });
+    const prizeText = (g.prize || 'N/A').slice(0, 150);
+    const name = `#${g.id} — ${g.game_name}`.slice(0, 256);
+    const value = (`${e('purplesparkle')} Prize: ${prizeText} | Payout: ${payout}${g.message_link ? ` | [Jump](${g.message_link})` : ''}`).slice(0, 1024);
+
+    if (runningTotal + name.length + value.length > MAX_TOTAL) break;
+
+    embed.addFields({ name, value });
+    runningTotal += name.length + value.length;
+    shown++;
+  }
+
+  if (shown < res.rows.length) {
+    embed.setFooter({ text: `Showing ${shown} of ${res.rows.length} — narrow with /game list ended:true or check individual game IDs.` });
   }
 
   await interaction.editReply({ embeds: [embed] });
