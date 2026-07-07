@@ -106,6 +106,48 @@ async function renderPanel(client, panel) {
   return newMsg;
 }
 
+async function updateStaffEmbed(client, ticketId) {
+  const ticketRes = await query('SELECT * FROM tickets WHERE id = $1', [ticketId]);
+  if (!ticketRes.rows.length) return;
+  const ticket = ticketRes.rows[0];
+  if (!ticket.staff_message_id || !ticket.staff_channel_id_ref) return;
+
+  const staffCh = client.channels.cache.get(ticket.staff_channel_id_ref);
+  if (!staffCh) return;
+  const staffMsg = await staffCh.messages.fetch(ticket.staff_message_id).catch(() => null);
+  if (!staffMsg) return;
+
+  const thread = await client.channels.fetch(ticket.channel_id).catch(() => null);
+  if (!thread) return;
+
+  const config = await getConfig(ticket.guild_id);
+  const threadMembers = await thread.members.fetch().catch(() => null);
+  if (!threadMembers) return;
+
+  const staffIds = [];
+  for (const tm of threadMembers.values()) {
+    if (tm.id === ticket.user_id) continue; // exclude the ticket opener
+    const guildMember = tm.guildMember || await thread.guild.members.fetch(tm.id).catch(() => null);
+    if (!guildMember || guildMember.user.bot) continue;
+    const isMemberStaff = guildMember.permissions.has(PermissionFlagsBits.Administrator) ||
+      (config?.staff_role_id && guildMember.roles.cache.has(config.staff_role_id));
+    if (!isMemberStaff) continue;
+    staffIds.push(tm.id);
+  }
+
+  const existingEmbed = staffMsg.embeds[0];
+  if (!existingEmbed) return;
+  const { EmbedBuilder: EB } = require('discord.js');
+  const updatedEmbed = EB.from(existingEmbed);
+  const fields = existingEmbed.fields.map(f => {
+    if (f.name.includes('Staff In Ticket')) return { ...f, value: `${staffIds.length}` };
+    if (f.name.includes('Staff Members')) return { ...f, value: staffIds.length ? staffIds.map(id => `<@${id}>`).join(' ') : 'None yet' };
+    return f;
+  });
+  updatedEmbed.setFields(fields);
+  await staffMsg.edit({ embeds: [updatedEmbed] }).catch(() => {});
+}
+
 async function closeTicketFlow(interaction, client, ticketId, reason) {
   const config = await getConfig(interaction.guild.id);
 
@@ -172,6 +214,15 @@ async function closeTicketFlow(interaction, client, ticketId, reason) {
 
   await query('UPDATE tickets SET status=$1, closed_at=NOW(), closed_by=$2, close_reason=$3 WHERE id=$4',
     ['closed', interaction.user.id, reason, ticket.id]);
+
+  // Clean up the staff notification message
+  if (ticket.staff_message_id && ticket.staff_channel_id_ref) {
+    const staffCh = client.channels.cache.get(ticket.staff_channel_id_ref);
+    if (staffCh) {
+      const staffMsg = await staffCh.messages.fetch(ticket.staff_message_id).catch(() => null);
+      if (staffMsg) await staffMsg.delete().catch(() => {});
+    }
+  }
 
   stickyMessages.delete(String(ticket.id));
   await interaction.editReply('✅ Ticket closed. Transcript sent.');
@@ -655,30 +706,7 @@ module.exports = {
       await thread.members.add(interaction.user.id);
       await interaction.reply({ content: `✅ You've joined ticket <#${thread.id}>!`, ephemeral: true });
 
-      // Update staff embed
-      const ticket = ticketRes.rows[0];
-      if (ticket.staff_message_id && ticket.staff_channel_id_ref) {
-        const staffCh = client.channels.cache.get(ticket.staff_channel_id_ref);
-        if (staffCh) {
-          const staffMsg = await staffCh.messages.fetch(ticket.staff_message_id).catch(() => null);
-          if (staffMsg) {
-            const members = await thread.members.fetch().catch(() => null);
-            const staffMembers = members ? [...members.values()].filter(m => !m.guildMember?.user?.bot) : [];
-            const staffCount = staffMembers.length;
-            const staffList = staffMembers.map(m => `<@${m.id}>`).join(' ') || 'None yet';
-            const existingEmbed = staffMsg.embeds[0];
-            const { EmbedBuilder: EB } = require('discord.js');
-            const updatedEmbed = EB.from(existingEmbed);
-            const fields = existingEmbed.fields.map(f => {
-              if (f.name.includes('Staff In Ticket')) return { ...f, value: `${staffCount}` };
-              if (f.name.includes('Staff Members')) return { ...f, value: staffList };
-              return f;
-            });
-            updatedEmbed.setFields(fields);
-            await staffMsg.edit({ embeds: [updatedEmbed] }).catch(() => {});
-          }
-        }
-      }
+      await updateStaffEmbed(client, ticketId);
       return;
     }
 
@@ -697,6 +725,12 @@ module.exports = {
 
       await interaction.reply({ content: `<:checkmark:1512916161493205165> <@${interaction.user.id}> has claimed this ticket!` });
 
+      const thread = interaction.channel;
+      if (thread.isThread()) {
+        await thread.members.add(interaction.user.id).catch(() => {});
+      }
+      await updateStaffEmbed(client, ticketId);
+
       // Update the button message to show claimed
       const newRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`ticket_claim:${ticketId}`).setLabel('Claimed').setEmoji('<:checkmark:1512916161493205165>').setStyle(ButtonStyle.Secondary).setDisabled(true),
@@ -705,7 +739,6 @@ module.exports = {
       await interaction.message.edit({ components: [newRow] }).catch(() => {});
 
       // Update sticky
-      const thread = interaction.channel;
       if (thread.isThread()) {
         stickyMessages.set(ticketId, interaction.message.id);
       }
@@ -916,5 +949,17 @@ module.exports = {
       const ticketId = String(ticketRes.rows[0].id);
       await repostActionRow(message.channel, ticketId);
     } catch(e) { /* ignore */ }
+  },
+
+  // ── Thread member add/remove handler (called from threadMembersUpdate) ────
+  // Catches ANY way a member is added to a ticket thread — Join Ticket button,
+  // Claim button, or manually adding someone via Discord itself.
+  async handleThreadMembersUpdate(thread, client) {
+    if (!thread.isThread()) return;
+    try {
+      const ticketRes = await query('SELECT id FROM tickets WHERE channel_id=$1 AND status=$2', [thread.id, 'open']);
+      if (!ticketRes.rows.length) return;
+      await updateStaffEmbed(client, ticketRes.rows[0].id);
+    } catch (e) { /* ignore */ }
   },
 };

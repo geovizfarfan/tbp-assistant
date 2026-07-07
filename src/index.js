@@ -1,7 +1,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, REST, Routes, Partials } = require('discord.js');
 
 process.on('unhandledRejection', (error) => {
   console.error('[UnhandledRejection]', error?.message || error);
@@ -19,6 +19,7 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessageReactions,
   ],
+  partials: [Partials.Message, Partials.Reaction, Partials.Channel],
 });
 
 client.commands = new Collection();
@@ -127,6 +128,9 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isStringSelectMenu() && interaction.customId === 'help_category') {
     return helpModule.handleSelect(interaction, client);
   }
+  if (interaction.isStringSelectMenu() && interaction.customId.startsWith('rolepanel_select:')) {
+    return rolePanelModule.handleSelect(interaction);
+  }
   if (interaction.isButton() && interaction.customId.startsWith('ticket_')) {
     return ticketModule.handleButton(interaction, client);
   }
@@ -159,6 +163,7 @@ const stickyModule    = require('./commands/sticky/sticky');
 const ticketModule    = require('./commands/ticket/ticket');
 const helpModule      = require('./commands/help/help');
 const wheelModule     = require('./commands/wheel/wheel');
+const rolePanelModule = require('./commands/rolepanel/rolepanel');
 client.on('messageCreate', async (message) => {
   try { await handleRRMessage(message, client); }
   catch (e) { console.error('[RumbleRoyale]', e.message); }
@@ -192,6 +197,22 @@ client.on('messageCreate', async (message) => {
 client.on('messageCreate', async (message) => {
   try { await ticketModule.handleStickyActionRow(message, client); }
   catch (e) { /* ignore */ }
+});
+
+// Ticket staff embed live update (catches manual member adds too)
+client.on('threadMembersUpdate', async (oldMembers, newMembers) => {
+  try { await ticketModule.handleThreadMembersUpdate(newMembers.thread, client); }
+  catch (e) { console.error('[Ticket] threadMembersUpdate:', e.message); }
+});
+
+// Reaction role panels
+client.on('messageReactionAdd', async (reaction, user) => {
+  try { await rolePanelModule.handleReactionAdd(reaction, user); }
+  catch (e) { console.error('[RolePanel] add:', e.message); }
+});
+client.on('messageReactionRemove', async (reaction, user) => {
+  try { await rolePanelModule.handleReactionRemove(reaction, user); }
+  catch (e) { console.error('[RolePanel] remove:', e.message); }
 });
 
 // Boost detection
