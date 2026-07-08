@@ -5,7 +5,7 @@ const {
 const { query } = require('../../utils/database');
 const { getBalance, adjustBalance } = require('../../utils/playAndRegretDb');
 
-const TYPE_LABELS = { role: '🎭 Role', reaction: '✨ Auto Reaction', custom: '🎁 Custom' };
+const TYPE_LABELS = { role: '<:role:1524456992683593979> Role', reaction: '<a:purplesparkle:1512912828489793626> Auto Reaction', custom: '<a:gift:1512915751458050268> Custom' };
 
 function formatDuration(hours) {
   if (!hours) return null;
@@ -28,7 +28,7 @@ async function getItems(guildId, activeOnly = true) {
 function buildShopEmbed(items) {
   const embed = new EmbedBuilder()
     .setColor('#d6c2ee')
-    .setTitle('🛍️ Shop')
+    .setTitle('<a:shop:1524457010714640464> Shop')
     .setDescription(items.length
       ? 'Select an item below to purchase with Sins!'
       : '*No items in the shop yet.*');
@@ -121,7 +121,7 @@ async function finalizePurchase(interaction, item, chosenEmoji) {
     if (ch) {
       const logEmbed = new EmbedBuilder()
         .setColor(item.type === 'custom' ? '#f0997b' : '#d6c2ee')
-        .setTitle(item.type === 'custom' ? '🎁 New Custom Order' : '🛍️ New Purchase')
+        .setTitle(item.type === 'custom' ? '<a:gift:1512915751458050268> New Custom Order' : '<a:shop:1524457010714640464> New Purchase')
         .addFields(
           { name: 'Buyer', value: `<@${interaction.user.id}>`, inline: true },
           { name: 'Item', value: item.name, inline: true },
@@ -130,7 +130,7 @@ async function finalizePurchase(interaction, item, chosenEmoji) {
         );
       if (chosenEmoji) logEmbed.addFields({ name: 'Chosen Emoji', value: chosenEmoji, inline: true });
       if (expiresAt) logEmbed.addFields({ name: 'Expires', value: `<t:${Math.floor(expiresAt.getTime()/1000)}:R>`, inline: true });
-      if (item.type === 'custom') logEmbed.setDescription('⚠️ *This item needs manual fulfillment by staff.*');
+      if (item.type === 'custom') logEmbed.setDescription('<a:Warning:1512912830888673462> *This item needs manual fulfillment by staff.*');
       logEmbed.setTimestamp();
 
       await ch.send({ embeds: [logEmbed] }).catch(() => {});
@@ -139,7 +139,7 @@ async function finalizePurchase(interaction, item, chosenEmoji) {
 
   const embed = new EmbedBuilder()
     .setColor('#2ecc71')
-    .setDescription(`✅ You purchased **${item.name}** for **${Number(item.price).toLocaleString()}** Sins!\nNew balance: **${Number(newBalance).toLocaleString()}** Sins` +
+    .setDescription(`<:checkmark:1512916161493205165> You purchased **${item.name}** for **${Number(item.price).toLocaleString()}** Sins!\nNew balance: **${Number(newBalance).toLocaleString()}** Sins` +
       (chosenEmoji ? `\n*Veloura will now react to your messages with ${chosenEmoji}*` : '') +
       (expiresAt ? `\n*This expires <t:${Math.floor(expiresAt.getTime()/1000)}:R>*` : '') +
       (item.type === 'custom' ? '\n\n*Staff has been notified to fulfill your order.*' : ''));
@@ -208,7 +208,7 @@ module.exports = {
     const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
 
     if (!['list', 'inventory'].includes(sub) && !isAdmin) {
-      return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
+      return interaction.reply({ content: '<:wrong:1512916350375301160> Admin only.', ephemeral: true });
     }
     await interaction.deferReply({ ephemeral: true });
 
@@ -226,7 +226,7 @@ module.exports = {
 
       await renderAndPost(interaction.client, interaction.guild.id);
 
-      return interaction.editReply(`✅ Shop configured in <#${shopChannel.id}>${fulfillChannel ? ` (custom-item orders → <#${fulfillChannel.id}>)` : ''}.`);
+      return interaction.editReply(`<:checkmark:1512916161493205165> Shop configured in <#${shopChannel.id}>${fulfillChannel ? ` (custom-item orders → <#${fulfillChannel.id}>)` : ''}.`);
     }
 
     if (sub === 'additem') {
@@ -241,16 +241,16 @@ module.exports = {
       const duration      = durationAmt ? (durationUnit === 'days' ? durationAmt * 24 : durationAmt) : null;
 
       if (durationAmt && type === 'custom') {
-        return interaction.editReply('❌ Duration only applies to Role and Auto Reaction items.');
+        return interaction.editReply('<:wrong:1512916350375301160> Duration only applies to Role and Auto Reaction items.');
       }
       if (type === 'role' && !role) {
-        return interaction.editReply('❌ `role` is required for Role items.');
+        return interaction.editReply('<:wrong:1512916350375301160> `role` is required for Role items.');
       }
-      if (price < 0) return interaction.editReply('❌ Price can\'t be negative.');
+      if (price < 0) return interaction.editReply('<:wrong:1512916350375301160> Price can\'t be negative.');
 
       const config = await getConfig(interaction.guild.id);
       if (!config?.shop_channel_id) {
-        return interaction.editReply('❌ Run `/shop setup` first to set a shop channel.');
+        return interaction.editReply('<:wrong:1512916350375301160> Run `/shop setup` first to set a shop channel.');
       }
 
       const res = await query(`
@@ -263,16 +263,16 @@ module.exports = {
       await renderAndPost(interaction.client, interaction.guild.id);
 
       const durLabel = formatDuration(duration);
-      return interaction.editReply(`✅ Added **${name}** (ID \`${res.rows[0].id}\`) — ${price.toLocaleString()} Sins, type: ${TYPE_LABELS[type]}${durLabel ? `, expires after ${durLabel}` : ''}${type === 'reaction' ? '\n*Buyers will be asked to pick their own emoji at purchase time.*' : ''}.`);
+      return interaction.editReply(`<:checkmark:1512916161493205165> Added **${name}** (ID \`${res.rows[0].id}\`) — ${price.toLocaleString()} Sins, type: ${TYPE_LABELS[type]}${durLabel ? `, expires after ${durLabel}` : ''}${type === 'reaction' ? '\n*Buyers will be asked to pick their own emoji at purchase time.*' : ''}.`);
     }
 
     if (sub === 'removeitem') {
       const itemId = interaction.options.getInteger('item_id');
       const del = await query('DELETE FROM shop_items WHERE id = $1 AND guild_id = $2 RETURNING name', [itemId, interaction.guild.id]);
-      if (!del.rows.length) return interaction.editReply('❌ No item with that ID.');
+      if (!del.rows.length) return interaction.editReply('<:wrong:1512916350375301160> No item with that ID.');
 
       await renderAndPost(interaction.client, interaction.guild.id);
-      return interaction.editReply(`✅ Removed **${del.rows[0].name}** from the shop.`);
+      return interaction.editReply(`<:checkmark:1512916161493205165> Removed **${del.rows[0].name}** from the shop.`);
     }
 
     if (sub === 'revoke') {
@@ -280,14 +280,14 @@ module.exports = {
       const itemId = interaction.options.getInteger('item_id');
 
       const itemRes = await query('SELECT * FROM shop_items WHERE id = $1 AND guild_id = $2', [itemId, interaction.guild.id]);
-      if (!itemRes.rows.length) return interaction.editReply('❌ No item with that ID.');
+      if (!itemRes.rows.length) return interaction.editReply('<:wrong:1512916350375301160> No item with that ID.');
       const item = itemRes.rows[0];
 
       const purchaseRes = await query(
         'SELECT * FROM shop_purchases WHERE item_id = $1 AND user_id = $2 AND expired = false ORDER BY purchased_at DESC LIMIT 1',
         [itemId, target.id]
       );
-      if (!purchaseRes.rows.length) return interaction.editReply(`❌ ${target.username} doesn't currently own **${item.name}**.`);
+      if (!purchaseRes.rows.length) return interaction.editReply(`<:wrong:1512916350375301160> ${target.username} doesn't currently own **${item.name}**.`);
 
       await query('UPDATE shop_purchases SET expired = true WHERE id = $1', [purchaseRes.rows[0].id]);
 
@@ -296,7 +296,7 @@ module.exports = {
         if (member) await member.roles.remove(item.role_id).catch(() => {});
       }
 
-      return interaction.editReply(`✅ Revoked **${item.name}** from ${target.username}.`);
+      return interaction.editReply(`<:checkmark:1512916161493205165> Revoked **${item.name}** from ${target.username}.`);
     }
 
     if (sub === 'inventory') {
@@ -319,7 +319,7 @@ module.exports = {
       }).join('\n');
 
       return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
-        .setTitle(`🎒 ${target.id === interaction.user.id ? 'Your' : `${target.username}'s`} Inventory`)
+        .setTitle(`<a:Backpack:1524458355156844633> ${target.id === interaction.user.id ? 'Your' : `${target.username}'s`} Inventory`)
         .setDescription(lines)] });
     }
 
@@ -336,8 +336,8 @@ module.exports = {
 
     if (sub === 'repost') {
       const msg = await renderAndPost(interaction.client, interaction.guild.id);
-      if (!msg) return interaction.editReply('❌ No shop channel configured — run `/shop setup` first.');
-      return interaction.editReply('✅ Shop panel reposted.');
+      if (!msg) return interaction.editReply('<:wrong:1512916350375301160> No shop channel configured — run `/shop setup` first.');
+      return interaction.editReply('<:checkmark:1512916161493205165> Shop panel reposted.');
     }
   },
 
@@ -346,7 +346,7 @@ module.exports = {
     const itemId = interaction.values[0];
     const itemRes = await query('SELECT * FROM shop_items WHERE id = $1 AND active = true', [itemId]);
     if (!itemRes.rows.length) {
-      return interaction.reply({ content: '❌ This item is no longer available.', ephemeral: true });
+      return interaction.reply({ content: '<:wrong:1512916350375301160> This item is no longer available.', ephemeral: true });
     }
     const item = itemRes.rows[0];
 
@@ -357,18 +357,18 @@ module.exports = {
         [item.id, interaction.user.id]
       );
       if (Number(countRes.rows[0].total) >= item.limit_per_user) {
-        return interaction.reply({ content: `❌ You've already reached the limit (${item.limit_per_user}) for **${item.name}**.`, ephemeral: true });
+        return interaction.reply({ content: `<:wrong:1512916350375301160> You've already reached the limit (${item.limit_per_user}) for **${item.name}**.`, ephemeral: true });
       }
     }
 
     // Role items: don't allow buying a role the member already has
     if (item.type === 'role' && interaction.member.roles.cache.has(item.role_id)) {
-      return interaction.reply({ content: '❌ You already have that role!', ephemeral: true });
+      return interaction.reply({ content: '<:wrong:1512916350375301160> You already have that role!', ephemeral: true });
     }
 
     const balance = await getBalance(interaction.user.id);
     if (balance === null || balance < item.price) {
-      return interaction.reply({ content: `❌ You don't have enough Sins for **${item.name}** (need ${Number(item.price).toLocaleString()}, you have ${Number(balance || 0).toLocaleString()}).`, ephemeral: true });
+      return interaction.reply({ content: `<:wrong:1512916350375301160> You don't have enough Sins for **${item.name}** (need ${Number(item.price).toLocaleString()}, you have ${Number(balance || 0).toLocaleString()}).`, ephemeral: true });
     }
 
     // Auto Reaction items: buyer picks their own emoji before we charge them
@@ -398,10 +398,10 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
     const itemId = interaction.customId.split(':')[1];
     const emoji  = interaction.fields.getTextInputValue('emoji').trim();
-    if (!emoji) return interaction.editReply('❌ Please enter a valid emoji.');
+    if (!emoji) return interaction.editReply('<:wrong:1512916350375301160> Please enter a valid emoji.');
 
     const itemRes = await query('SELECT * FROM shop_items WHERE id = $1 AND active = true', [itemId]);
-    if (!itemRes.rows.length) return interaction.editReply('❌ This item is no longer available.');
+    if (!itemRes.rows.length) return interaction.editReply('<:wrong:1512916350375301160> This item is no longer available.');
     const item = itemRes.rows[0];
 
     // Re-check limit & balance since some time may have passed since the dropdown
@@ -411,12 +411,12 @@ module.exports = {
         [item.id, interaction.user.id]
       );
       if (Number(countRes.rows[0].total) >= item.limit_per_user) {
-        return interaction.editReply(`❌ You've already reached the limit (${item.limit_per_user}) for **${item.name}**.`);
+        return interaction.editReply(`<:wrong:1512916350375301160> You've already reached the limit (${item.limit_per_user}) for **${item.name}**.`);
       }
     }
     const balance = await getBalance(interaction.user.id);
     if (balance === null || balance < item.price) {
-      return interaction.editReply(`❌ You don't have enough Sins for **${item.name}**.`);
+      return interaction.editReply(`<:wrong:1512916350375301160> You don't have enough Sins for **${item.name}**.`);
     }
 
     return finalizePurchase(interaction, item, emoji);
