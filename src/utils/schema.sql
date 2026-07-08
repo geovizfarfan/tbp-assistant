@@ -496,10 +496,10 @@ CREATE TABLE IF NOT EXISTS shop_items (
   emoji TEXT,
   limit_per_user INT,
   duration_hours INT,
-  category TEXT NOT NULL DEFAULT 'General',
   active BOOLEAN NOT NULL DEFAULT TRUE,
   position INT NOT NULL DEFAULT 0
 );
+ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'General';
 
 CREATE TABLE IF NOT EXISTS shop_panel_messages (
   guild_id TEXT NOT NULL,
