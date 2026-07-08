@@ -95,6 +95,36 @@ client.once('ready', async () => {
     }
     console.log('[Grind] Restored auto-delete timers.');
   } catch(e) { console.error('[Grind] restore error:', e.message); }
+
+  // Restore shop role-expiry timers
+  try {
+    const { query: q } = require('./utils/database');
+    const { scheduleRoleRemoval, scheduleReactionExpiry } = require('./commands/shop/shop');
+    const res = await q(`
+      SELECT sp.id, sp.guild_id, sp.user_id, sp.expires_at, si.role_id
+      FROM shop_purchases sp
+      JOIN shop_items si ON si.id = sp.item_id
+      WHERE sp.expires_at IS NOT NULL AND sp.expired = false
+    `, []);
+    for (const row of res.rows) {
+      const ms = new Date(row.expires_at).getTime() - Date.now();
+      const guild = client.guilds.cache.get(row.guild_id);
+      if (!guild) continue;
+
+      if (ms > 0) {
+        if (row.role_id) scheduleRoleRemoval(guild, row.user_id, row.role_id, ms, row.id);
+        else scheduleReactionExpiry(row.id, ms);
+      } else {
+        // Already expired while bot was offline — clean up immediately
+        if (row.role_id) {
+          const member = await guild.members.fetch(row.user_id).catch(() => null);
+          if (member) await member.roles.remove(row.role_id).catch(() => {});
+        }
+        await q('UPDATE shop_purchases SET expired = true WHERE id = $1', [row.id]).catch(() => {});
+      }
+    }
+    console.log('[Shop] Restored role-expiry timers.');
+  } catch(e) { console.error('[Shop] restore error:', e.message); }
   startReminderLoop(client);
   const { startPrivateRoomCleanupLoop } = require('./utils/privateRooms');
   startPrivateRoomCleanupLoop(client);
@@ -131,11 +161,17 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isStringSelectMenu() && interaction.customId.startsWith('rolepanel_select:')) {
     return rolePanelModule.handleSelect(interaction);
   }
+  if (interaction.isStringSelectMenu() && interaction.customId === 'shop_select') {
+    return shopModule.handleSelect(interaction);
+  }
   if (interaction.isButton() && interaction.customId.startsWith('ticket_')) {
     return ticketModule.handleButton(interaction, client);
   }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('ticket_')) {
     return ticketModule.handleModal(interaction, client);
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('shop_emoji_modal:')) {
+    return shopModule.handleEmojiModal(interaction);
   }
   if (!interaction.isChatInputCommand()) return;
 
@@ -164,6 +200,7 @@ const ticketModule    = require('./commands/ticket/ticket');
 const helpModule      = require('./commands/help/help');
 const wheelModule     = require('./commands/wheel/wheel');
 const rolePanelModule = require('./commands/rolepanel/rolepanel');
+const shopModule      = require('./commands/shop/shop');
 client.on('messageCreate', async (message) => {
   try { await handleRRMessage(message, client); }
   catch (e) { console.error('[RumbleRoyale]', e.message); }
@@ -178,6 +215,12 @@ client.on('messageUpdate', async (oldMsg, newMsg) => {
 // Auto-react to messages from members with winner roles
 client.on('messageCreate', async (message) => {
   try { await handleRRReaction(message, client); }
+  catch (e) { /* ignore reaction errors */ }
+});
+
+// Auto-react to messages from members who bought a shop reaction perk
+client.on('messageCreate', async (message) => {
+  try { await shopModule.handleAutoReact(message, client); }
   catch (e) { /* ignore reaction errors */ }
 });
 

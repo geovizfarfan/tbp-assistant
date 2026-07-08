@@ -478,6 +478,40 @@ ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS other_reward TEXT DEFAULT
 ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS host_description TEXT DEFAULT NULL;
 ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS announce_style TEXT DEFAULT 'embed';
 
+CREATE TABLE IF NOT EXISTS shop_config (
+  guild_id TEXT PRIMARY KEY,
+  shop_channel_id TEXT,
+  fulfillment_channel_id TEXT,
+  message_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS shop_items (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  price BIGINT NOT NULL,
+  type TEXT NOT NULL,
+  role_id TEXT,
+  emoji TEXT,
+  limit_per_user INT,
+  duration_hours INT,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  position INT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS shop_purchases (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  item_id INTEGER NOT NULL REFERENCES shop_items(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  quantity INT NOT NULL DEFAULT 1,
+  chosen_emoji TEXT,
+  expires_at TIMESTAMPTZ,
+  expired BOOLEAN NOT NULL DEFAULT FALSE,
+  purchased_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS role_panels (
   id SERIAL PRIMARY KEY,
   guild_id TEXT NOT NULL,
