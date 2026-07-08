@@ -243,8 +243,8 @@ client.on('messageCreate', async (message) => {
 });
 
 // Ticket staff embed live update (catches manual member adds too)
-client.on('threadMembersUpdate', async (oldMembers, newMembers) => {
-  try { await ticketModule.handleThreadMembersUpdate(newMembers.thread, client); }
+client.on('threadMembersUpdate', async (addedMembers, removedMembers, thread) => {
+  try { await ticketModule.handleThreadMembersUpdate(thread, client); }
   catch (e) { console.error('[Ticket] threadMembersUpdate:', e.message); }
 });
 
