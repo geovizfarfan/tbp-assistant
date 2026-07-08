@@ -7,6 +7,17 @@ const { query } = require('../utils/database');
 
 const RUMBLE_ROYALE_BOT_ID = '693167035068317736';
 
+// Prevents the same message from being processed twice (once via messageCreate,
+// once via messageUpdate) — Discord.js can hand back a "partial" old message on
+// edits, which makes the old embed-check unreliable on its own.
+const processedMessages = new Set();
+function alreadyProcessed(messageId) {
+  if (processedMessages.has(messageId)) return true;
+  processedMessages.add(messageId);
+  if (processedMessages.size > 2000) processedMessages.clear(); // simple unbounded-growth guard
+  return false;
+}
+
 async function getConfig(channelId) {
   const res = await query('SELECT * FROM rr_channel_config WHERE channel_id = $1', [channelId]);
   return res.rows[0] || null;
@@ -136,6 +147,7 @@ async function checkAllRolesAchievement(guild, member, client, guildConfig) {
 async function handleMessage(message, client) {
   if (message.author.id !== RUMBLE_ROYALE_BOT_ID) return;
   if (!message.embeds?.length) return;
+  if (alreadyProcessed(message.id)) return;
 
   // Check if battle started in a personal grind channel
   const grindChRes = await query(
