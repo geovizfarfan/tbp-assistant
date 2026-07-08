@@ -35,8 +35,8 @@ function buildShopEmbed(category, items) {
 
   for (const item of items.slice(0, 25)) {
     embed.addFields({
-      name: `${item.name} — ${Number(item.price).toLocaleString()} <a:SINS:1522338148380704910> (sins)`,
-      value: `${TYPE_LABELS[item.type] || item.type}${item.description ? `\n${item.description}` : ''}${item.limit_per_user ? `\n*Limit: ${item.limit_per_user} per user*` : ''}${item.duration_hours ? `\n*Lasts ${formatDuration(item.duration_hours)}*` : ''}`,
+      name: `\`#${item.id}\` ${item.name} — ${Number(item.price).toLocaleString()} <a:SINS:1522338148380704910> (sins)`,
+      value: `${TYPE_LABELS[item.type] || item.type}${item.description ? `\n${item.description}` : ''}${item.limit_per_user ? `\n<:vertical_line:1520457297476845741> Limit: ${item.limit_per_user} per user` : ''}${item.duration_hours ? `\n<:vertical_line:1520457297476845741> Lasts: ${formatDuration(item.duration_hours)}` : ''}`,
       inline: false,
     });
   }
@@ -222,6 +222,23 @@ module.exports = {
       .addIntegerOption(o => o.setName('item_id').setDescription('Item ID (see /shop list)').setRequired(true)))
 
     .addSubcommand(sub => sub
+      .setName('edititem')
+      .setDescription('Edit an existing shop item (only fills in fields you provide)')
+      .addIntegerOption(o => o.setName('item_id').setDescription('Item ID (see /shop list)').setRequired(true))
+      .addStringOption(o => o.setName('name').setDescription('New name'))
+      .addIntegerOption(o => o.setName('price').setDescription('New price in Sins'))
+      .addStringOption(o => o.setName('description').setDescription('New description'))
+      .addStringOption(o => o.setName('category').setDescription('New category'))
+      .addRoleOption(o => o.setName('role').setDescription('New role (Role/Auto Reaction types)'))
+      .addIntegerOption(o => o.setName('limit').setDescription('New max purchases per user (0 = unlimited)'))
+      .addIntegerOption(o => o.setName('duration_amount').setDescription('New duration amount (0 = permanent)'))
+      .addStringOption(o => o.setName('duration_unit').setDescription('Unit for the duration above').addChoices(
+        { name: 'Hours', value: 'hours' },
+        { name: 'Days', value: 'days' },
+      ))
+      .addBooleanOption(o => o.setName('active').setDescription('Show/hide this item in the shop')))
+
+    .addSubcommand(sub => sub
       .setName('revoke')
       .setDescription('Revoke a purchased item from a member (removes role, marks expired)')
       .addUserOption(o => o.setName('user').setDescription('Member to revoke from').setRequired(true))
@@ -311,6 +328,45 @@ module.exports = {
 
       await renderAndPost(interaction.client, interaction.guild.id);
       return interaction.editReply(`<:checkmark:1512916161493205165> Removed **${del.rows[0].name}** from the shop.`);
+    }
+
+    if (sub === 'edititem') {
+      const itemId = interaction.options.getInteger('item_id');
+      const itemRes = await query('SELECT * FROM shop_items WHERE id = $1 AND guild_id = $2', [itemId, interaction.guild.id]);
+      if (!itemRes.rows.length) return interaction.editReply('<:wrong:1512916350375301160> No item with that ID.');
+      const item = itemRes.rows[0];
+
+      const name         = interaction.options.getString('name');
+      const price        = interaction.options.getInteger('price');
+      const description  = interaction.options.getString('description');
+      const category     = interaction.options.getString('category');
+      const role         = interaction.options.getRole('role');
+      const limitOpt     = interaction.options.getInteger('limit');
+      const durationAmt  = interaction.options.getInteger('duration_amount');
+      const durationUnit = interaction.options.getString('duration_unit') || 'hours';
+      const activeOpt    = interaction.options.getBoolean('active');
+
+      const newName        = name ?? item.name;
+      const newPrice       = price !== null ? price : item.price;
+      const newDescription = description !== null ? description : item.description;
+      const newCategory    = category ? category.trim() : item.category;
+      const newRoleId      = role ? role.id : item.role_id;
+      const newLimit       = limitOpt !== null ? (limitOpt === 0 ? null : limitOpt) : item.limit_per_user;
+      const newDuration    = durationAmt !== null
+        ? (durationAmt === 0 ? null : (durationUnit === 'days' ? durationAmt * 24 : durationAmt))
+        : item.duration_hours;
+      const newActive      = activeOpt !== null ? activeOpt : item.active;
+
+      if (newPrice < 0) return interaction.editReply('<:wrong:1512916350375301160> Price can\'t be negative.');
+
+      await query(`
+        UPDATE shop_items SET name=$1, price=$2, description=$3, category=$4, role_id=$5, limit_per_user=$6, duration_hours=$7, active=$8
+        WHERE id=$9
+      `, [newName, newPrice, newDescription, newCategory, newRoleId, newLimit, newDuration, newActive, itemId]);
+
+      await renderAndPost(interaction.client, interaction.guild.id);
+
+      return interaction.editReply(`<:checkmark:1512916161493205165> Updated **${newName}** (ID \`${itemId}\`).`);
     }
 
     if (sub === 'revoke') {
