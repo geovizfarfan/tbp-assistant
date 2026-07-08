@@ -114,20 +114,26 @@ async function finalizePurchase(interaction, item, chosenEmoji) {
     await scheduleReactionExpiry(purchaseId, ms);
   }
 
-  if (item.type === 'custom') {
-    const config = await getConfig(interaction.guild.id);
-    if (config?.fulfillment_channel_id) {
-      const ch = await interaction.client.channels.fetch(config.fulfillment_channel_id).catch(() => null);
-      if (ch) {
-        await ch.send({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
-          .setTitle('🎁 New Custom Order')
-          .addFields(
-            { name: 'Buyer', value: `<@${interaction.user.id}>`, inline: true },
-            { name: 'Item', value: item.name, inline: true },
-            { name: 'Price', value: `${Number(item.price).toLocaleString()} Sins`, inline: true },
-          )
-          .setTimestamp()] }).catch(() => {});
-      }
+  // Log every purchase to the fulfillment channel, custom items get an extra highlight
+  const config = await getConfig(interaction.guild.id);
+  if (config?.fulfillment_channel_id) {
+    const ch = await interaction.client.channels.fetch(config.fulfillment_channel_id).catch(() => null);
+    if (ch) {
+      const logEmbed = new EmbedBuilder()
+        .setColor(item.type === 'custom' ? '#f0997b' : '#d6c2ee')
+        .setTitle(item.type === 'custom' ? '🎁 New Custom Order' : '🛍️ New Purchase')
+        .addFields(
+          { name: 'Buyer', value: `<@${interaction.user.id}>`, inline: true },
+          { name: 'Item', value: item.name, inline: true },
+          { name: 'Type', value: TYPE_LABELS[item.type] || item.type, inline: true },
+          { name: 'Price', value: `${Number(item.price).toLocaleString()} Sins`, inline: true },
+        );
+      if (chosenEmoji) logEmbed.addFields({ name: 'Chosen Emoji', value: chosenEmoji, inline: true });
+      if (expiresAt) logEmbed.addFields({ name: 'Expires', value: `<t:${Math.floor(expiresAt.getTime()/1000)}:R>`, inline: true });
+      if (item.type === 'custom') logEmbed.setDescription('⚠️ *This item needs manual fulfillment by staff.*');
+      logEmbed.setTimestamp();
+
+      await ch.send({ embeds: [logEmbed] }).catch(() => {});
     }
   }
 
@@ -179,6 +185,17 @@ module.exports = {
       .addIntegerOption(o => o.setName('item_id').setDescription('Item ID (see /shop list)').setRequired(true)))
 
     .addSubcommand(sub => sub
+      .setName('revoke')
+      .setDescription('Revoke a purchased item from a member (removes role, marks expired)')
+      .addUserOption(o => o.setName('user').setDescription('Member to revoke from').setRequired(true))
+      .addIntegerOption(o => o.setName('item_id').setDescription('Item ID (see /shop list)').setRequired(true)))
+
+    .addSubcommand(sub => sub
+      .setName('inventory')
+      .setDescription('See what you (or someone else) currently own from the shop')
+      .addUserOption(o => o.setName('user').setDescription('Member to check (defaults to you)')))
+
+    .addSubcommand(sub => sub
       .setName('list')
       .setDescription('List all shop items with their IDs (admin)'))
 
@@ -190,7 +207,7 @@ module.exports = {
     const sub = interaction.options.getSubcommand();
     const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
 
-    if (sub !== 'list' && !isAdmin) {
+    if (!['list', 'inventory'].includes(sub) && !isAdmin) {
       return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
     }
     await interaction.deferReply({ ephemeral: true });
@@ -256,6 +273,54 @@ module.exports = {
 
       await renderAndPost(interaction.client, interaction.guild.id);
       return interaction.editReply(`✅ Removed **${del.rows[0].name}** from the shop.`);
+    }
+
+    if (sub === 'revoke') {
+      const target = interaction.options.getUser('user');
+      const itemId = interaction.options.getInteger('item_id');
+
+      const itemRes = await query('SELECT * FROM shop_items WHERE id = $1 AND guild_id = $2', [itemId, interaction.guild.id]);
+      if (!itemRes.rows.length) return interaction.editReply('❌ No item with that ID.');
+      const item = itemRes.rows[0];
+
+      const purchaseRes = await query(
+        'SELECT * FROM shop_purchases WHERE item_id = $1 AND user_id = $2 AND expired = false ORDER BY purchased_at DESC LIMIT 1',
+        [itemId, target.id]
+      );
+      if (!purchaseRes.rows.length) return interaction.editReply(`❌ ${target.username} doesn't currently own **${item.name}**.`);
+
+      await query('UPDATE shop_purchases SET expired = true WHERE id = $1', [purchaseRes.rows[0].id]);
+
+      if ((item.type === 'role' || item.type === 'reaction') && item.role_id) {
+        const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+        if (member) await member.roles.remove(item.role_id).catch(() => {});
+      }
+
+      return interaction.editReply(`✅ Revoked **${item.name}** from ${target.username}.`);
+    }
+
+    if (sub === 'inventory') {
+      const target = interaction.options.getUser('user') || interaction.user;
+      const res = await query(`
+        SELECT sp.*, si.name, si.type, si.description
+        FROM shop_purchases sp
+        JOIN shop_items si ON si.id = sp.item_id
+        WHERE sp.guild_id = $1 AND sp.user_id = $2 AND sp.expired = false
+        ORDER BY sp.purchased_at DESC
+      `, [interaction.guild.id, target.id]);
+
+      if (!res.rows.length) return interaction.editReply(`${target.id === interaction.user.id ? 'You don\'t' : `${target.username} doesn't`} own anything from the shop yet.`);
+
+      const lines = res.rows.map(p => {
+        let line = `${TYPE_LABELS[p.type] || p.type} **${p.name}**`;
+        if (p.chosen_emoji) line += ` (${p.chosen_emoji})`;
+        if (p.expires_at) line += ` — expires <t:${Math.floor(new Date(p.expires_at).getTime()/1000)}:R>`;
+        return line;
+      }).join('\n');
+
+      return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
+        .setTitle(`🎒 ${target.id === interaction.user.id ? 'Your' : `${target.username}'s`} Inventory`)
+        .setDescription(lines)] });
     }
 
     if (sub === 'list') {
