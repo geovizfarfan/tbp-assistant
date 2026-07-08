@@ -30,12 +30,12 @@ function buildShopEmbed(items) {
     .setColor('#d6c2ee')
     .setTitle('<a:shop:1524457010714640464> Shop')
     .setDescription(items.length
-      ? 'Select an item below to purchase with Sins!'
+      ? 'Select an item below to purchase with <a:SINS:1522338148380704910> Sins!'
       : '*No items in the shop yet.*');
 
   for (const item of items) {
     embed.addFields({
-      name: `${item.name} — ${Number(item.price).toLocaleString()} Sins`,
+      name: `${item.name} — ${Number(item.price).toLocaleString()} <a:SINS:1522338148380704910> (sins)`,
       value: `${TYPE_LABELS[item.type] || item.type}${item.description ? `\n${item.description}` : ''}${item.limit_per_user ? `\n*Limit: ${item.limit_per_user} per user*` : ''}${item.duration_hours ? `\n*Lasts ${formatDuration(item.duration_hours)}*` : ''}`,
       inline: false,
     });
@@ -126,7 +126,7 @@ async function finalizePurchase(interaction, item, chosenEmoji) {
           { name: 'Buyer', value: `<@${interaction.user.id}>`, inline: true },
           { name: 'Item', value: item.name, inline: true },
           { name: 'Type', value: TYPE_LABELS[item.type] || item.type, inline: true },
-          { name: 'Price', value: `${Number(item.price).toLocaleString()} Sins`, inline: true },
+          { name: 'Price', value: `${Number(item.price).toLocaleString()} <a:SINS:1522338148380704910> (sins)`, inline: true },
         );
       if (chosenEmoji) logEmbed.addFields({ name: 'Chosen Emoji', value: chosenEmoji, inline: true });
       if (expiresAt) logEmbed.addFields({ name: 'Expires', value: `<t:${Math.floor(expiresAt.getTime()/1000)}:R>`, inline: true });
@@ -139,7 +139,7 @@ async function finalizePurchase(interaction, item, chosenEmoji) {
 
   const embed = new EmbedBuilder()
     .setColor('#2ecc71')
-    .setDescription(`<:checkmark:1512916161493205165> You purchased **${item.name}** for **${Number(item.price).toLocaleString()}** Sins!\nNew balance: **${Number(newBalance).toLocaleString()}** Sins` +
+    .setDescription(`<:checkmark:1512916161493205165> You purchased **${item.name}** for **${Number(item.price).toLocaleString()}** <a:SINS:1522338148380704910> (sins)!\nNew balance: **${Number(newBalance).toLocaleString()}** <a:SINS:1522338148380704910> (sins)` +
       (chosenEmoji ? `\n*Veloura will now react to your messages with ${chosenEmoji}*` : '') +
       (expiresAt ? `\n*This expires <t:${Math.floor(expiresAt.getTime()/1000)}:R>*` : '') +
       (item.type === 'custom' ? '\n\n*Staff has been notified to fulfill your order.*' : ''));
@@ -263,7 +263,7 @@ module.exports = {
       await renderAndPost(interaction.client, interaction.guild.id);
 
       const durLabel = formatDuration(duration);
-      return interaction.editReply(`<:checkmark:1512916161493205165> Added **${name}** (ID \`${res.rows[0].id}\`) — ${price.toLocaleString()} Sins, type: ${TYPE_LABELS[type]}${durLabel ? `, expires after ${durLabel}` : ''}${type === 'reaction' ? '\n*Buyers will be asked to pick their own emoji at purchase time.*' : ''}.`);
+      return interaction.editReply(`<:checkmark:1512916161493205165> Added **${name}** (ID \`${res.rows[0].id}\`) — ${price.toLocaleString()} <a:SINS:1522338148380704910> (sins), type: ${TYPE_LABELS[type]}${durLabel ? `, expires after ${durLabel}` : ''}${type === 'reaction' ? '\n*Buyers will be asked to pick their own emoji at purchase time.*' : ''}.`);
     }
 
     if (sub === 'removeitem') {
@@ -328,7 +328,7 @@ module.exports = {
       if (!items.length) return interaction.editReply('No shop items yet.');
 
       const lines = items.map(i =>
-        `\`${i.id}\` **${i.name}** — ${Number(i.price).toLocaleString()} Sins (${TYPE_LABELS[i.type]})${i.active ? '' : ' *(inactive)*'}${i.limit_per_user ? ` — limit ${i.limit_per_user}/user` : ' — unlimited'}${i.duration_hours ? ` — expires ${formatDuration(i.duration_hours)}` : ''}`
+        `\`${i.id}\` **${i.name}** — ${Number(i.price).toLocaleString()} <a:SINS:1522338148380704910> (sins) (${TYPE_LABELS[i.type]})${i.active ? '' : ' *(inactive)*'}${i.limit_per_user ? ` — limit ${i.limit_per_user}/user` : ' — unlimited'}${i.duration_hours ? ` — expires ${formatDuration(i.duration_hours)}` : ''}`
       ).join('\n');
 
       return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee').setTitle('Shop Items').setDescription(lines)] });
@@ -368,7 +368,7 @@ module.exports = {
 
     const balance = await getBalance(interaction.user.id);
     if (balance === null || balance < item.price) {
-      return interaction.reply({ content: `<:wrong:1512916350375301160> You don't have enough Sins for **${item.name}** (need ${Number(item.price).toLocaleString()}, you have ${Number(balance || 0).toLocaleString()}).`, ephemeral: true });
+      return interaction.reply({ content: `<:wrong:1512916350375301160> You don't have enough <a:SINS:1522338148380704910> Sins for **${item.name}** (need ${Number(item.price).toLocaleString()}, you have ${Number(balance || 0).toLocaleString()}).`, ephemeral: true });
     }
 
     // Auto Reaction items: buyer picks their own emoji before we charge them
@@ -416,7 +416,7 @@ module.exports = {
     }
     const balance = await getBalance(interaction.user.id);
     if (balance === null || balance < item.price) {
-      return interaction.editReply(`<:wrong:1512916350375301160> You don't have enough Sins for **${item.name}**.`);
+      return interaction.editReply(`<:wrong:1512916350375301160> You don't have enough <a:SINS:1522338148380704910> Sins for **${item.name}**.`);
     }
 
     return finalizePurchase(interaction, item, emoji);
