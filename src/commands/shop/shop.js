@@ -25,15 +25,15 @@ async function getItems(guildId, activeOnly = true) {
   return res.rows;
 }
 
-function buildShopEmbed(items) {
+function buildShopEmbed(category, items) {
   const embed = new EmbedBuilder()
     .setColor('#d6c2ee')
-    .setTitle('<a:shop:1524457010714640464> Shop')
+    .setTitle(`<a:shop:1524457010714640464> ${category}`)
     .setDescription(items.length
-      ? 'Select an item below to purchase with <a:SINS:1522338148380704910> Sins!'
-      : '*No items in the shop yet.*');
+      ? `Select an item below to purchase with <a:SINS:1522338148380704910> Sins!${items.length > 25 ? `\n*(showing first 25 of ${items.length} — consider splitting this category)*` : ''}`
+      : '*No items in this category yet.*');
 
-  for (const item of items) {
+  for (const item of items.slice(0, 25)) {
     embed.addFields({
       name: `${item.name} — ${Number(item.price).toLocaleString()} <a:SINS:1522338148380704910> (sins)`,
       value: `${TYPE_LABELS[item.type] || item.type}${item.description ? `\n${item.description}` : ''}${item.limit_per_user ? `\n*Limit: ${item.limit_per_user} per user*` : ''}${item.duration_hours ? `\n*Lasts ${formatDuration(item.duration_hours)}*` : ''}`,
@@ -63,17 +63,53 @@ async function renderAndPost(client, guildId) {
   if (!channel) return null;
 
   const items = await getItems(guildId);
-  const embed = buildShopEmbed(items);
-  const row = buildShopSelect(items);
 
-  if (config.message_id) {
-    const oldMsg = await channel.messages.fetch(config.message_id).catch(() => null);
-    if (oldMsg) await oldMsg.delete().catch(() => {});
+  // Group items by category, preserving the order categories first appear in
+  const categoryOrder = [];
+  const grouped = new Map();
+  for (const item of items) {
+    const cat = item.category || 'General';
+    if (!grouped.has(cat)) { grouped.set(cat, []); categoryOrder.push(cat); }
+    grouped.get(cat).push(item);
+  }
+  if (!categoryOrder.length) {
+    categoryOrder.push('General');
+    grouped.set('General', []);
   }
 
-  const newMsg = await channel.send({ embeds: [embed], components: row ? [row] : [] });
-  await query('UPDATE shop_config SET message_id = $1 WHERE guild_id = $2', [newMsg.id, guildId]);
-  return newMsg;
+  const existingRes = await query('SELECT category, message_id FROM shop_panel_messages WHERE guild_id = $1', [guildId]);
+  const existingMap = new Map(existingRes.rows.map(r => [r.category, r.message_id]));
+
+  let firstMsg = null;
+  for (const cat of categoryOrder) {
+    const catItems = grouped.get(cat);
+    const embed = buildShopEmbed(cat, catItems);
+    const row = buildShopSelect(catItems);
+
+    const oldMsgId = existingMap.get(cat);
+    if (oldMsgId) {
+      const oldMsg = await channel.messages.fetch(oldMsgId).catch(() => null);
+      if (oldMsg) await oldMsg.delete().catch(() => {});
+      existingMap.delete(cat);
+    }
+
+    const newMsg = await channel.send({ embeds: [embed], components: row ? [row] : [] });
+    await query(`
+      INSERT INTO shop_panel_messages (guild_id, category, message_id)
+      VALUES ($1,$2,$3)
+      ON CONFLICT (guild_id, category) DO UPDATE SET message_id = EXCLUDED.message_id
+    `, [guildId, cat, newMsg.id]);
+    if (!firstMsg) firstMsg = newMsg;
+  }
+
+  // Clean up panel messages for categories that no longer have any items
+  for (const [cat, msgId] of existingMap.entries()) {
+    const oldMsg = await channel.messages.fetch(msgId).catch(() => null);
+    if (oldMsg) await oldMsg.delete().catch(() => {});
+    await query('DELETE FROM shop_panel_messages WHERE guild_id = $1 AND category = $2', [guildId, cat]);
+  }
+
+  return firstMsg;
 }
 
 async function scheduleRoleRemoval(guild, userId, roleId, ms, purchaseId) {
@@ -172,6 +208,7 @@ module.exports = {
       ))
       .addRoleOption(o => o.setName('role').setDescription('Role to grant (required for Role type; optional tag role for Auto Reaction)'))
       .addStringOption(o => o.setName('description').setDescription('Shown in the shop listing'))
+      .addStringOption(o => o.setName('category').setDescription('Category to group this item under (default: General)'))
       .addIntegerOption(o => o.setName('limit').setDescription('Max purchases per user (blank = unlimited/stackable)'))
       .addIntegerOption(o => o.setName('duration_amount').setDescription('Expires after this amount (blank = permanent)'))
       .addStringOption(o => o.setName('duration_unit').setDescription('Unit for the duration above').addChoices(
@@ -235,6 +272,7 @@ module.exports = {
       const type          = interaction.options.getString('type');
       const role          = interaction.options.getRole('role');
       const description   = interaction.options.getString('description') || null;
+      const category      = interaction.options.getString('category')?.trim() || 'General';
       const limit         = interaction.options.getInteger('limit') || null;
       const durationAmt   = interaction.options.getInteger('duration_amount');
       const durationUnit  = interaction.options.getString('duration_unit') || 'hours';
@@ -254,16 +292,16 @@ module.exports = {
       }
 
       const res = await query(`
-        INSERT INTO shop_items (guild_id, name, description, price, type, role_id, limit_per_user, duration_hours, position)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,
+        INSERT INTO shop_items (guild_id, name, description, price, type, role_id, limit_per_user, duration_hours, category, position)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,
           (SELECT COALESCE(MAX(position),0)+1 FROM shop_items WHERE guild_id=$1))
         RETURNING id
-      `, [interaction.guild.id, name, description, price, type, role?.id || null, limit, duration]);
+      `, [interaction.guild.id, name, description, price, type, role?.id || null, limit, duration, category]);
 
       await renderAndPost(interaction.client, interaction.guild.id);
 
       const durLabel = formatDuration(duration);
-      return interaction.editReply(`<:checkmark:1512916161493205165> Added **${name}** (ID \`${res.rows[0].id}\`) — ${price.toLocaleString()} <a:SINS:1522338148380704910> (sins), type: ${TYPE_LABELS[type]}${durLabel ? `, expires after ${durLabel}` : ''}${type === 'reaction' ? '\n*Buyers will be asked to pick their own emoji at purchase time.*' : ''}.`);
+      return interaction.editReply(`<:checkmark:1512916161493205165> Added **${name}** (ID \`${res.rows[0].id}\`) to **${category}** — ${price.toLocaleString()} <a:SINS:1522338148380704910> (sins), type: ${TYPE_LABELS[type]}${durLabel ? `, expires after ${durLabel}` : ''}${type === 'reaction' ? '\n*Buyers will be asked to pick their own emoji at purchase time.*' : ''}.`);
     }
 
     if (sub === 'removeitem') {
@@ -327,11 +365,22 @@ module.exports = {
       const items = await getItems(interaction.guild.id, false);
       if (!items.length) return interaction.editReply('No shop items yet.');
 
-      const lines = items.map(i =>
-        `\`${i.id}\` **${i.name}** — ${Number(i.price).toLocaleString()} <a:SINS:1522338148380704910> (sins) (${TYPE_LABELS[i.type]})${i.active ? '' : ' *(inactive)*'}${i.limit_per_user ? ` — limit ${i.limit_per_user}/user` : ' — unlimited'}${i.duration_hours ? ` — expires ${formatDuration(i.duration_hours)}` : ''}`
-      ).join('\n');
+      const byCategory = new Map();
+      for (const i of items) {
+        const cat = i.category || 'General';
+        if (!byCategory.has(cat)) byCategory.set(cat, []);
+        byCategory.get(cat).push(i);
+      }
 
-      return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee').setTitle('Shop Items').setDescription(lines)] });
+      const embed = new EmbedBuilder().setColor('#d6c2ee').setTitle('Shop Items');
+      for (const [cat, catItems] of byCategory) {
+        const lines = catItems.map(i =>
+          `\`${i.id}\` **${i.name}** — ${Number(i.price).toLocaleString()} <a:SINS:1522338148380704910> (sins) (${TYPE_LABELS[i.type]})${i.active ? '' : ' *(inactive)*'}${i.limit_per_user ? ` — limit ${i.limit_per_user}/user` : ' — unlimited'}${i.duration_hours ? ` — expires ${formatDuration(i.duration_hours)}` : ''}`
+        ).join('\n');
+        embed.addFields({ name: cat, value: lines });
+      }
+
+      return interaction.editReply({ embeds: [embed] });
     }
 
     if (sub === 'repost') {
