@@ -869,7 +869,7 @@ module.exports = {
     const ticketId = ticketRes.rows[0].id;
 
     // Build answers
-    const questionsArr = type?.questions ? type.questions.split('|') : ['Issue'];
+    const questionsArr = type?.questions ? type.questions.split('|') : ['Details'];
     const answers = [];
     interaction.fields.fields.forEach((field, key) => {
       if (field.value) {
