@@ -450,7 +450,7 @@ module.exports = {
       }
 
       const lines = [];
-      if (otherReward) lines.push(`🎁 **Other Reward:** ${otherReward}`);
+      if (otherReward) lines.push(`<a:gift:1512915751458050268> **Other Reward:** ${otherReward}`);
       if (description) lines.push(`📝 **Description:** ${description.slice(0, 50)}...`);
 
       return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')

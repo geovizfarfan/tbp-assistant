@@ -166,7 +166,7 @@ function buildBattleAnnouncement(config, channel, hostName, era = null) {
   }
   if (config.host_description) descLines.push('', config.host_description, '');
   if (config.reward_amount) descLines.push(`<a:moneybag:1522373120147849226> **Reward:** ${Number(config.reward_amount).toLocaleString()} <:sins:1522291331672703100> (sins)`);
-  if (config.other_reward) descLines.push(`🎁 **Bonus Reward:** ${config.other_reward}`);
+  if (config.other_reward) descLines.push(`<a:gift:1512915751458050268> **Bonus Reward:** ${config.other_reward}`);
   if (config.winner_role_id) descLines.push(`<a:trophies:1512912823062364281> **Winner Role:** <@&${config.winner_role_id}>`);
   if (config.next_channel_id) descLines.push(`<a:rumblesword:1522372420894330921> **Next Room:** <#${config.next_channel_id}>`);
 
