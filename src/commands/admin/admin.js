@@ -460,6 +460,22 @@ module.exports = {
 };
 
 
+// Splits an array of lines into embed-field-safe chunks (Discord's field value limit is 1024 chars)
+function chunkLines(lines, limit = 1000) {
+  const chunks = [];
+  let current = '';
+  for (const line of lines) {
+    if ((current + '\n' + line).length > limit) {
+      if (current) chunks.push(current);
+      current = line;
+    } else {
+      current = current ? `${current}\n${line}` : line;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks.length ? chunks : ['None'];
+}
+
 async function paySummary(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
@@ -500,14 +516,22 @@ async function paySummary(interaction) {
     boosterLines.push(`${tierEmoji} ${b.username} — **${b.amount_owed} ${b.currency}** ${overdue ? e('atention') + ' OVERDUE' : ''}`);
   }
 
-  const embed = baseEmbed(`${e('payday')} Pay Summary`, COLORS.tbppurple, interaction.guild?.name)
-    .addFields(
-      { name: `${e('members')} Staff Owed`, value: staffLines.join('\n') || 'No staff', inline: false },
-      { name: `${e('purplesparkle')} Staff Total`, value: `Crowns: ${totalCrowns} | Sins: ${totalSins} | Goos: ${totalGoos}`, inline: false },
-      { name: `${e('diamond')} Boosters Owed`, value: boosterLines.join('\n') || 'No boosters', inline: false },
-      { name: `${e('purplesparkle')} Booster Total`, value: `Crowns: ${boosterCrowns} | Sins: ${boosterSins} | Goos: ${boosterGoos}`, inline: false },
-      { name: `${e('payout')} Grand Total`, value: `Crowns: ${totalCrowns + boosterCrowns} | Sins: ${totalSins + boosterSins} | Goos: ${totalGoos + boosterGoos}`, inline: false },
-    );
+  const embed = baseEmbed(`${e('payday')} Pay Summary`, COLORS.tbppurple, interaction.guild?.name);
+
+  const staffChunks = chunkLines(staffLines);
+  staffChunks.forEach((chunk, i) => {
+    embed.addFields({ name: `${e('members')} Staff Owed${staffChunks.length > 1 ? ` (${i+1}/${staffChunks.length})` : ''}`, value: chunk, inline: false });
+  });
+  embed.addFields({ name: `${e('purplesparkle')} Staff Total`, value: `Crowns: ${totalCrowns} | Sins: ${totalSins} | Goos: ${totalGoos}`, inline: false });
+
+  const boosterChunks = chunkLines(boosterLines);
+  boosterChunks.forEach((chunk, i) => {
+    embed.addFields({ name: `${e('diamond')} Boosters Owed${boosterChunks.length > 1 ? ` (${i+1}/${boosterChunks.length})` : ''}`, value: chunk, inline: false });
+  });
+  embed.addFields(
+    { name: `${e('purplesparkle')} Booster Total`, value: `Crowns: ${boosterCrowns} | Sins: ${boosterSins} | Goos: ${boosterGoos}`, inline: false },
+    { name: `${e('payout')} Grand Total`, value: `Crowns: ${totalCrowns + boosterCrowns} | Sins: ${totalSins + boosterSins} | Goos: ${totalGoos + boosterGoos}`, inline: false },
+  );
 
   await interaction.editReply({ embeds: [embed] });
 }

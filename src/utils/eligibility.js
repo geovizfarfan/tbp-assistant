@@ -33,11 +33,11 @@ async function checkEligibility(guildId, userId, periodDays) {
     [guildId, userId, periodStart]
   );
   const missedRes = await query(
-    `SELECT COUNT(*) FROM schedules WHERE guild_id=$1 AND user_id=$2 AND scheduled_date > $3 AND status='missed'`,
+    `SELECT COUNT(*) FROM schedules WHERE guild_id=$1 AND staff_id=$2 AND scheduled_date > $3 AND status='missed'`,
     [guildId, userId, periodStart]
   );
   const totalScheduled = parseInt((await query(
-    `SELECT COUNT(*) FROM schedules WHERE guild_id=$1 AND user_id=$2 AND scheduled_date > $3`,
+    `SELECT COUNT(*) FROM schedules WHERE guild_id=$1 AND staff_id=$2 AND scheduled_date > $3`,
     [guildId, userId, periodStart]
   )).rows[0].count);
 
