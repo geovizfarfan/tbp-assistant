@@ -1,11 +1,11 @@
 const {
   SlashCommandBuilder, EmbedBuilder, ActionRowBuilder,
-  StringSelectMenuBuilder, PermissionFlagsBits,
+  StringSelectMenuBuilder, PermissionFlagsBits, UserSelectMenuBuilder,
 } = require('discord.js');
 const { query } = require('../../utils/database');
 const { getBalance, adjustBalance } = require('../../utils/playAndRegretDb');
 
-const TYPE_LABELS = { role: '<:role:1524456992683593979> Role', reaction: '<a:purplesparkle:1512912828489793626> Auto Reaction', custom: '<a:gift:1512915751458050268> Custom' };
+const TYPE_LABELS = { role: '<:role:1524456992683593979> Role', reaction: '<a:purplesparkle:1512912828489793626> Auto Reaction', custom: '<a:gift:1512915751458050268> Custom', nickname: '<:role:1524456992683593979> Nickname' };
 
 function formatDuration(hours) {
   if (!hours) return null;
@@ -128,6 +128,16 @@ async function scheduleReactionExpiry(purchaseId, ms) {
   }, ms);
 }
 
+function scheduleNicknameRevert(guild, targetId, originalNickname, ms, purchaseId) {
+  setTimeout(async () => {
+    try {
+      const member = await guild.members.fetch(targetId).catch(() => null);
+      if (member) await member.setNickname(originalNickname || null).catch(() => {});
+      await query('UPDATE shop_purchases SET expired = true WHERE id = $1', [purchaseId]).catch(() => {});
+    } catch (e) { console.error('[Shop] nickname revert error:', e.message); }
+  }, ms);
+}
+
 async function finalizePurchase(interaction, item, chosenEmoji) {
   const newBalance = await adjustBalance(interaction.user.id, interaction.user.username, -item.price);
 
@@ -186,6 +196,7 @@ async function finalizePurchase(interaction, item, chosenEmoji) {
 module.exports = {
   scheduleRoleRemoval,
   scheduleReactionExpiry,
+  scheduleNicknameRevert,
   data: new SlashCommandBuilder()
     .setName('shop')
     .setDescription('Economy shop — spend Sins on roles, perks, and custom items')
@@ -205,6 +216,7 @@ module.exports = {
         { name: 'Role', value: 'role' },
         { name: 'Auto Reaction', value: 'reaction' },
         { name: 'Custom (staff fulfills)', value: 'custom' },
+        { name: 'Nickname (rename another member)', value: 'nickname' },
       ))
       .addRoleOption(o => o.setName('role').setDescription('Role to grant (required for Role type; optional tag role for Auto Reaction)'))
       .addStringOption(o => o.setName('description').setDescription('Shown in the shop listing'))
@@ -493,9 +505,146 @@ module.exports = {
       return interaction.showModal(modal);
     }
 
+    // Nickname items: buyer picks a target member first, then types the new nickname
+    if (item.type === 'nickname') {
+      await interaction.deferReply({ ephemeral: true });
+
+      const userSelect = new UserSelectMenuBuilder()
+        .setCustomId('shop_nickname_target')
+        .setPlaceholder('Who do you want to nickname?')
+        .setMinValues(1)
+        .setMaxValues(1);
+      const row = new ActionRowBuilder().addComponents(userSelect);
+
+      const promptMsg = await interaction.editReply({
+        content: '<:role:1524456992683593979> Choose who you want to nickname (60s to pick):',
+        components: [row],
+      });
+
+      let targetSelectInteraction;
+      try {
+        targetSelectInteraction = await promptMsg.awaitMessageComponent({ time: 60_000 });
+      } catch {
+        return interaction.editReply({ content: '<:wrong:1512916350375301160> Timed out — no charge was made.', components: [] });
+      }
+
+      const targetId = targetSelectInteraction.values[0];
+      const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+
+      if (!targetMember) {
+        return targetSelectInteraction.update({ content: '<:wrong:1512916350375301160> Couldn\'t find that member — no charge was made.', components: [] });
+      }
+      if (targetMember.user.bot) {
+        return targetSelectInteraction.update({ content: '<:wrong:1512916350375301160> You can\'t nickname a bot — no charge was made.', components: [] });
+      }
+      if (targetMember.id === interaction.guild.ownerId) {
+        return targetSelectInteraction.update({ content: '<:wrong:1512916350375301160> Can\'t nickname the server owner — no charge was made.', components: [] });
+      }
+      const botMember = interaction.guild.members.me;
+      if (!botMember.permissions.has(PermissionFlagsBits.ManageNicknames)) {
+        return targetSelectInteraction.update({ content: '<:wrong:1512916350375301160> Veloura is missing the Manage Nicknames permission — let staff know. No charge was made.', components: [] });
+      }
+      if (targetMember.roles.highest.position >= botMember.roles.highest.position) {
+        return targetSelectInteraction.update({ content: '<:wrong:1512916350375301160> That member\'s role is too high for Veloura to nickname — no charge was made.', components: [] });
+      }
+
+      const { ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+      const modal = new ModalBuilder()
+        .setCustomId(`shop_nickname_modal:${item.id}:${targetId}`)
+        .setTitle('Set their new nickname');
+      const input = new TextInputBuilder()
+        .setCustomId('nickname')
+        .setLabel('New nickname (max 32 characters)')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(32);
+      modal.addComponents(new ActionRowBuilder().addComponents(input));
+      return targetSelectInteraction.showModal(modal);
+    }
+
     // Role & Custom items: purchase immediately
     await interaction.deferReply({ ephemeral: true });
     return finalizePurchase(interaction, item, null);
+  },
+
+  // ── Nickname modal submit (for Nickname purchases) ─────────────────────
+  async handleNicknameModal(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    const [, itemId, targetId] = interaction.customId.split(':');
+    const newNickname = interaction.fields.getTextInputValue('nickname').trim();
+    if (!newNickname) return interaction.editReply('<:wrong:1512916350375301160> Please enter a valid nickname.');
+
+    const itemRes = await query('SELECT * FROM shop_items WHERE id = $1 AND active = true', [itemId]);
+    if (!itemRes.rows.length) return interaction.editReply('<:wrong:1512916350375301160> This item is no longer available.');
+    const item = itemRes.rows[0];
+
+    // Re-check limit & balance since time may have passed
+    if (item.limit_per_user) {
+      const countRes = await query(
+        'SELECT COALESCE(SUM(quantity),0) AS total FROM shop_purchases WHERE item_id = $1 AND user_id = $2',
+        [item.id, interaction.user.id]
+      );
+      if (Number(countRes.rows[0].total) >= item.limit_per_user) {
+        return interaction.editReply(`<:wrong:1512916350375301160> You've already reached the limit (${item.limit_per_user}) for **${item.name}**.`);
+      }
+    }
+    const balance = await getBalance(interaction.user.id);
+    if (balance === null || balance < item.price) {
+      return interaction.editReply(`<:wrong:1512916350375301160> You don't have enough <a:SINS:1522338148380704910> Sins for **${item.name}**.`);
+    }
+
+    const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+    if (!targetMember) return interaction.editReply('<:wrong:1512916350375301160> Couldn\'t find that member anymore — no charge was made.');
+
+    const botMember = interaction.guild.members.me;
+    if (!botMember.permissions.has(PermissionFlagsBits.ManageNicknames) || targetMember.roles.highest.position >= botMember.roles.highest.position) {
+      return interaction.editReply('<:wrong:1512916350375301160> Veloura can no longer nickname that member — no charge was made.');
+    }
+
+    const originalNickname = targetMember.nickname; // null if they had none
+
+    const setResult = await targetMember.setNickname(newNickname).catch(() => null);
+    if (!setResult) {
+      return interaction.editReply('<:wrong:1512916350375301160> Failed to set that nickname — no charge was made.');
+    }
+
+    const newBalance = await adjustBalance(interaction.user.id, interaction.user.username, -item.price);
+
+    let expiresAt = null;
+    if (item.duration_hours) expiresAt = new Date(Date.now() + item.duration_hours * 60 * 60 * 1000);
+
+    const purchaseRes = await query(
+      'INSERT INTO shop_purchases (guild_id, item_id, user_id, quantity, expires_at, target_user_id, original_nickname) VALUES ($1,$2,$3,1,$4,$5,$6) RETURNING id',
+      [interaction.guildId, item.id, interaction.user.id, expiresAt, targetId, originalNickname]
+    );
+
+    if (expiresAt) {
+      scheduleNicknameRevert(interaction.guild, targetId, originalNickname, item.duration_hours * 60 * 60 * 1000, purchaseRes.rows[0].id);
+    }
+
+    // Log to fulfillment channel, same as every other purchase
+    const config = await getConfig(interaction.guildId);
+    if (config?.fulfillment_channel_id) {
+      const ch = await interaction.client.channels.fetch(config.fulfillment_channel_id).catch(() => null);
+      if (ch) {
+        await ch.send({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
+          .setTitle('<:role:1524456992683593979> Nickname Purchase')
+          .addFields(
+            { name: 'Buyer', value: `<@${interaction.user.id}>`, inline: true },
+            { name: 'Target', value: `<@${targetId}>`, inline: true },
+            { name: 'New Nickname', value: newNickname, inline: true },
+            { name: 'Price', value: `${Number(item.price).toLocaleString()} <a:SINS:1522338148380704910> (sins)`, inline: true },
+          )
+          .setTimestamp()] }).catch(() => {});
+      }
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor('#2ecc71')
+      .setDescription(`<:checkmark:1512916161493205165> You nicknamed <@${targetId}> to **${newNickname}** for **${Number(item.price).toLocaleString()}** <a:SINS:1522338148380704910> (sins)!\nNew balance: **${Number(newBalance).toLocaleString()}** <a:SINS:1522338148380704910> (sins)` +
+        (expiresAt ? `\n*This reverts <t:${Math.floor(expiresAt.getTime()/1000)}:R>*` : ''));
+
+    return interaction.editReply({ embeds: [embed] });
   },
 
   // ── Emoji modal submit (for Auto Reaction purchases) ───────────────────

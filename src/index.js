@@ -99,9 +99,9 @@ client.once('ready', async () => {
   // Restore shop role-expiry timers
   try {
     const { query: q } = require('./utils/database');
-    const { scheduleRoleRemoval, scheduleReactionExpiry } = require('./commands/shop/shop');
+    const { scheduleRoleRemoval, scheduleReactionExpiry, scheduleNicknameRevert } = require('./commands/shop/shop');
     const res = await q(`
-      SELECT sp.id, sp.guild_id, sp.user_id, sp.expires_at, si.role_id
+      SELECT sp.id, sp.guild_id, sp.user_id, sp.expires_at, sp.target_user_id, sp.original_nickname, si.role_id, si.type
       FROM shop_purchases sp
       JOIN shop_items si ON si.id = sp.item_id
       WHERE sp.expires_at IS NOT NULL AND sp.expired = false
@@ -110,6 +110,17 @@ client.once('ready', async () => {
       const ms = new Date(row.expires_at).getTime() - Date.now();
       const guild = client.guilds.cache.get(row.guild_id);
       if (!guild) continue;
+
+      if (row.type === 'nickname') {
+        if (ms > 0) {
+          scheduleNicknameRevert(guild, row.target_user_id, row.original_nickname, ms, row.id);
+        } else {
+          const member = await guild.members.fetch(row.target_user_id).catch(() => null);
+          if (member) await member.setNickname(row.original_nickname || null).catch(() => {});
+          await q('UPDATE shop_purchases SET expired = true WHERE id = $1', [row.id]).catch(() => {});
+        }
+        continue;
+      }
 
       if (ms > 0) {
         if (row.role_id) scheduleRoleRemoval(guild, row.user_id, row.role_id, ms, row.id);
@@ -125,6 +136,24 @@ client.once('ready', async () => {
     }
     console.log('[Shop] Restored role-expiry timers.');
   } catch(e) { console.error('[Shop] restore error:', e.message); }
+
+  // Restore active giveaway end-timers
+  try {
+    const { query: q } = require('./utils/database');
+    const { scheduleGiveawayEnd, finishGiveaway } = require('./commands/giveaway/giveaway');
+    const res = await q(`SELECT id, ends_at FROM giveaway_events WHERE status = 'active'`, []);
+    for (const row of res.rows) {
+      const ms = new Date(row.ends_at).getTime() - Date.now();
+      if (ms > 0) {
+        scheduleGiveawayEnd(client, row.id, ms);
+      } else {
+        // Already expired while bot was offline — finish it now
+        finishGiveaway(client, row.id).catch(err => console.error('[Giveaway] restore finish error:', err.message));
+      }
+    }
+    console.log('[Giveaway] Restored active giveaway timers.');
+  } catch(e) { console.error('[Giveaway] restore error:', e.message); }
+
   startReminderLoop(client);
   const { startPrivateRoomCleanupLoop } = require('./utils/privateRooms');
   startPrivateRoomCleanupLoop(client);
@@ -172,6 +201,9 @@ client.on('interactionCreate', async (interaction) => {
   }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('shop_emoji_modal:')) {
     return shopModule.handleEmojiModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('shop_nickname_modal:')) {
+    return shopModule.handleNicknameModal(interaction);
   }
   if (!interaction.isChatInputCommand()) return;
 
