@@ -48,6 +48,11 @@ module.exports = {
       .setName('report')
       .setDescription('Full staff report')
       .addUserOption(o => o.setName('user').setDescription('Staff member').setRequired(true))
+    )
+    .addSubcommand(sub => sub
+      .setName('payhistory')
+      .setDescription('View past payments for a staff member')
+      .addUserOption(o => o.setName('user').setDescription('Staff member').setRequired(true))
     ),
 
   async execute(interaction) {
@@ -56,6 +61,7 @@ module.exports = {
     if (sub === 'remove') await removeStaff(interaction);
     if (sub === 'list')   await listStaff(interaction);
     if (sub === 'report') await staffReport(interaction);
+    if (sub === 'payhistory') await payHistory(interaction);
   },
 };
 
@@ -154,6 +160,38 @@ async function staffReport(interaction) {
 
   if (eligibility.notes.length) {
     embed.addFields({ name: `${e('receipt')} Notes`, value: eligibility.notes.join('\n') });
+  }
+
+  await interaction.editReply({ embeds: [embed] });
+}
+
+async function payHistory(interaction) {
+  const user = interaction.options.getUser('user');
+  await interaction.deferReply();
+
+  const staffRes = await query(`SELECT * FROM staff WHERE user_id=$1`, [user.id]);
+  if (!staffRes.rows.length) return interaction.editReply({ content: `${e('wrong')} User not in staff database.` });
+  const staff = staffRes.rows[0];
+
+  const res = await query(
+    `SELECT * FROM staff_payments WHERE user_id=$1 AND guild_id=$2 ORDER BY paid_at DESC LIMIT 15`,
+    [user.id, interaction.guildId]
+  );
+
+  const embed = baseEmbed(`${e('payday')} Payment History — ${user.username}`, COLORS.lightpurple, interaction.guild?.name)
+    .setThumbnail(user.displayAvatarURL())
+    .addFields(
+      { name: `${e('calender')} Last Paid`,      value: staff.last_paid_at ? tsF(staff.last_paid_at) : 'Never', inline: true },
+      { name: `${e('RojasClock')} Next Pay Due`, value: staff.next_pay_due_at ? tsF(staff.next_pay_due_at) : 'N/A', inline: true },
+    );
+
+  if (res.rows.length) {
+    const lines = res.rows.map(p =>
+      `${tsF(p.paid_at)} — **${p.amount ? `${p.amount} ${p.currency}` : `Logged (${p.currency})`}** — approved by <@${p.approved_by}>`
+    ).join('\n');
+    embed.addFields({ name: `${e('receipt')} Past Payments (most recent ${res.rows.length})`, value: lines.slice(0, 1024) });
+  } else {
+    embed.addFields({ name: `${e('receipt')} Past Payments`, value: 'No payment history recorded yet.' });
   }
 
   await interaction.editReply({ embeds: [embed] });

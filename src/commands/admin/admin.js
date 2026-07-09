@@ -779,15 +779,37 @@ async function markPaid(interaction) {
 
   await interaction.deferReply({ ephemeral: true });
 
+  const staffRes = await query('SELECT pay_currency FROM staff WHERE user_id=$1', [user.id]);
+  const currency = staffRes.rows[0]?.pay_currency || 'MEE6';
+
   await query(
     `UPDATE staff SET last_paid_at=$1, next_pay_due_at=$2 WHERE user_id=$3`,
     [now, nextDue, user.id]
   );
 
+  await query(
+    `INSERT INTO staff_payments (user_id, guild_id, amount, currency, paid_at, approved_by) VALUES ($1,$2,$3,$4,$5,$6)`,
+    [user.id, interaction.guildId, amount, currency, now, interaction.user.id]
+  );
+
+  // DM receipt — best effort, don't block on closed DMs
+  const dmMember = await interaction.guild.members.fetch(user.id).catch(() => null);
+  if (dmMember) {
+    await dmMember.send({
+      embeds: [baseEmbed(`${e('payday')} Payment Receipt`, COLORS.softgreen, interaction.guild?.name)
+        .addFields(
+          { name: `${e('payday')} Amount`,      value: amount ? `${amount} ${currency}` : `Logged (${currency})`, inline: true },
+          { name: `${e('RojasClock')} Paid At`, value: tsF(now), inline: true },
+          { name: `${e('calender')} Next Due`,  value: tsF(nextDue), inline: true },
+          { name: '✍️ Approved by',             value: `<@${interaction.user.id}>`, inline: true },
+        )]
+    }).catch(() => {});
+  }
+
   const embed = baseEmbed(`${e('checkmark')} Staff Paid`, COLORS.softgreen, interaction.guild?.name)
     .addFields(
       { name: `${e('members')} Staff`,      value: `<@${user.id}>`, inline: true },
-      { name: `${e('payday')} Amount`,     value: amount ? `${amount}` : 'Logged', inline: true },
+      { name: `${e('payday')} Amount`,     value: amount ? `${amount} ${currency}` : 'Logged', inline: true },
       { name: `${e('RojasClock')} Paid At`,    value: tsF(now), inline: true },
       { name: `${e('calender')} Next Due`,   value: tsF(nextDue), inline: true },
       { name: '✍️ Approved by',value: `<@${interaction.user.id}>`, inline: true },
