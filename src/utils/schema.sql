@@ -322,6 +322,11 @@ CREATE TABLE IF NOT EXISTS afk_status (
 -- claim_hours_booster INTEGER DEFAULT 12
 
 -- Rumble Royale integration
+CREATE TABLE IF NOT EXISTS rr_processed_messages (
+  message_id TEXT PRIMARY KEY,
+  processed_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS rr_channel_config (
   channel_id TEXT PRIMARY KEY,
   guild_id TEXT NOT NULL,

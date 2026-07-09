@@ -10,12 +10,21 @@ const RUMBLE_ROYALE_BOT_ID = '693167035068317736';
 // Prevents the same message from being processed twice (once via messageCreate,
 // once via messageUpdate) — Discord.js can hand back a "partial" old message on
 // edits, which makes the old embed-check unreliable on its own.
+// Prevents the same message from being processed twice (once via messageCreate,
+// once via messageUpdate, or across a bot restart). The in-memory Set is a fast
+// first-pass check; the DB insert is the real, restart-proof guarantee.
 const processedMessages = new Set();
-function alreadyProcessed(messageId) {
+async function alreadyProcessed(messageId) {
   if (processedMessages.has(messageId)) return true;
   processedMessages.add(messageId);
   if (processedMessages.size > 2000) processedMessages.clear(); // simple unbounded-growth guard
-  return false;
+
+  const res = await query(
+    'INSERT INTO rr_processed_messages (message_id) VALUES ($1) ON CONFLICT (message_id) DO NOTHING RETURNING message_id',
+    [messageId]
+  ).catch((err) => { console.error('[RumbleRoyale] dedup insert error:', err.message); return { rows: [{}] }; }); // fail open on DB errors so a hiccup doesn't block real wins
+
+  return res.rows.length === 0; // if nothing was inserted, it was already there
 }
 
 async function getConfig(channelId) {
@@ -187,7 +196,7 @@ function buildBattleAnnouncement(config, channel, hostName, era = null) {
 async function handleMessage(message, client) {
   if (message.author.id !== RUMBLE_ROYALE_BOT_ID) return;
   if (!message.embeds?.length) return;
-  if (alreadyProcessed(message.id)) return;
+  if (await alreadyProcessed(message.id)) return;
 
   // Check if battle started in a personal grind channel
   const grindChRes = await query(
