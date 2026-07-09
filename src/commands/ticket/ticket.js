@@ -112,7 +112,7 @@ async function updateStaffEmbed(client, ticketId) {
   const ticket = ticketRes.rows[0];
   if (!ticket.staff_message_id || !ticket.staff_channel_id_ref) return;
 
-  const staffCh = client.channels.cache.get(ticket.staff_channel_id_ref);
+  const staffCh = (await client.channels.fetch(ticket.staff_channel_id_ref).catch(() => null));
   if (!staffCh) return;
   const staffMsg = await staffCh.messages.fetch(ticket.staff_message_id).catch(() => null);
   if (!staffMsg) return;
@@ -177,7 +177,7 @@ async function closeTicketFlow(interaction, client, ticketId, reason) {
   const attachment = new AttachmentBuilder(buffer, { name: `transcript-${interaction.channel.name}.txt` });
 
   if (config?.transcript_channel_id) {
-    const tCh = client.channels.cache.get(config.transcript_channel_id);
+    const tCh = (await client.channels.fetch(config.transcript_channel_id).catch(() => null));
     if (tCh) {
       const tMsg = await tCh.send({ embeds: [transcriptEmbed], files: [attachment] }).catch(() => null);
       if (tMsg) await query('UPDATE tickets SET transcript_message_id=$1, transcript_channel_id=$2 WHERE id=$3',
@@ -217,7 +217,7 @@ async function closeTicketFlow(interaction, client, ticketId, reason) {
 
   // Clean up the staff notification message
   if (ticket.staff_message_id && ticket.staff_channel_id_ref) {
-    const staffCh = client.channels.cache.get(ticket.staff_channel_id_ref);
+    const staffCh = (await client.channels.fetch(ticket.staff_channel_id_ref).catch(() => null));
     if (staffCh) {
       const staffMsg = await staffCh.messages.fetch(ticket.staff_message_id).catch(() => null);
       if (staffMsg) await staffMsg.delete().catch(() => {});
@@ -418,7 +418,7 @@ module.exports = {
 
       const typesRes = await query('SELECT * FROM ticket_types WHERE panel_id = $1 ORDER BY id', [panelId]);
       const components = buildPanelComponents(typesRes.rows);
-      const ch = interaction.client.channels.cache.get(panel.channel_id);
+      const ch = (await interaction.client.channels.fetch(panel.channel_id).catch(() => null));
       if (ch && panel.message_id) {
         const msg = await ch.messages.fetch(panel.message_id).catch(() => null);
         if (msg) await msg.edit({ components }).catch(() => {});
@@ -447,7 +447,7 @@ module.exports = {
         const panel = panelRes.rows[0];
         const typesRes = await query('SELECT * FROM ticket_types WHERE panel_id = $1 ORDER BY id', [panelId]);
         const components = buildPanelComponents(typesRes.rows);
-        const ch = interaction.client.channels.cache.get(panel.channel_id);
+        const ch = (await interaction.client.channels.fetch(panel.channel_id).catch(() => null));
         if (ch && panel.message_id) {
           const msg = await ch.messages.fetch(panel.message_id).catch(() => null);
           if (msg) await msg.edit({ components }).catch(() => {});
@@ -498,7 +498,7 @@ module.exports = {
         const panel = panelRes.rows[0];
         const typesRes = await query('SELECT * FROM ticket_types WHERE panel_id = $1 ORDER BY id', [panelId]);
         const components = buildPanelComponents(typesRes.rows);
-        const ch = interaction.client.channels.cache.get(panel.channel_id);
+        const ch = (await interaction.client.channels.fetch(panel.channel_id).catch(() => null));
         if (ch && panel.message_id) {
           const msg = await ch.messages.fetch(panel.message_id).catch(() => null);
           if (msg) await msg.edit({ components }).catch(() => {});
@@ -538,7 +538,7 @@ module.exports = {
       await query('UPDATE ticket_panels SET title=$1, description=$2, color=$3, open_message=$4 WHERE id=$5',
         [newTitle, newDesc, newColor, newOpenMsg, panelId]);
 
-      const ch = interaction.client.channels.cache.get(panel.channel_id);
+      const ch = (await interaction.client.channels.fetch(panel.channel_id).catch(() => null));
       if (ch && panel.message_id) {
         const msg = await ch.messages.fetch(panel.message_id).catch(() => null);
         if (msg) await msg.edit({ embeds: [new EmbedBuilder().setColor(newColor).setTitle(newTitle).setDescription(newDesc)] }).catch(() => {});
@@ -613,7 +613,7 @@ module.exports = {
 
       // Delete panel message from channel
       if (panel.channel_id && panel.message_id) {
-        const ch = interaction.client.channels.cache.get(panel.channel_id);
+        const ch = (await interaction.client.channels.fetch(panel.channel_id).catch(() => null));
         if (ch) {
           const msg = await ch.messages.fetch(panel.message_id).catch(() => null);
           if (msg) await msg.delete().catch(() => {});
@@ -700,7 +700,7 @@ module.exports = {
       if (!await isStaff(interaction.member, config))
         return interaction.reply({ content: '❌ Staff only.', ephemeral: true });
 
-      const thread = interaction.guild.channels.cache.get(ticketRes.rows[0].channel_id);
+      const thread = (await interaction.guild.channels.fetch(ticketRes.rows[0].channel_id).catch(() => null));
       if (!thread) return interaction.reply({ content: '❌ Ticket thread not found.', ephemeral: true });
 
       await thread.members.add(interaction.user.id);
@@ -775,7 +775,7 @@ module.exports = {
       if (ticketRes.rows.length) {
         const t = ticketRes.rows[0];
         if (t.transcript_message_id && t.transcript_channel_id) {
-          const tCh = client.channels.cache.get(t.transcript_channel_id);
+          const tCh = (await client.channels.fetch(t.transcript_channel_id).catch(() => null));
           if (tCh) {
             const tMsg = await tCh.messages.fetch(t.transcript_message_id).catch(() => null);
             if (tMsg) {
@@ -842,7 +842,7 @@ module.exports = {
     const threadName  = `ticket-${interaction.user.username}-${typeName}`.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 100);
 
     // Find panel channel to create thread under
-    const panelChannel = interaction.guild.channels.cache.get(panel?.channel_id || interaction.channel.id);
+    const panelChannel = (await interaction.guild.channels.fetch(panel?.channel_id || interaction.channel.id).catch(() => null));
     if (!panelChannel) return interaction.editReply('❌ Panel channel not found.');
 
     // Create private thread
@@ -898,7 +898,7 @@ module.exports = {
 
     // Post to staff channel
     if (config.staff_channel_id) {
-      const staffCh = interaction.client.channels.cache.get(config.staff_channel_id);
+      const staffCh = (await interaction.client.channels.fetch(config.staff_channel_id).catch(() => null));
       if (staffCh) {
         const staffEmbed = new EmbedBuilder()
           .setColor(panel?.color || '#d6c2ee')

@@ -52,7 +52,7 @@ function buildPanelEmbeds(config, count) {
 async function updatePanelCount(client, config) {
   if (!config.panel_channel_id || !config.panel_message_id2) return;
   const count = await getChannelCount(config.guild_id);
-  const ch = client.channels.cache.get(config.panel_channel_id);
+  const ch = (await client.channels.fetch(config.panel_channel_id).catch(() => null));
   if (!ch) return;
   const msg = await ch.messages.fetch(config.panel_message_id2).catch(() => null);
   if (!msg) return;
@@ -137,7 +137,7 @@ module.exports = {
       const config = await getConfig(interaction.guild.id);
       if (!config) return interaction.editReply('❌ Run `/grind setup` first.');
 
-      const ch = interaction.client.channels.cache.get(config.panel_channel_id);
+      const ch = (await interaction.client.channels.fetch(config.panel_channel_id).catch(() => null));
       if (!ch) return interaction.editReply('❌ Panel channel not found.');
 
       const count = await getChannelCount(interaction.guild.id);
@@ -282,7 +282,7 @@ module.exports = {
       }
 
       if (existing) {
-        const ch = guild.channels.cache.get(existing.channel_id);
+        const ch = (await guild.channels.fetch(existing.channel_id).catch(() => null));
         if (ch) await ch.delete().catch(() => {});
         await query('DELETE FROM grind_channels WHERE guild_id = $1 AND user_id = $2', [guild.id, member.id]);
         await updatePanelCount(client, { ...config, guild_id: guild.id });

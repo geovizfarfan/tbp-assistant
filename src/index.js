@@ -75,6 +75,17 @@ async function restoreRaffles(client) {
 
 client.once('ready', async () => {
   console.log(`[Bot] Logged in as ${client.user.tag}`);
+
+  // Fully populate the member cache for every guild. Without this, guildMemberUpdate
+  // (used for boost detection) silently never fires for members who haven't
+  // recently sent a message or otherwise been cached since the last restart.
+  for (const guild of client.guilds.cache.values()) {
+    await guild.members.fetch().catch((err) => {
+      console.error(`[Bot] Failed to fetch members for ${guild.name}:`, err.message);
+    });
+  }
+  console.log(`[Bot] Member cache primed for ${client.guilds.cache.size} guild(s).`);
+
   await loadAppEmojis(client.user.id, process.env.DISCORD_TOKEN);
   await restoreRaffles(client);
   await initDB();
@@ -86,7 +97,7 @@ client.once('ready', async () => {
     for (const row of res.rows) {
       const ms = new Date(row.expires_at).getTime() - Date.now();
       if (ms > 0) {
-        const ch = client.channels.cache.get(row.channel_id);
+        const ch = await client.channels.fetch(row.channel_id).catch(() => null);
         if (ch) {
           const cfgRes = await q('SELECT * FROM grind_config WHERE guild_id = $1', [row.guild_id]);
           scheduleDelete(ch, row.guild_id, row.user_id, ms, client, cfgRes.rows[0] || {});

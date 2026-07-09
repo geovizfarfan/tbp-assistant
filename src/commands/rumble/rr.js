@@ -12,7 +12,7 @@ async function getLogChannel(client, guildId, type = 'admin') {
   const col = type === 'achievement' ? 'achievement_log_channel_id' : 'log_channel_id';
   const res = await query(`SELECT ${col} FROM rr_guild_config WHERE guild_id = $1`, [guildId]);
   const id = res.rows[0]?.[col];
-  return id ? client.channels.cache.get(id) : null;
+  return id ? (await client.channels.fetch(id).catch(() => null)) : null;
 }
 
 module.exports = {
