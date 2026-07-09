@@ -276,6 +276,23 @@ async function handleMessage(message, client) {
     if (!parsed) return;
 
     const { userId, username, totalPlayers } = parsed;
+
+    // Second safety net: even if this came from a genuinely different message
+    // (not an edit of one we've already seen), don't award the same user a
+    // win in the same channel twice within a short window.
+    if (userId) {
+      const dupeCheck = await query(
+        `SELECT 1 FROM rr_recent_wins WHERE channel_id = $1 AND user_id = $2 AND won_at > NOW() - INTERVAL '90 seconds'`,
+        [message.channel.id, userId]
+      );
+      if (dupeCheck.rows.length) {
+        console.log(`[RumbleRoyale] Skipping duplicate winner announcement for ${username} in ${message.channel.id} (already awarded within the last 90s).`);
+        return;
+      }
+      await query('INSERT INTO rr_recent_wins (guild_id, channel_id, user_id) VALUES ($1,$2,$3)',
+        [message.guild.id, message.channel.id, userId]).catch(() => {});
+    }
+
     let serverWins = 0;
 
     if (userId) {

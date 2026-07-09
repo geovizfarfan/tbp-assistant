@@ -338,6 +338,14 @@ CREATE TABLE IF NOT EXISTS rr_processed_messages (
   processed_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS rr_recent_wins (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  won_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS rr_channel_config (
   channel_id TEXT PRIMARY KEY,
   guild_id TEXT NOT NULL,
