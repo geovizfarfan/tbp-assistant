@@ -193,6 +193,7 @@ module.exports = {
   scheduleRoleRemoval,
   scheduleReactionExpiry,
   scheduleNicknameRevert,
+  renderAndPost,
 
   data: new SlashCommandBuilder()
     .setName('shop')
@@ -506,7 +507,7 @@ module.exports = {
     }
 
     const balance = await getBalance(interaction.user.id);
-    if (balance === null || balance < item.price) {
+    if (balance === null || Number(balance) < Number(item.price)) {
       return interaction.reply({ content: `${WRONG} You don't have enough ${SINS} Sins for **${item.name}** (need ${Number(item.price).toLocaleString()}, you have ${Number(balance || 0).toLocaleString()}).`, ephemeral: true });
     }
 
