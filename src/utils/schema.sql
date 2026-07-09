@@ -96,6 +96,35 @@ CREATE TABLE IF NOT EXISTS giveaways (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS giveaway_bonus_roles (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  role_id TEXT NOT NULL,
+  bonus_entries INT NOT NULL,
+  UNIQUE (guild_id, role_id)
+);
+
+CREATE TABLE IF NOT EXISTS giveaway_events (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  message_id TEXT,
+  host_id TEXT NOT NULL,
+  prize TEXT NOT NULL,
+  winners_count INT NOT NULL DEFAULT 1,
+  thumbnail_url TEXT,
+  required_role_id TEXT,
+  bonus_role_ids TEXT[],
+  entry_emoji TEXT NOT NULL DEFAULT '🎉',
+  claim_hours INT,
+  ticket_channel_id TEXT,
+  ends_at TIMESTAMPTZ NOT NULL,
+  ended_at TIMESTAMPTZ,
+  winner_ids TEXT[],
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Game logs
 CREATE TABLE IF NOT EXISTS game_logs (
   id SERIAL PRIMARY KEY,
