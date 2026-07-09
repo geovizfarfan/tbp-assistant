@@ -531,6 +531,7 @@ CREATE TABLE IF NOT EXISTS shop_items (
 ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'General';
 ALTER TABLE shop_purchases ADD COLUMN IF NOT EXISTS target_user_id TEXT;
 ALTER TABLE shop_purchases ADD COLUMN IF NOT EXISTS original_nickname TEXT;
+ALTER TABLE shop_purchases ADD COLUMN IF NOT EXISTS used_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS shop_panel_messages (
   guild_id TEXT NOT NULL,
@@ -548,6 +549,7 @@ CREATE TABLE IF NOT EXISTS shop_purchases (
   chosen_emoji TEXT,
   target_user_id TEXT,
   original_nickname TEXT,
+  used_at TIMESTAMPTZ,
   expires_at TIMESTAMPTZ,
   expired BOOLEAN NOT NULL DEFAULT FALSE,
   purchased_at TIMESTAMPTZ DEFAULT NOW()
