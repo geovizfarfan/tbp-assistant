@@ -5,6 +5,10 @@ const pool = new Pool({
   ssl: process.env.PLAY_AND_REGRET_DB_URL?.includes('railway') ? { rejectUnauthorized: false } : false,
 });
 
+pool.on('error', (err) => {
+  console.error('[PlayAndRegretDB] Unexpected pool error (connection recovered automatically):', err.message);
+});
+
 async function query(text, params) {
   const client = await pool.connect();
   try {
