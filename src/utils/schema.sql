@@ -506,6 +506,7 @@ ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS host_description TEXT DEF
 ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS other_reward TEXT DEFAULT NULL;
 ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS host_description TEXT DEFAULT NULL;
 ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS announce_style TEXT DEFAULT 'embed';
+ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS last_battle_message_id TEXT;
 
 CREATE TABLE IF NOT EXISTS shop_config (
   guild_id TEXT PRIMARY KEY,

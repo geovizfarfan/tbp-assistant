@@ -144,6 +144,46 @@ async function checkAllRolesAchievement(guild, member, client, guildConfig) {
   }).catch(() => {}); // DM might be closed
 }
 
+// Builds the battle-start announcement (or ping-only content) for a channel's
+// current config. Used both by automatic detection and by manual /rr repost.
+function buildBattleAnnouncement(config, channel, hostName, era = null) {
+  const pings = [config.ping_role1_id, config.ping_role2_id, config.ping_role3_id]
+    .filter(Boolean).map(id => `<@&${id}>`).join(' ');
+
+  if (config.announce_style === 'ping') {
+    const nextLine = config.next_channel_id
+      ? `<a:rumblesword:1522372420894330921> Next Channel: <#${config.next_channel_id}>`
+      : `<a:rumblesword:1522372420894330921> Next Channel: —`;
+    return { content: `${pings}\n${nextLine}`, embeds: [] };
+  }
+
+  const descLines = [];
+  if (!config.battle_title) descLines.push(`<:rumble:1522372419338375299> Rumble Royale — BATTLE TIME!`);
+  if (config.battle_description) {
+    descLines.push('', config.battle_description, '');
+  } else {
+    descLines.push('');
+  }
+  if (config.host_description) descLines.push('', config.host_description, '');
+  if (config.reward_amount) descLines.push(`<a:moneybag:1522373120147849226> **Reward:** ${Number(config.reward_amount).toLocaleString()} <:sins:1522291331672703100> (sins)`);
+  if (config.other_reward) descLines.push(`🎁 **Bonus Reward:** ${config.other_reward}`);
+  if (config.winner_role_id) descLines.push(`<a:trophies:1512912823062364281> **Winner Role:** <@&${config.winner_role_id}>`);
+  if (config.next_channel_id) descLines.push(`<a:rumblesword:1522372420894330921> **Next Room:** <#${config.next_channel_id}>`);
+
+  const channelName = channel.name || '';
+
+  const battleEmbed = new EmbedBuilder()
+    .setColor(config.embed_color || '#d6c2ee')
+    .setAuthor({ name: channelName.slice(0, 256) })
+    .setTitle((config.battle_title || 'Rumble Royale — BATTLE TIME!').slice(0, 256))
+    .setDescription(descLines.join('\n').slice(0, 4096))
+    .setFooter({ text: `${channel.guild.name} • Hosted by: ${hostName}${era ? ` • Era: ${era}` : ''}` });
+
+  if (config.battle_image) battleEmbed.setImage(config.battle_image);
+
+  return { content: pings || '', embeds: [battleEmbed] };
+}
+
 async function handleMessage(message, client) {
   if (message.author.id !== RUMBLE_ROYALE_BOT_ID) return;
   if (!message.embeds?.length) return;
@@ -198,16 +238,12 @@ async function handleMessage(message, client) {
       }
     }
 
-    const pings = [config.ping_role1_id, config.ping_role2_id, config.ping_role3_id]
-      .filter(Boolean).map(id => `<@&${id}>`).join(' ');
+    // ── Battle announcement (embed or ping-only) ────────────────────────────
+    const announcement = buildBattleAnnouncement(config, message.channel, parsed.host, parsed.era);
 
-    // ── Ping-only announcement (no embed) ──────────────────────────────────
     if (config.announce_style === 'ping') {
-      const nextLine = config.next_channel_id
-        ? `<a:rumblesword:1522372420894330921> Next Channel: <#${config.next_channel_id}>`
-        : `<a:rumblesword:1522372420894330921> Next Channel: —`;
-      await message.channel.send({ content: `${pings}\n${nextLine}` });
-
+      const sentMsg = await message.channel.send({ content: announcement.content });
+      await query('UPDATE rr_channel_config SET last_battle_message_id = $1 WHERE channel_id = $2', [sentMsg.id, message.channel.id]).catch(() => {});
       // Clear one-time host description and other reward after posting
       if (config.host_description || config.other_reward) {
         await query('UPDATE rr_channel_config SET host_description = NULL, other_reward = NULL WHERE channel_id = $1', [message.channel.id]).catch(() => {});
@@ -215,30 +251,8 @@ async function handleMessage(message, client) {
       return;
     }
 
-    const descLines = [];
-    if (!config.battle_title) descLines.push(`<:rumble:1522372419338375299> Rumble Royale — BATTLE TIME!`);
-    if (config.battle_description) {
-      descLines.push('', config.battle_description, '');
-    } else {
-      descLines.push('');
-    }
-    if (config.reward_amount) descLines.push(`<a:moneybag:1522373120147849226> **Reward:** ${Number(config.reward_amount).toLocaleString()} <:sins:1522291331672703100> (sins)`);
-    if (config.winner_role_id) descLines.push(`<a:trophies:1512912823062364281> **Winner Role:** <@&${config.winner_role_id}>`);
-    if (config.next_channel_id) descLines.push(`<a:rumblesword:1522372420894330921> **Next Room:** <#${config.next_channel_id}>`);
-
-    // Channel name without # for author field
-    const channelName = message.channel.name || '';
-
-    const battleEmbed = new EmbedBuilder()
-      .setColor(config.embed_color || '#d6c2ee')
-      .setAuthor({ name: channelName.slice(0, 256) })
-      .setTitle((config.battle_title || 'Rumble Royale — BATTLE TIME!').slice(0, 256))
-      .setDescription(descLines.join('\n').slice(0, 4096))
-      .setFooter({ text: `${message.guild.name} • Hosted by: ${parsed.host}${parsed.era ? ` • Era: ${parsed.era}` : ''}` });
-
-    if (config.battle_image) battleEmbed.setImage(config.battle_image);
-
-    await message.channel.send({ content: pings || '', embeds: [battleEmbed] });
+    const sentMsg = await message.channel.send({ content: announcement.content, embeds: announcement.embeds });
+    await query('UPDATE rr_channel_config SET last_battle_message_id = $1 WHERE channel_id = $2', [sentMsg.id, message.channel.id]).catch(() => {});
 
     // Clear one-time host description and other reward after posting
     if (config.host_description || config.other_reward) {
@@ -369,4 +383,4 @@ async function handleReaction(message, client) {
   } catch (e) { console.error('[RumbleRoyale] handleReaction error:', e.message); }
 }
 
-module.exports = { handleMessage, handleReaction };
+module.exports = { handleMessage, handleReaction, buildBattleAnnouncement };

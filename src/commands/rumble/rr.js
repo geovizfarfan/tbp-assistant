@@ -92,6 +92,12 @@ module.exports = {
       .addStringOption(o => o.setName('other_reward').setDescription('Custom reward (e.g. Sticker, Nitro Basic)'))
       .addStringOption(o => o.setName('description').setDescription('One-time battle description (use \\n for new lines)')))
 
+    // ── repost (manually resend battle-start announcement) ──────────────────
+    .addSubcommand(sub => sub
+      .setName('repost')
+      .setDescription('Manually repost the battle-start announcement for a channel')
+      .addChannelOption(o => o.setName('channel').setDescription('RR channel').setRequired(true)))
+
     // ── stats ──────────────────────────────────────────────────────────────
     .addSubcommand(sub => sub
       .setName('stats')
@@ -112,8 +118,8 @@ module.exports = {
     const sub = interaction.options.getSubcommand();
     const group = interaction.options.getSubcommandGroup(false);
 
-    // /rr add has its own mod/admin role check below — every other subcommand is admin/owner only
-    if (sub !== 'add' &&
+    // /rr add and /rr repost have their own mod/admin/staff role check below — every other subcommand is admin/owner only
+    if (sub !== 'add' && sub !== 'repost' &&
         !interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
         interaction.user.id !== process.env.OWNER_ID) {
       return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
@@ -430,14 +436,53 @@ module.exports = {
       await query(`UPDATE rr_channel_config SET other_reward = $1, host_description = $2 WHERE channel_id = $3`,
         [otherReward, description, channel.id]);
 
+      // Try to update the currently-live battle announcement in place, rather than waiting for the next one
+      let liveUpdateNote = '';
+      if (cfgRes.rows[0].last_battle_message_id && cfgRes.rows[0].announce_style !== 'ping') {
+        const liveMsg = await channel.messages.fetch(cfgRes.rows[0].last_battle_message_id).catch(() => null);
+        if (liveMsg) {
+          const { buildBattleAnnouncement } = require('../../events/rumbleRoyale');
+          const freshCfgRes = await query('SELECT * FROM rr_channel_config WHERE channel_id = $1', [channel.id]);
+          const announcement = buildBattleAnnouncement(freshCfgRes.rows[0], channel, liveMsg.embeds[0]?.footer?.text?.match(/Hosted by: ([^•]+)/)?.[1]?.trim() || 'Unknown');
+          await liveMsg.edit({ embeds: announcement.embeds }).catch(() => {});
+          liveUpdateNote = '\n*The current battle announcement was updated live.*';
+        }
+      }
+
       const lines = [];
       if (otherReward) lines.push(`🎁 **Other Reward:** ${otherReward}`);
       if (description) lines.push(`📝 **Description:** ${description.slice(0, 50)}...`);
 
       return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
         .setTitle('<:rumble:1522372419338375299> Battle Info Added!')
-        .setDescription(lines.join('\n') || 'Nothing added.')
-        .setFooter({ text: 'This will appear in the next battle announcement and clear after.' })]});
+        .setDescription((lines.join('\n') || 'Nothing added.') + liveUpdateNote)
+        .setFooter({ text: liveUpdateNote ? 'Updated the live announcement — no need to wait for the next battle.' : 'This will appear in the next battle announcement and clear after.' })]});
+    }
+
+    // ── /rr repost ────────────────────────────────────────────────────────
+    if (sub === 'repost') {
+      const gcRes = await query('SELECT mod_role_id, admin_role_id FROM guild_config WHERE guild_id = $1', [interaction.guild.id]);
+      const gc = gcRes.rows[0];
+      const staffRes = await query('SELECT 1 FROM staff WHERE user_id = $1 AND active = true', [interaction.user.id]);
+      const isAllowed = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
+        interaction.user.id === process.env.OWNER_ID ||
+        (gc?.mod_role_id && interaction.member.roles.cache.has(gc.mod_role_id)) ||
+        (gc?.admin_role_id && interaction.member.roles.cache.has(gc.admin_role_id)) ||
+        staffRes.rows.length > 0;
+
+      if (!isAllowed) return interaction.editReply('❌ Staff/Mod only.');
+
+      const channel = interaction.options.getChannel('channel');
+      const cfgRes = await query('SELECT * FROM rr_channel_config WHERE channel_id = $1', [channel.id]);
+      if (!cfgRes.rows.length) return interaction.editReply('❌ That channel is not configured for RR tracking.');
+      const config = cfgRes.rows[0];
+
+      const { buildBattleAnnouncement } = require('../../events/rumbleRoyale');
+      const announcement = buildBattleAnnouncement(config, channel, interaction.user.username);
+
+      const sentMsg = await channel.send({ content: announcement.content, embeds: announcement.embeds });
+      await query('UPDATE rr_channel_config SET last_battle_message_id = $1 WHERE channel_id = $2', [sentMsg.id, channel.id]);
+      return interaction.editReply(`✅ Reposted the battle announcement in <#${channel.id}>.`);
     }
 
     // ── /rr stats ──────────────────────────────────────────────────────────
