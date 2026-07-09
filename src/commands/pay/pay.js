@@ -28,6 +28,21 @@ function formatMethods(m) {
   return lines.join('\n') || 'No payment methods set.';
 }
 
+// Shows only the ONE method tied to this specific payment, instead of every
+// method the seller has configured. Falls back to showing all of them if
+// that specific method isn't set (or the payment was logged as "Other").
+function formatSingleMethod(m, methodName) {
+  if (!m) return 'Contact the seller directly.';
+  const map = {
+    'PayPal':    m.paypal   ? `${E.paypal} **PayPal:** [Pay Here](${m.paypal})`     : null,
+    'Venmo':     m.venmo    ? `${E.venmo} **Venmo:** [Pay Here](${m.venmo})`         : null,
+    'CashApp':   m.cashapp  ? `${E.cashapp} **CashApp:** [Pay Here](${m.cashapp})`   : null,
+    'Apple Pay': m.applepay ? `${E.applepay} **Apple Pay:** ${m.applepay}`           : null,
+    'Zelle':     m.zelle    ? `${E.zelle} **Zelle:** ${m.zelle}`                     : null,
+  };
+  return map[methodName] || formatMethods(m);
+}
+
 async function getMethods(guildId, sellerId) {
   const res = await query('SELECT * FROM payment_methods WHERE guild_id=$1 AND seller_id=$2', [guildId, sellerId]);
   return res.rows[0] || null;
@@ -265,7 +280,7 @@ module.exports = {
                 { name: `${E.receipt} Service`,         value: service,                 inline: true },
                 { name: `${E.money} Amount Due`,        value: `$${amount.toFixed(2)}`, inline: true },
                 { name: `${E.sparkle} Method`,          value: method,                  inline: true },
-                { name: `${E.sparkle} How to Pay`,      value: formatMethods(m),        inline: false },
+                { name: `${E.sparkle} How to Pay`,      value: formatSingleMethod(m, method),        inline: false },
               ).setFooter({ text: `${interaction.guild.name} • ID: #${payId}` }).setTimestamp();
 
         await member.send({ embeds: [dmEmbed] }).catch(() => {});
@@ -339,7 +354,7 @@ module.exports = {
             { name: `${E.receipt} Service`,   value: p.service,                       inline: true },
             { name: `${E.money} Paid Now`,    value: `$${amountPaid.toFixed(2)}`,     inline: true },
             { name: `${E.loading} Remaining`, value: remaining > 0 ? `$${remaining.toFixed(2)}` : 'None — paid in full!', inline: true },
-            ...(remaining > 0 ? [{ name: `${E.sparkle} How to Pay Remaining`, value: formatMethods(m), inline: false }] : []),
+            ...(remaining > 0 ? [{ name: `${E.sparkle} How to Pay Remaining`, value: formatSingleMethod(m, p.method), inline: false }] : []),
           ).setFooter({ text: `${interaction.guild.name} • ID: #${id}` }).setTimestamp()
         ]}).catch(() => {});
       }
