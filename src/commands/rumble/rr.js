@@ -109,13 +109,15 @@ module.exports = {
       ))),
 
   async execute(interaction) {
-    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
+    const sub = interaction.options.getSubcommand();
+    const group = interaction.options.getSubcommandGroup(false);
+
+    // /rr add has its own mod/admin role check below — every other subcommand is admin/owner only
+    if (sub !== 'add' &&
+        !interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
         interaction.user.id !== process.env.OWNER_ID) {
       return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
     }
-
-    const sub = interaction.options.getSubcommand();
-    const group = interaction.options.getSubcommandGroup(false);
 
     await interaction.deferReply({ ephemeral: true });
 
@@ -405,15 +407,15 @@ module.exports = {
 
     // ── /rr add ───────────────────────────────────────────────────────────
     if (sub === 'add') {
-      await interaction.deferReply({ ephemeral: true });
-
-      // Check mod/admin role
+      // Check mod/admin role OR staff roster membership
       const gcRes = await query('SELECT mod_role_id, admin_role_id FROM guild_config WHERE guild_id = $1', [interaction.guild.id]);
       const gc = gcRes.rows[0];
+      const staffRes = await query('SELECT 1 FROM staff WHERE user_id = $1 AND active = true', [interaction.user.id]);
       const isAllowed = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
         interaction.user.id === process.env.OWNER_ID ||
         (gc?.mod_role_id && interaction.member.roles.cache.has(gc.mod_role_id)) ||
-        (gc?.admin_role_id && interaction.member.roles.cache.has(gc.admin_role_id));
+        (gc?.admin_role_id && interaction.member.roles.cache.has(gc.admin_role_id)) ||
+        staffRes.rows.length > 0;
 
       if (!isAllowed) return interaction.editReply('❌ Staff/Mod only.');
 
