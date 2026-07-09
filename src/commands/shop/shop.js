@@ -6,7 +6,7 @@ const {
 const { query } = require('../../utils/database');
 const { getBalance, adjustBalance } = require('../../utils/playAndRegretDb');
 
-const TYPE_LABELS = { role: '<:role:1524456992683593979> Role', reaction: '<a:purplesparkle:1512912828489793626> Auto Reaction', custom: '<a:gift:1512915751458050268> Custom', nickname: '<:role:1524456992683593979> Nickname' };
+const TYPE_LABELS = { role: '<:role:1524456992683593979> Role', reaction: '<a:purplesparkle:1512912828489793626> Auto Reaction', custom: '<a:gift:1512915751458050268> Custom', nickname: '<:role:1524456992683593979> Nickname', nickname_remove: '<:role:1524456992683593979> Nickname Remover' };
 const WRONG = '<:wrong:1512916350375301160>';
 const CHECK = '<:checkmark:1512916161493205165>';
 const SINS = '<a:SINS:1522338148380704910>';
@@ -214,6 +214,7 @@ module.exports = {
         { name: 'Auto Reaction', value: 'reaction' },
         { name: 'Custom (staff fulfills)', value: 'custom' },
         { name: 'Nickname (rename another member)', value: 'nickname' },
+        { name: 'Nickname Remover (reset your own nickname)', value: 'nickname_remove' },
       ))
       .addRoleOption(o => o.setName('role').setDescription('Role to grant (required for Role type; optional tag role for Auto Reaction)'))
       .addStringOption(o => o.setName('description').setDescription('Shown in the shop listing'))
@@ -315,7 +316,7 @@ module.exports = {
       const durationUnit  = interaction.options.getString('duration_unit') || 'hours';
       const duration      = durationAmt ? (durationUnit === 'days' ? durationAmt * 24 : durationAmt) : null;
 
-      if (durationAmt && type === 'custom') {
+      if (durationAmt && (type === 'custom' || type === 'nickname_remove')) {
         return interaction.editReply(`${WRONG} Duration only applies to Role, Auto Reaction, and Nickname items.`);
       }
       if (type === 'role' && !role) {
@@ -665,6 +666,33 @@ async function useItem(interaction) {
     await query('UPDATE shop_purchases SET used_at = NOW() WHERE id = $1', [row.purchase_id]);
     await logUsedItem(interaction, row, [], true);
     return interaction.editReply(`${CHECK} Used **${row.name}** — staff has been notified to fulfill your order.`);
+  }
+
+  // ── Nickname Remover: resets the BUYER's own nickname immediately ──────
+  if (row.type === 'nickname_remove') {
+    await interaction.deferReply({ ephemeral: true });
+
+    const botMember = interaction.guild.members.me;
+    if (!botMember.permissions.has(PermissionFlagsBits.ManageNicknames)) {
+      return interaction.editReply(`${WRONG} Veloura is missing the Manage Nicknames permission — let staff know. Item was not used.`);
+    }
+    if (interaction.member.roles.highest.position >= botMember.roles.highest.position) {
+      return interaction.editReply(`${WRONG} Veloura can't remove your nickname — your role is too high. Item was not used.`);
+    }
+    if (!interaction.member.nickname) {
+      return interaction.editReply(`${WRONG} You don't currently have a nickname set — item was not used.`);
+    }
+
+    const removed = await interaction.member.setNickname(null).catch(() => null);
+    if (removed === null) {
+      return interaction.editReply(`${WRONG} Failed to remove your nickname — item was not used.`);
+    }
+
+    await query('UPDATE shop_purchases SET used_at = NOW() WHERE id = $1', [row.purchase_id]);
+    await logUsedItem(interaction, row);
+
+    return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#2ecc71')
+      .setDescription(`${CHECK} Used **${row.name}** — your nickname has been reset!`)] });
   }
 
   // ── Auto Reaction: pick an emoji via modal ──────────────────────────────
