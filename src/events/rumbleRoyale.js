@@ -196,6 +196,18 @@ function buildBattleAnnouncement(config, channel, hostName, era = null) {
 async function handleMessage(message, client) {
   if (message.author.id !== RUMBLE_ROYALE_BOT_ID) return;
   if (!message.embeds?.length) return;
+
+  // Guard against old, already-resolved messages getting reprocessed as fresh
+  // events — e.g. if the RR bot edits an old message for unrelated reasons,
+  // or a channel gets configured for tracking after messages already exist
+  // in its history. A genuine live battle message is always very recent.
+  const ageMs = Date.now() - message.createdTimestamp;
+  const MAX_AGE_MS = 15 * 60 * 1000; // 15 minutes
+  if (ageMs > MAX_AGE_MS) {
+    console.log(`[RumbleRoyale] Ignoring stale message ${message.id} in #${message.channel.name} — ${Math.round(ageMs / 60000)}m old, not a live battle event.`);
+    return;
+  }
+
   if (await alreadyProcessed(message.id)) return;
 
   // Check if battle started in a personal grind channel
