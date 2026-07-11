@@ -232,17 +232,29 @@ module.exports = {
         return interaction.editReply({ content: `❌ Max channel capacity reached (${config.max_channels}). Try again later!` });
       }
 
-      // Create channel in same category
+      // Create channel in same category, inheriting the category's own permissions
+      // (e.g. staff roles already granted access there) on top of channel privacy
       const parentId = interaction.channel.parentId;
+      const parentCategory = parentId ? await guild.channels.fetch(parentId).catch(() => null) : null;
+
+      // Start with whatever the category already has set up
+      const overwriteMap = new Map();
+      if (parentCategory) {
+        for (const ow of parentCategory.permissionOverwrites.cache.values()) {
+          overwriteMap.set(ow.id, { id: ow.id, allow: ow.allow.toArray(), deny: ow.deny.toArray() });
+        }
+      }
+      // Then enforce the channel's own privacy rules — these take priority over
+      // whatever the category has, so the channel stays private to its owner
+      overwriteMap.set(guild.roles.everyone.id, { id: guild.roles.everyone.id, deny: ['ViewChannel'] });
+      overwriteMap.set(member.id, { id: member.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] });
+      overwriteMap.set(client.user.id, { id: client.user.id, allow: ['ViewChannel', 'SendMessages', 'ManageChannels'] });
+
       const newChannel = await guild.channels.create({
         name: `grind-${member.user.username}`.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 100),
         type: ChannelType.GuildText,
         parent: parentId || null,
-        permissionOverwrites: [
-          { id: guild.roles.everyone, deny: ['ViewChannel'] },
-          { id: member.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
-          { id: client.user.id, allow: ['ViewChannel', 'SendMessages', 'ManageChannels'] },
-        ],
+        permissionOverwrites: [...overwriteMap.values()],
       });
 
       const expiry = new Date(Date.now() + (config.duration_hours * 60 * 60 * 1000));
