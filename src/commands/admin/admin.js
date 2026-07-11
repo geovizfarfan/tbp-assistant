@@ -624,7 +624,7 @@ async function paycheckCheck(interaction) {
   if (!staffRes.rows.length) return interaction.editReply({ content: `${e('wrong')} Not in staff database.` });
 
   const result = await checkEligibility(interaction.guildId, user.id);
-  const embed = eligibilityEmbed(staffRes.rows[0], result);
+  const embed = eligibilityEmbed(staffRes.rows[0], result, e);
   await interaction.editReply({ embeds: [embed] });
 }
 
