@@ -30,8 +30,8 @@ async function setupButton(interaction) {
 
   const embed = new EmbedBuilder()
     .setColor(COLORS.tbppurple)
-    .setDescription(description)
-    .setFooter({ text: interaction.guild?.name || '' });
+    .setDescription(description);
+  if (interaction.guild?.name) embed.setFooter({ text: interaction.guild.name });
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
