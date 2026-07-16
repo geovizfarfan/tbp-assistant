@@ -148,7 +148,7 @@ function buildCategoryEmbed(category) {
         { name: '📝 Add Host Info', value: '`/rr add channel:#ch other_reward:"Sticker" description:"Tonight: Boardgame era"`\nAnyone on the staff roster (or with the mod/admin role) can add a one-time description or reward — updates the *live* battle announcement immediately if one is currently posted, no need to wait for the next battle.', inline: false },
         { name: '🔁 Repost Announcement', value: '`/rr repost channel:#ch`\nManually resends the battle-start announcement for a channel using its current config (title, image, next room). Staff roster access, same as `/rr add`.', inline: false },
         { name: '🏆 Season Management', value: '`/rr season start name:"Season 1"` → `/rr season add channel:#ch` → `/rr season end`\nDefines which channels count toward the collection achievement.', inline: false },
-        { name: '📊 Stats', value: '`/rr stats [user] [channel] [period] [scope]`\nView leaderboards — filter by channel, week/month/all, server/global.', inline: false },
+        { name: '💰 Currency & Wallet', value: '`/rr currency use_sins:True/False name:"..." emoji:"..."` — choose real Sins or your own currency\n`/rr wallet [user]` — check custom currency balance', inline: false },
         { name: '📋 Log Channels', value: '`/rr log admin channel:#ch` — config change logs\n`/rr log achievement channel:#ch` — collection achievement logs', inline: false },
         { name: '🗑️ Clear Channel', value: '`/rr clear channel:#ch`\nRemoves all RR config for a channel.', inline: false },
       )

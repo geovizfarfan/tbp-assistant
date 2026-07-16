@@ -111,23 +111,7 @@ module.exports = {
     .addSubcommand(sub => sub
       .setName('wallet')
       .setDescription('Check your (or someone else\'s) custom RR currency balance')
-      .addUserOption(o => o.setName('user').setDescription('Member to check (defaults to you)')))
-
-    // ── stats ──────────────────────────────────────────────────────────────
-    .addSubcommand(sub => sub
-      .setName('stats')
-      .setDescription('Rumble Royale leaderboard and stats')
-      .addUserOption(o => o.setName('user').setDescription('View a specific user\'s stats'))
-      .addChannelOption(o => o.setName('channel').setDescription('Filter by channel'))
-      .addStringOption(o => o.setName('period').setDescription('Time period').addChoices(
-        { name: 'All Time', value: 'all' },
-        { name: 'This Week', value: 'week' },
-        { name: 'This Month', value: 'month' },
-      ))
-      .addStringOption(o => o.setName('scope').setDescription('Scope').addChoices(
-        { name: 'Server', value: 'server' },
-        { name: 'Global', value: 'global' },
-      ))),
+      .addUserOption(o => o.setName('user').setDescription('Member to check (defaults to you)'))),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
@@ -542,62 +526,6 @@ module.exports = {
       const balance = balRes.rows[0]?.balance || 0;
 
       return interaction.editReply(`${gc.currency_emoji || '🪙'} <@${user.id}>'s balance: **${Number(balance).toLocaleString()} ${gc.currency_name || 'Coins'}**`);
-    }
-
-    // ── /rr stats ──────────────────────────────────────────────────────────
-    if (sub === 'stats') {
-      const user    = interaction.options.getUser('user');
-      const channel = interaction.options.getChannel('channel');
-      const period  = interaction.options.getString('period') || 'all';
-      const scope   = interaction.options.getString('scope') || 'server';
-
-      if (user) {
-        const serverRes = await query('SELECT channel_id, wins, games FROM rr_stats WHERE guild_id = $1 AND user_id = $2 ORDER BY wins DESC', [interaction.guild.id, user.id]);
-        const globalRes = await query('SELECT SUM(wins) as tw, SUM(games) as tg FROM rr_stats WHERE user_id = $1', [user.id]);
-        const achRes    = await query('SELECT completions FROM rr_achievements WHERE guild_id = $1 AND user_id = $2', [interaction.guild.id, user.id]);
-
-        const serverTotal = serverRes.rows.reduce((s, r) => s + Number(r.wins), 0);
-        const globalTotal = Number(globalRes.rows[0]?.tw || 0);
-        const completions = achRes.rows[0]?.completions || 0;
-        const channelLines = serverRes.rows.length ? serverRes.rows.map(r => `<#${r.channel_id}> — **${r.wins}W**`).join('\n') : 'No wins yet';
-
-        return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
-          .setTitle(`<a:trophies:1512912823062364281> ${user.username}'s RR Stats`)
-          .setThumbnail(user.displayAvatarURL({ dynamic: true }))
-          .addFields(
-            { name: '<:rumble:1522372419338375299> Server Wins', value: `**${serverTotal}**`, inline: true },
-            { name: '<a:rumblesword:1522372420894330921> Global Wins', value: `**${globalTotal}**`, inline: true },
-            { name: '<a:trophies:1512912823062364281> Completions', value: `**${completions}**`, inline: true },
-            { name: 'By Channel', value: channelLines },
-          ).setFooter({ text: interaction.guild.name })]});
-      }
-
-      const periodFilter = period === 'week' ? "AND updated_at > NOW() - INTERVAL '7 days'" : period === 'month' ? "AND updated_at > NOW() - INTERVAL '30 days'" : '';
-      const periodLabel  = period === 'week' ? ' · This Week' : period === 'month' ? ' · This Month' : ' · All Time';
-
-      if (scope === 'global') {
-        const res = await query(`SELECT user_id, username, SUM(wins) as tw, SUM(games) as tg FROM rr_stats s WHERE 1=1 ${periodFilter} GROUP BY user_id, username ORDER BY tw DESC LIMIT 10`);
-        if (!res.rows.length) return interaction.editReply('No global stats yet.');
-        const lines = res.rows.map((r, i) => `**${i+1}.** ${cleanName(r.username)} — **${r.tw}W** (${r.tg} games)`).join('\n');
-        return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
-          .setTitle(`<a:trophies:1512912823062364281> Global RR Leaderboard${periodLabel}`)
-          .setDescription(lines).setFooter({ text: 'All servers tracked by VELOURA' })]});
-      }
-
-      const params = [interaction.guild.id];
-      let channelFilter = '';
-      if (channel) { channelFilter = `AND s.channel_id = $${params.length + 1}`; params.push(channel.id); }
-
-      const res = await query(
-        `SELECT user_id, username, SUM(wins) as tw, SUM(games) as tg FROM rr_stats s WHERE guild_id = $1 ${channelFilter} ${periodFilter} GROUP BY user_id, username ORDER BY tw DESC LIMIT 10`,
-        params
-      );
-      if (!res.rows.length) return interaction.editReply('No stats yet.');
-      const lines = res.rows.map((r, i) => `**${i+1}.** ${cleanName(r.username)} — **${r.tw}W** (${r.tg} games)`).join('\n');
-      const chLabel = channel ? ` · <#${channel.id}>` : '';
-      return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
-        .setTitle(`<a:trophies:1512912823062364281> RR Leaderboard${periodLabel}${chLabel}`)
-        .setDescription(lines).setFooter({ text: interaction.guild.name })]});
     }
   },
 };
