@@ -18,6 +18,7 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessageReactions,
+    GatewayIntentBits.GuildModeration,
   ],
   partials: [Partials.Message, Partials.Reaction, Partials.Channel],
 });
@@ -244,6 +245,8 @@ const helpModule      = require('./commands/help/help');
 const wheelModule     = require('./commands/wheel/wheel');
 const rolePanelModule = require('./commands/rolepanel/rolepanel');
 const shopModule      = require('./commands/shop/shop');
+const banlogModule    = require('./commands/banlog/banlog');
+const { handleMessageXp } = require('./events/levelXp');
 client.on('messageCreate', async (message) => {
   try { await handleRRMessage(message, client); }
   catch (e) { console.error('[RumbleRoyale]', e.message); }
@@ -299,6 +302,18 @@ client.on('messageReactionAdd', async (reaction, user) => {
 client.on('messageReactionRemove', async (reaction, user) => {
   try { await rolePanelModule.handleReactionRemove(reaction, user); }
   catch (e) { console.error('[RolePanel] remove:', e.message); }
+});
+
+// Ban log
+client.on('guildBanAdd', async (ban) => {
+  try { await banlogModule.handleBan(ban, client); }
+  catch (e) { console.error('[BanLog]', e.message); }
+});
+
+// Level system XP gain
+client.on('messageCreate', async (message) => {
+  try { await handleMessageXp(message, client); }
+  catch (e) { console.error('[Level] XP error:', e.message); }
 });
 
 // Boost detection

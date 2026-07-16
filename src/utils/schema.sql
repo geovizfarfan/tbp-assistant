@@ -280,6 +280,7 @@ CREATE TABLE IF NOT EXISTS guild_config (
   mod_role_id TEXT,
   admin_role_id TEXT,
   game_ping_role_id TEXT,
+  ban_log_channel_id TEXT,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -554,6 +555,44 @@ CREATE TABLE IF NOT EXISTS shop_items (
   position INT NOT NULL DEFAULT 0
 );
 ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'General';
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS ban_log_channel_id TEXT;
+
+CREATE TABLE IF NOT EXISTS ban_logs (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  username TEXT,
+  reason TEXT,
+  banned_by TEXT,
+  message_id TEXT,
+  channel_id TEXT,
+  banned_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS level_config (
+  guild_id TEXT PRIMARY KEY,
+  levelup_channel_id TEXT,
+  announce_levelup BOOLEAN NOT NULL DEFAULT TRUE,
+  xp_min INT NOT NULL DEFAULT 15,
+  xp_max INT NOT NULL DEFAULT 25,
+  cooldown_seconds INT NOT NULL DEFAULT 60
+);
+
+CREATE TABLE IF NOT EXISTS level_excluded_channels (
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  PRIMARY KEY (guild_id, channel_id)
+);
+
+CREATE TABLE IF NOT EXISTS levels (
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  username TEXT,
+  xp BIGINT NOT NULL DEFAULT 0,
+  level INT NOT NULL DEFAULT 0,
+  last_xp_at TIMESTAMPTZ,
+  PRIMARY KEY (guild_id, user_id)
+);
 ALTER TABLE shop_purchases ADD COLUMN IF NOT EXISTS target_user_id TEXT;
 ALTER TABLE shop_purchases ADD COLUMN IF NOT EXISTS original_nickname TEXT;
 ALTER TABLE shop_purchases ADD COLUMN IF NOT EXISTS used_at TIMESTAMPTZ;
