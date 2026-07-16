@@ -1,4 +1,4 @@
-const { query } = require('../../utils/database');
+const { query } = require('./database');
 
 // MEE6-style formula: XP needed to go from `level` to `level + 1`
 function xpForNextLevel(level) {
