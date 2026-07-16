@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const { query } = require('../../utils/database');
+const { isGuildAllowedSins } = require('../../utils/sinsRequests');
 
 const cleanName = (name) => name?.replace(/<a?:[^:]+:\d+>/g, '').replace(/:[^:]+:/g, '').trim() || 'Unknown';
 
@@ -98,6 +99,20 @@ module.exports = {
       .setDescription('Manually repost the battle-start announcement for a channel')
       .addChannelOption(o => o.setName('channel').setDescription('RR channel').setRequired(true)))
 
+    // ── currency (choose Sins or a custom local currency) ────────────────────
+    .addSubcommand(sub => sub
+      .setName('currency')
+      .setDescription('Set whether RR rewards use real Sins or your own custom currency')
+      .addBooleanOption(o => o.setName('use_sins').setDescription('True = real Sins (Play & Regret). False = your own custom currency').setRequired(true))
+      .addStringOption(o => o.setName('name').setDescription('Custom currency name, e.g. "Coins" (only used if use_sins is False)'))
+      .addStringOption(o => o.setName('emoji').setDescription('Custom currency emoji, e.g. 🪙 or <:coin:id> (only used if use_sins is False)')))
+
+    // ── wallet (check custom currency balance) ────────────────────────────────
+    .addSubcommand(sub => sub
+      .setName('wallet')
+      .setDescription('Check your (or someone else\'s) custom RR currency balance')
+      .addUserOption(o => o.setName('user').setDescription('Member to check (defaults to you)')))
+
     // ── stats ──────────────────────────────────────────────────────────────
     .addSubcommand(sub => sub
       .setName('stats')
@@ -119,7 +134,7 @@ module.exports = {
     const group = interaction.options.getSubcommandGroup(false);
 
     // /rr add and /rr repost have their own mod/admin/staff role check below — every other subcommand is admin/owner only
-    if (sub !== 'add' && sub !== 'repost' &&
+    if (sub !== 'add' && sub !== 'repost' && sub !== 'wallet' &&
         !interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
         interaction.user.id !== process.env.OWNER_ID) {
       return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
@@ -443,7 +458,7 @@ module.exports = {
         if (liveMsg) {
           const { buildBattleAnnouncement } = require('../../events/rumbleRoyale');
           const freshCfgRes = await query('SELECT * FROM rr_channel_config WHERE channel_id = $1', [channel.id]);
-          const announcement = buildBattleAnnouncement(freshCfgRes.rows[0], channel, liveMsg.embeds[0]?.footer?.text?.match(/Hosted by: ([^•]+)/)?.[1]?.trim() || 'Unknown');
+          const announcement = await buildBattleAnnouncement(freshCfgRes.rows[0], channel, liveMsg.embeds[0]?.footer?.text?.match(/Hosted by: ([^•]+)/)?.[1]?.trim() || 'Unknown');
           await liveMsg.edit({ embeds: announcement.embeds }).catch(() => {});
           liveUpdateNote = '\n*The current battle announcement was updated live.*';
         }
@@ -478,11 +493,55 @@ module.exports = {
       const config = cfgRes.rows[0];
 
       const { buildBattleAnnouncement } = require('../../events/rumbleRoyale');
-      const announcement = buildBattleAnnouncement(config, channel, interaction.user.username);
+      const announcement = await buildBattleAnnouncement(config, channel, interaction.user.username);
 
       const sentMsg = await channel.send({ content: announcement.content, embeds: announcement.embeds });
       await query('UPDATE rr_channel_config SET last_battle_message_id = $1 WHERE channel_id = $2', [sentMsg.id, channel.id]);
       return interaction.editReply(`✅ Reposted the battle announcement in <#${channel.id}>.`);
+    }
+
+    // ── /rr currency ──────────────────────────────────────────────────────
+    if (sub === 'currency') {
+      const useSins = interaction.options.getBoolean('use_sins');
+      const name    = interaction.options.getString('name');
+      const emoji   = interaction.options.getString('emoji');
+
+      if (useSins && !isGuildAllowedSins(interaction.guild.id)) {
+        return interaction.editReply('❌ Real Sins are only available in specific approved servers. Please set up your own custom currency instead (`use_sins:False name:"..." emoji:"..."`).');
+      }
+      if (!useSins && !name) {
+        return interaction.editReply('❌ Please provide a `name` for your custom currency (e.g. "Coins") when `use_sins` is False.');
+      }
+
+      await query(`
+        INSERT INTO rr_guild_config (guild_id, use_sins, currency_name, currency_emoji)
+        VALUES ($1,$2,$3,$4)
+        ON CONFLICT (guild_id) DO UPDATE SET
+          use_sins = $2,
+          currency_name = COALESCE($3, rr_guild_config.currency_name),
+          currency_emoji = COALESCE($4, rr_guild_config.currency_emoji)
+      `, [interaction.guild.id, useSins, name, emoji]);
+
+      if (useSins) {
+        return interaction.editReply('✅ RR rewards will use real **Sins** (Play & Regret) going forward.');
+      }
+      return interaction.editReply(`✅ RR rewards will use your own currency: **${name}** ${emoji || ''} going forward. Balances are tracked locally in Veloura, separate from Sins.`);
+    }
+
+    // ── /rr wallet ────────────────────────────────────────────────────────
+    if (sub === 'wallet') {
+      const user = interaction.options.getUser('user') || interaction.user;
+      const gcRes = await query('SELECT use_sins, currency_name, currency_emoji FROM rr_guild_config WHERE guild_id = $1', [interaction.guild.id]);
+      const gc = gcRes.rows[0] || { use_sins: isGuildAllowedSins(interaction.guild.id), currency_name: 'Sins', currency_emoji: '<a:SINS:1522338148380704910>' };
+
+      if (gc.use_sins) {
+        return interaction.editReply('ℹ️ This server uses real Sins — check your balance with `/sins balance` instead.');
+      }
+
+      const balRes = await query('SELECT balance FROM rr_custom_balances WHERE guild_id = $1 AND user_id = $2', [interaction.guild.id, user.id]);
+      const balance = balRes.rows[0]?.balance || 0;
+
+      return interaction.editReply(`${gc.currency_emoji || '🪙'} <@${user.id}>'s balance: **${Number(balance).toLocaleString()} ${gc.currency_name || 'Coins'}**`);
     }
 
     // ── /rr stats ──────────────────────────────────────────────────────────

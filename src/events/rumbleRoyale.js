@@ -4,6 +4,7 @@
  */
 const { EmbedBuilder } = require('discord.js');
 const { query } = require('../utils/database');
+const { isGuildAllowedSins, getGuildCaps, createSinsRequest } = require('../utils/sinsRequests');
 
 const RUMBLE_ROYALE_BOT_ID = '693167035068317736';
 
@@ -155,7 +156,11 @@ async function checkAllRolesAchievement(guild, member, client, guildConfig) {
 
 // Builds the battle-start announcement (or ping-only content) for a channel's
 // current config. Used both by automatic detection and by manual /rr repost.
-function buildBattleAnnouncement(config, channel, hostName, era = null) {
+async function buildBattleAnnouncement(config, channel, hostName, era = null) {
+  const guildCfgRes = await query('SELECT use_sins, currency_name, currency_emoji FROM rr_guild_config WHERE guild_id = $1', [channel.guild.id]);
+  const guildCfg = guildCfgRes.rows[0] || { use_sins: isGuildAllowedSins(channel.guild.id), currency_name: 'Sins', currency_emoji: '<a:SINS:1522338148380704910>' };
+  const currencyName  = guildCfg.use_sins ? 'sins' : (guildCfg.currency_name || 'Coins');
+  const currencyEmoji = guildCfg.use_sins ? '<:sins:1522291331672703100>' : (guildCfg.currency_emoji || '🪙');
   const pings = [config.ping_role1_id, config.ping_role2_id, config.ping_role3_id]
     .filter(Boolean).map(id => `<@&${id}>`).join(' ');
 
@@ -174,7 +179,7 @@ function buildBattleAnnouncement(config, channel, hostName, era = null) {
     descLines.push('');
   }
   if (config.host_description) descLines.push('', config.host_description, '');
-  if (config.reward_amount) descLines.push(`<a:moneybag:1522373120147849226> **Reward:** ${Number(config.reward_amount).toLocaleString()} <:sins:1522291331672703100> (sins)`);
+  if (config.reward_amount) descLines.push(`<a:moneybag:1522373120147849226> **Reward:** ${Number(config.reward_amount).toLocaleString()} ${currencyEmoji} (${currencyName})`);
   if (config.other_reward) descLines.push(`<a:gift:1512915751458050268> **Bonus Reward:** ${config.other_reward}`);
   if (config.winner_role_id) descLines.push(`<a:trophies:1512912823062364281> **Winner Role:** <@&${config.winner_role_id}>`);
   if (config.next_channel_id) descLines.push(`<a:rumblesword:1522372420894330921> **Next Room:** <#${config.next_channel_id}>`);
@@ -260,7 +265,7 @@ async function handleMessage(message, client) {
     }
 
     // ── Battle announcement (embed or ping-only) ────────────────────────────
-    const announcement = buildBattleAnnouncement(config, message.channel, parsed.host, parsed.era);
+    const announcement = await buildBattleAnnouncement(config, message.channel, parsed.host, parsed.era);
 
     if (config.announce_style === 'ping') {
       const sentMsg = await message.channel.send({ content: announcement.content });
@@ -321,13 +326,31 @@ async function handleMessage(message, client) {
 
     const winnerMention = userId ? `<@${userId}>` : `**${username}**`;
 
-    // Give sins and get updated balance
+    // Load this guild's currency settings (defaults to Sins only for allowed servers)
+    const guildCfgRes = await query('SELECT use_sins, currency_name, currency_emoji FROM rr_guild_config WHERE guild_id = $1', [message.guild.id]);
+    const guildCfg = guildCfgRes.rows[0] || { use_sins: isGuildAllowedSins(message.guild.id), currency_name: 'Sins', currency_emoji: '<a:SINS:1522338148380704910>' };
+    const currencyName  = guildCfg.use_sins ? 'sins' : (guildCfg.currency_name || 'Coins');
+    const currencyEmoji = guildCfg.use_sins ? '<a:SINS:1522338148380704910>' : (guildCfg.currency_emoji || '🪙');
+
+    // Give reward and get updated balance — either real Sins (Play & Regret) or this
+    // guild's own locally-tracked custom currency
     let walletBalance = null;
     if (userId && config.reward_amount) {
       try {
-        const { adjustBalance } = require('../utils/playAndRegretDb');
-        walletBalance = await adjustBalance(userId, username || 'Unknown', Number(config.reward_amount));
-      } catch (e) { console.error('[RumbleRoyale] sins error:', e.message); }
+        if (guildCfg.use_sins) {
+          const { adjustBalance } = require('../utils/playAndRegretDb');
+          walletBalance = await adjustBalance(userId, username || 'Unknown', Number(config.reward_amount));
+        } else {
+          const res = await query(`
+            INSERT INTO rr_custom_balances (guild_id, user_id, username, balance)
+            VALUES ($1,$2,$3,$4)
+            ON CONFLICT (guild_id, user_id) DO UPDATE SET
+              balance = rr_custom_balances.balance + $4, username = $3
+            RETURNING balance
+          `, [message.guild.id, userId, username || 'Unknown', Number(config.reward_amount)]);
+          walletBalance = Number(res.rows[0].balance);
+        }
+      } catch (e) { console.error('[RumbleRoyale] reward crediting error:', e.message); }
     }
 
     // Check if winner already had the role, then assign
@@ -359,8 +382,8 @@ async function handleMessage(message, client) {
 
     const descLines = [
       `${winnerMention} has won Rumble Royale! <a:confetti:1512912825935335484>`,
-      config.reward_amount ? `<a:moneybag:1522373120147849226> **Reward:** ${Number(config.reward_amount).toLocaleString()} <a:SINS:1522338148380704910> (sins)` : null,
-      walletBalance !== null ? `<a:atm:1522656210439114902> **Wallet:** ${Number(walletBalance).toLocaleString()} <a:SINS:1522338148380704910> (sins)` : null,
+      config.reward_amount ? `<a:moneybag:1522373120147849226> **Reward:** ${Number(config.reward_amount).toLocaleString()} ${currencyEmoji} (${currencyName})` : null,
+      walletBalance !== null ? `<a:atm:1522656210439114902> **Wallet:** ${Number(walletBalance).toLocaleString()} ${currencyEmoji} (${currencyName})` : null,
     ].filter(Boolean);
 
     if (config.winner_role_id) {
@@ -394,9 +417,14 @@ async function handleMessage(message, client) {
 }
 
 // Auto-react to messages from members who have winner roles
+const reactedMessages = new Set();
+
 async function handleReaction(message, client) {
   if (message.author.bot) return;
   if (!message.guild) return;
+  if (reactedMessages.has(message.id)) return;
+  reactedMessages.add(message.id);
+  if (reactedMessages.size > 2000) reactedMessages.clear();
 
   try {
     const res = await query(

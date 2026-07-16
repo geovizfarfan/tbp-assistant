@@ -378,7 +378,21 @@ CREATE TABLE IF NOT EXISTS rr_stats (
 -- RR guild config (log channel)
 CREATE TABLE IF NOT EXISTS rr_guild_config (
   guild_id TEXT PRIMARY KEY,
-  log_channel_id TEXT
+  log_channel_id TEXT,
+  use_sins BOOLEAN NOT NULL DEFAULT TRUE,
+  currency_name TEXT DEFAULT 'Sins',
+  currency_emoji TEXT DEFAULT '<a:SINS:1522338148380704910>'
+);
+ALTER TABLE rr_guild_config ADD COLUMN IF NOT EXISTS use_sins BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE rr_guild_config ADD COLUMN IF NOT EXISTS currency_name TEXT DEFAULT 'Sins';
+ALTER TABLE rr_guild_config ADD COLUMN IF NOT EXISTS currency_emoji TEXT DEFAULT '<a:SINS:1522338148380704910>';
+
+CREATE TABLE IF NOT EXISTS rr_custom_balances (
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  username TEXT,
+  balance BIGINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (guild_id, user_id)
 );
 
 -- RR achievements (tracks who collected all roles)

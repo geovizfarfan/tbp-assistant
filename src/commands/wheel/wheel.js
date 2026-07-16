@@ -7,7 +7,7 @@ const { baseEmbed, COLORS } = require('../../utils/embeds');
 const { spinWheel } = require('../../utils/wheelRenderer');
 const { getPaletteColors, getPaletteChoices, WHEEL_PALETTES } = require('../../utils/wheelPalettes');
 const { query } = require('../../utils/database');
-const { adjustBalance } = require('../../utils/playAndRegretDb');
+const { adjustBalance, getBalance } = require('../../utils/playAndRegretDb');
 
 
 // Temporary wheel session store for re-roll/remove
@@ -509,12 +509,18 @@ async function spinPrizes(interaction) {
 
   const sinsAmount = parseSinsAmount(prizeWon);
   if (sinsAmount) {
-    try {
-      const newBalance = await adjustBalance(winner.id, winner.username, sinsAmount);
-      await interaction.followUp({ content: e('checkmark') + ' Awarded **' + sinsAmount + '** Sins to <@' + winner.id + '>! New balance: **' + newBalance.toLocaleString() + '**' });
-    } catch (err) {
-      console.error('[Wheel] Sins award failed:', err.message);
-      await interaction.followUp({ content: e('wrong') + ' Wheel landed on Sins but the award failed to process. Please award manually with /sins give.' });
+    const hostBalance = await getBalance(interaction.user.id);
+    if (hostBalance === null || Number(hostBalance) < sinsAmount) {
+      await interaction.followUp({ content: e('wrong') + ' Wheel landed on ' + sinsAmount + ' Sins, but you don\'t have enough to cover it (need ' + sinsAmount.toLocaleString() + ', you have ' + Number(hostBalance || 0).toLocaleString() + '). No Sins were awarded — this comes out of your own wallet.' });
+    } else {
+      try {
+        await adjustBalance(interaction.user.id, interaction.user.username, -sinsAmount);
+        const newBalance = await adjustBalance(winner.id, winner.username, sinsAmount);
+        await interaction.followUp({ content: e('checkmark') + ' Awarded **' + sinsAmount + '** Sins to <@' + winner.id + '> from your wallet! Their new balance: **' + newBalance.toLocaleString() + '**' });
+      } catch (err) {
+        console.error('[Wheel] Sins award failed:', err.message);
+        await interaction.followUp({ content: e('wrong') + ' Wheel landed on Sins but the award failed to process. Please award manually with /sins give.' });
+      }
     }
   }
 }
@@ -575,12 +581,18 @@ async function spinCombo(interaction) {
   const sinsAmount = parseSinsAmount(prizeName);
   if (sinsAmount) {
     if (winnerEntry && winnerEntry.userId) {
-      try {
-        const newBalance = await adjustBalance(winnerEntry.userId, winnerEntry.text, sinsAmount);
-        await interaction.followUp({ content: e('checkmark') + ' Awarded **' + sinsAmount + '** Sins to ' + winnerDisplay + '! New balance: **' + newBalance.toLocaleString() + '**' });
-      } catch (err) {
-        console.error('[Wheel] Sins award failed:', err.message);
-        await interaction.followUp({ content: e('wrong') + ' Wheel landed on Sins but the award failed to process. Please award manually with /sins give.' });
+      const hostBalance = await getBalance(interaction.user.id);
+      if (hostBalance === null || Number(hostBalance) < sinsAmount) {
+        await interaction.followUp({ content: e('wrong') + ' Wheel landed on ' + sinsAmount + ' Sins, but you don\u2019t have enough to cover it (need ' + sinsAmount.toLocaleString() + ', you have ' + Number(hostBalance || 0).toLocaleString() + '). No Sins were awarded \u2014 this comes out of your own wallet.' });
+      } else {
+        try {
+          await adjustBalance(interaction.user.id, interaction.user.username, -sinsAmount);
+          const newBalance = await adjustBalance(winnerEntry.userId, winnerEntry.text, sinsAmount);
+          await interaction.followUp({ content: e('checkmark') + ' Awarded **' + sinsAmount + '** Sins to ' + winnerDisplay + ' from your wallet! Their new balance: **' + newBalance.toLocaleString() + '**' });
+        } catch (err) {
+          console.error('[Wheel] Sins award failed:', err.message);
+          await interaction.followUp({ content: e('wrong') + ' Wheel landed on Sins but the award failed to process. Please award manually with /sins give.' });
+        }
       }
     } else {
       await interaction.followUp({ content: e('atention') + ' Wheel landed on Sins, but the winner wasn\u2019t a recognized Discord member \u2014 please award manually with /sins give.' });
