@@ -276,12 +276,13 @@ function buildCategoryEmbed(category) {
 
     shop: new EmbedBuilder().setColor('#d6c2ee')
       .setTitle('<a:shop:1524457010714640464> Shop')
-      .setDescription('Spend Sins on Roles, Auto Reactions, Nicknames, and Custom items — buy now, activate with `/shop use` when ready.')
+      .setDescription('Spend Sins on Roles, Auto Reactions, Nicknames, Level Ups, and Custom items — buy now, activate with `/shop use` when ready.')
       .addFields(
         { name: '⚙️ Setup', value: '`/shop setup shop_channel:#shop fulfillment_channel:#staff-orders`\nAlso settable via `/settings channels shop:#ch shop_fulfillment:#ch`.', inline: false },
-        { name: '➕ Add Item', value: '`/shop additem name:"VIP Role" price:5000 type:Role role:@VIP category:"Roles" duration_amount:7 duration_unit:Days`\nTypes: Role, Auto Reaction (buyer picks their own emoji), Nickname (rename another member), Nickname Remover (reset your own), Custom (staff fulfills).', inline: false },
+        { name: '➕ Add Item', value: '`/shop additem name:"VIP Role" price:5000 type:Role role:@VIP category:"Roles" duration_amount:7 duration_unit:Days`\nTypes: Role, Auto Reaction (buyer picks their own emoji), Nickname (rename another member), Nickname Remover (reset your own), Level Up (grants +N levels — set `levels:`), Custom (staff fulfills).', inline: false },
         { name: '🛍️ Buy', value: 'Members pick an item from the shop panel dropdown. This charges Sins and adds it to their inventory — nothing activates yet. A DM receipt is sent automatically.', inline: false },
-        { name: '✅ Use', value: '`/shop use item_id:3`\nActivates an item from inventory — grants the role, prompts for an emoji/nickname target if needed, or notifies staff (Custom items). This is what removes it from inventory.', inline: false },
+        { name: '✅ Use', value: '`/shop use item_id:3`\nActivates an item from inventory — grants the role, prompts for an emoji/nickname target if needed, adds levels, or notifies staff (Custom items). This is what removes it from inventory.', inline: false },
+        { name: '🎁 Gift', value: '`/shop gift item_id:3 to:@friend`\nSend an unused item straight to someone else\'s inventory — free, no purchase needed on their end.', inline: false },
         { name: '🎒 Inventory', value: '`/shop inventory [user]`\nShows unused items (need `/shop use`) and active items (with expiry countdowns).', inline: false },
         { name: '✏️ Edit / Remove Item', value: '`/shop edititem item_id:3 price:6000` — only fills in fields you provide\n`/shop removeitem item_id:3`', inline: false },
         { name: '🔄 Revoke', value: '`/shop revoke user:@member item_id:3`\nPulls back a used role/nickname and marks the purchase expired.', inline: false },

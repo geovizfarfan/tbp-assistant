@@ -5,8 +5,9 @@ const {
 } = require('discord.js');
 const { query } = require('../../utils/database');
 const { getBalance, adjustBalance } = require('../../utils/playAndRegretDb');
+const { xpForLevel, getUserLevel } = require('../../utils/levelSystem');
 
-const TYPE_LABELS = { role: '<:role:1524456992683593979> Role', reaction: '<a:purplesparkle:1512912828489793626> Auto Reaction', custom: '<a:gift:1512915751458050268> Custom', nickname: '<:role:1524456992683593979> Nickname', nickname_remove: '<:role:1524456992683593979> Nickname Remover' };
+const TYPE_LABELS = { role: '<:role:1524456992683593979> Role', reaction: '<a:purplesparkle:1512912828489793626> Auto Reaction', custom: '<a:gift:1512915751458050268> Custom', nickname: '<:role:1524456992683593979> Nickname', nickname_remove: '<:role:1524456992683593979> Nickname Remover', levelup: '<a:trophies:1512912823062364281> Level Up' };
 const WRONG = '<:wrong:1512916350375301160>';
 const CHECK = '<:checkmark:1512916161493205165>';
 const SINS = '<a:SINS:1522338148380704910>';
@@ -216,8 +217,10 @@ module.exports = {
         { name: 'Custom (staff fulfills)', value: 'custom' },
         { name: 'Nickname (rename another member)', value: 'nickname' },
         { name: 'Nickname Remover (reset your own nickname)', value: 'nickname_remove' },
+        { name: 'Level Up (grants +N levels when used)', value: 'levelup' },
       ))
       .addRoleOption(o => o.setName('role').setDescription('Role to grant (required for Role type; optional tag role for Auto Reaction)'))
+      .addIntegerOption(o => o.setName('levels').setDescription('How many levels this grants when used (required for Level Up type)'))
       .addStringOption(o => o.setName('description').setDescription('Shown in the shop listing'))
       .addStringOption(o => o.setName('category').setDescription('Category to group this item under (default: General)'))
       .addIntegerOption(o => o.setName('limit').setDescription('Max purchases per user (blank = unlimited/stackable)'))
@@ -266,6 +269,12 @@ module.exports = {
       .addIntegerOption(o => o.setName('item_id').setDescription('Item ID (see /shop inventory)').setRequired(true)))
 
     .addSubcommand(sub => sub
+      .setName('gift')
+      .setDescription('Gift an unused item from your inventory to another member')
+      .addIntegerOption(o => o.setName('item_id').setDescription('Item ID (see /shop inventory)').setRequired(true))
+      .addUserOption(o => o.setName('to').setDescription('Who to gift it to').setRequired(true)))
+
+    .addSubcommand(sub => sub
       .setName('list')
       .setDescription('List all shop items with their IDs (admin)'))
 
@@ -276,7 +285,7 @@ module.exports = {
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
-    const memberFacing = ['list', 'inventory', 'use'];
+    const memberFacing = ['list', 'inventory', 'use', 'gift'];
 
     if (!memberFacing.includes(sub) && !isAdmin) {
       return interaction.reply({ content: `${WRONG} Admin only.`, ephemeral: true });
@@ -310,6 +319,7 @@ module.exports = {
       const price         = interaction.options.getInteger('price');
       const type          = interaction.options.getString('type');
       const role          = interaction.options.getRole('role');
+      const levels        = interaction.options.getInteger('levels');
       const description   = interaction.options.getString('description') || null;
       const category      = interaction.options.getString('category')?.trim() || 'General';
       const limit         = interaction.options.getInteger('limit') || null;
@@ -317,11 +327,14 @@ module.exports = {
       const durationUnit  = interaction.options.getString('duration_unit') || 'hours';
       const duration      = durationAmt ? (durationUnit === 'days' ? durationAmt * 24 : durationAmt) : null;
 
-      if (durationAmt && (type === 'custom' || type === 'nickname_remove')) {
+      if (durationAmt && (type === 'custom' || type === 'nickname_remove' || type === 'levelup')) {
         return interaction.editReply(`${WRONG} Duration only applies to Role, Auto Reaction, and Nickname items.`);
       }
       if (type === 'role' && !role) {
         return interaction.editReply(`${WRONG} \`role\` is required for Role items.`);
+      }
+      if (type === 'levelup' && (!levels || levels < 1)) {
+        return interaction.editReply(`${WRONG} \`levels\` (at least 1) is required for Level Up items.`);
       }
       if (price < 0) return interaction.editReply(`${WRONG} Price can't be negative.`);
 
@@ -331,16 +344,16 @@ module.exports = {
       }
 
       const res = await query(`
-        INSERT INTO shop_items (guild_id, name, description, price, type, role_id, limit_per_user, duration_hours, category, position)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,
+        INSERT INTO shop_items (guild_id, name, description, price, type, role_id, limit_per_user, duration_hours, category, levels_granted, position)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
           (SELECT COALESCE(MAX(position),0)+1 FROM shop_items WHERE guild_id=$1))
         RETURNING id
-      `, [interaction.guild.id, name, description, price, type, role?.id || null, limit, duration, category]);
+      `, [interaction.guild.id, name, description, price, type, role?.id || null, limit, duration, category, type === 'levelup' ? levels : null]);
 
       await renderAndPost(interaction.client, interaction.guild.id);
 
       const durLabel = formatDuration(duration);
-      return interaction.editReply(`${CHECK} Added **${name}** (ID \`${res.rows[0].id}\`) to **${category}** — ${price.toLocaleString()} ${SINS} (sins), type: ${TYPE_LABELS[type]}${durLabel ? `, lasts ${durLabel} once used` : ''}.`);
+      return interaction.editReply(`${CHECK} Added **${name}** (ID \`${res.rows[0].id}\`) to **${category}** — ${price.toLocaleString()} ${SINS} (sins), type: ${TYPE_LABELS[type]}${durLabel ? `, lasts ${durLabel} once used` : ''}${type === 'levelup' ? `, grants +${levels} level${levels === 1 ? '' : 's'}` : ''}.`);
     }
 
     if (sub === 'removeitem') {
@@ -457,6 +470,39 @@ module.exports = {
     }
 
     if (sub === 'use') return useItem(interaction);
+
+    if (sub === 'gift') {
+      const itemId = interaction.options.getInteger('item_id');
+      const recipient = interaction.options.getUser('to');
+
+      if (recipient.bot) return interaction.editReply(`${WRONG} You can't gift items to a bot.`);
+      if (recipient.id === interaction.user.id) return interaction.editReply(`${WRONG} You can't gift an item to yourself.`);
+
+      const purchaseRes = await query(`
+        SELECT id FROM shop_purchases
+        WHERE item_id = $1 AND user_id = $2 AND guild_id = $3 AND used_at IS NULL AND expired = false
+        ORDER BY purchased_at ASC LIMIT 1
+      `, [itemId, interaction.user.id, interaction.guildId]);
+
+      if (!purchaseRes.rows.length) {
+        return interaction.editReply(`${WRONG} You don't have an unused copy of that item to gift — check \`/shop inventory\`.`);
+      }
+
+      const itemRes = await query('SELECT name FROM shop_items WHERE id = $1', [itemId]);
+      const itemName = itemRes.rows[0]?.name || 'that item';
+
+      await query('UPDATE shop_purchases SET user_id = $1 WHERE id = $2', [recipient.id, purchaseRes.rows[0].id]);
+
+      await interaction.editReply(`${CHECK} Gifted **${itemName}** to <@${recipient.id}>! It's now sitting unused in their inventory.`);
+
+      // Let the recipient know, best effort
+      await recipient.send({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee')
+          .setDescription(`🎁 <@${interaction.user.id}> gifted you **${itemName}**! Run \`/shop inventory\` to see it, or \`/shop use item_id:${itemId}\` to activate it.`)]
+      }).catch(() => {});
+
+      return;
+    }
 
     if (sub === 'list') {
       const items = await getItems(interaction.guild.id, false);
@@ -694,6 +740,30 @@ async function useItem(interaction) {
 
     return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#2ecc71')
       .setDescription(`${CHECK} Used **${row.name}** — your nickname has been reset!`)] });
+  }
+
+  // ── Level Up: adds N levels to the BUYER's current level ────────────────
+  if (row.type === 'levelup') {
+    await interaction.deferReply({ ephemeral: true });
+
+    const current = await getUserLevel(interaction.guildId, interaction.user.id);
+    const oldLevel = current?.level || 0;
+    const newLevel = oldLevel + row.levels_granted;
+    const newXp = xpForLevel(newLevel);
+
+    await query(`
+      INSERT INTO levels (guild_id, user_id, username, xp, level)
+      VALUES ($1,$2,$3,$4,$5)
+      ON CONFLICT (guild_id, user_id) DO UPDATE SET xp = $4, level = $5, username = $3
+    `, [interaction.guildId, interaction.user.id, interaction.user.username, newXp, newLevel]);
+
+    await query('UPDATE shop_purchases SET used_at = NOW() WHERE id = $1', [row.purchase_id]);
+    await logUsedItem(interaction, row, [
+      { name: 'Level', value: `${oldLevel} → ${newLevel}`, inline: true },
+    ]);
+
+    return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#2ecc71')
+      .setDescription(`${CHECK} Used **${row.name}** — you leveled up from **Level ${oldLevel}** to **Level ${newLevel}**! 🎉`)] });
   }
 
   // ── Auto Reaction: pick an emoji via modal ──────────────────────────────

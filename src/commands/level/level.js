@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { query } = require('../../utils/database');
-const { xpForNextLevel, levelFromXp, getTier, getLevelConfig, getUserLevel } = require('../../utils/levelSystem');
+const { xpForNextLevel, levelFromXp, xpForLevel, getTier, getLevelConfig, getUserLevel } = require('../../utils/levelSystem');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -112,8 +112,7 @@ module.exports = {
       if (level < 0) return interaction.editReply('❌ Level can\'t be negative.');
 
       // Compute the minimum total XP needed to sit at exactly this level
-      let totalXp = 0;
-      for (let i = 0; i < level; i++) totalXp += xpForNextLevel(i);
+      const totalXp = xpForLevel(level);
 
       await query(`
         INSERT INTO levels (guild_id, user_id, username, xp, level)

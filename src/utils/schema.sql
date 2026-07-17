@@ -569,6 +569,7 @@ CREATE TABLE IF NOT EXISTS shop_items (
   position INT NOT NULL DEFAULT 0
 );
 ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'General';
+ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS levels_granted INT;
 ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS ban_log_channel_id TEXT;
 
 CREATE TABLE IF NOT EXISTS ban_logs (

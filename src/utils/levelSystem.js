@@ -16,6 +16,13 @@ function levelFromXp(totalXp) {
   return level;
 }
 
+// The minimum total XP needed to sit at exactly this level (inverse of levelFromXp)
+function xpForLevel(level) {
+  let totalXp = 0;
+  for (let i = 0; i < level; i++) totalXp += xpForNextLevel(i);
+  return totalXp;
+}
+
 function getTier(level) {
   if (level >= 26) return { name: 'Hard', emoji: '🔴' };
   if (level >= 11) return { name: 'Medium', emoji: '🟡' };
@@ -37,4 +44,4 @@ async function isChannelExcluded(guildId, channelId) {
   return res.rows.length > 0;
 }
 
-module.exports = { xpForNextLevel, levelFromXp, getTier, getLevelConfig, getUserLevel, isChannelExcluded };
+module.exports = { xpForNextLevel, levelFromXp, xpForLevel, getTier, getLevelConfig, getUserLevel, isChannelExcluded };
