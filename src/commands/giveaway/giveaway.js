@@ -34,6 +34,11 @@ module.exports = {
       .addIntegerOption(o => o.setName('id').setDescription('Giveaway ID').setRequired(true)))
 
     .addSubcommand(sub => sub
+      .setName('entries')
+      .setDescription('See every member entered in a giveaway and their ticket count')
+      .addIntegerOption(o => o.setName('id').setDescription('Giveaway ID').setRequired(true)))
+
+    .addSubcommand(sub => sub
       .setName('cancel')
       .setDescription('Cancel a live giveaway with no winner picked')
       .addIntegerOption(o => o.setName('id').setDescription('Giveaway ID').setRequired(true)))
@@ -117,6 +122,7 @@ module.exports = {
 
     if (sub === 'start')  return startGiveaway(interaction);
     if (sub === 'end')    return endGiveawayLive(interaction);
+    if (sub === 'entries') return giveawayEntries(interaction);
     if (sub === 'cancel') return cancelGiveaway(interaction);
     if (sub === 'edit')   return editGiveaway(interaction);
     if (sub === 'reroll') return rerollGiveaway(interaction);
@@ -317,6 +323,45 @@ async function handleCheckEntriesButton(interaction) {
   }
 
   return interaction.editReply(lines.join('\n'));
+}
+
+async function giveawayEntries(interaction) {
+  const id = interaction.options.getInteger('id');
+  await interaction.deferReply({ ephemeral: true });
+
+  const gwRes = await query('SELECT * FROM giveaway_events WHERE id=$1 AND guild_id=$2', [id, interaction.guildId]);
+  if (!gwRes.rows.length) return interaction.editReply(`${e('wrong')} Giveaway not found.`);
+  const gw = gwRes.rows[0];
+
+  const channel = await interaction.client.channels.fetch(gw.channel_id).catch(() => null);
+  const message = channel ? await channel.messages.fetch(gw.message_id).catch(() => null) : null;
+  if (!message) return interaction.editReply(`${e('wrong')} Couldn't find the giveaway message.`);
+
+  const reactors = await fetchAllReactors(message, gw.entry_emoji);
+  if (!reactors.length) return interaction.editReply(`${e('wrong')} No one has entered yet.`);
+
+  const { weighted, ineligible } = await buildWeightedEntrants(channel.guild, reactors, gw);
+
+  // Count tickets per user from the weighted pool
+  const ticketCounts = new Map();
+  for (const userId of weighted) ticketCounts.set(userId, (ticketCounts.get(userId) || 0) + 1);
+
+  const sorted = [...ticketCounts.entries()].sort((a, b) => b[1] - a[1]);
+  const totalTickets = weighted.length;
+
+  const lines = sorted.map(([userId, tickets]) => `<@${userId}> — **${tickets}** ${tickets === 1 ? 'entry' : 'entries'}`);
+  if (ineligible.length) {
+    lines.push('', `${e('wrong')} **Reacted but ineligible (missing required role):**`);
+    lines.push(...ineligible.map(userId => `<@${userId}>`));
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor(0xB57EDC)
+    .setTitle(`🎫 Entries — ${gw.prize}`)
+    .setDescription(lines.join('\n').slice(0, 4000))
+    .setFooter({ text: `${sorted.length} eligible member(s) • ${totalTickets} total ticket(s)` });
+
+  return interaction.editReply({ embeds: [embed] });
 }
 
 async function buildWeightedEntrants(guild, users, gw) {
