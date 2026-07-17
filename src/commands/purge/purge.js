@@ -25,9 +25,18 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
     const amount = interaction.options.getInteger('amount');
 
-    const deleted = await interaction.channel.bulkDelete(amount, true).catch(() => null);
-    const count = deleted?.size || 0;
-
-    return interaction.editReply(`✅ Deleted **${count}** message(s).`);
+    try {
+      const deleted = await interaction.channel.bulkDelete(amount, true);
+      return interaction.editReply(`✅ Deleted **${deleted.size}** message(s).`);
+    } catch (err) {
+      console.error('[Purge] bulkDelete failed:', err.message);
+      if (err.code === 50034) {
+        return interaction.editReply(`❌ Some of those messages are older than 14 days — Discord only allows bulk-deleting messages newer than that. Try a smaller amount.`);
+      }
+      if (err.code === 50013) {
+        return interaction.editReply(`❌ Veloura is missing the Manage Messages permission in this channel.`);
+      }
+      return interaction.editReply(`❌ Failed to delete messages: ${err.message}`);
+    }
   },
 };
