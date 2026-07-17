@@ -637,19 +637,20 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-async function loginWithRetry(maxAttempts = 5) {
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+async function loginWithRetry() {
+  let attempt = 0;
+  while (true) {
+    attempt++;
     try {
       await client.login(process.env.DISCORD_TOKEN);
       return; // success
     } catch (err) {
-      console.error(`[Login] Attempt ${attempt}/${maxAttempts} failed:`, err.message);
-      if (attempt === maxAttempts) {
-        console.error('[Login] All attempts exhausted — exiting so Railway restarts the container.');
-        process.exit(1); // let the platform's restart policy take over
-      }
-      const delayMs = Math.min(5000 * attempt, 30000); // 5s, 10s, 15s... capped at 30s
-      console.log(`[Login] Retrying in ${delayMs / 1000}s...`);
+      console.error(`[Login] Attempt ${attempt} failed:`, err.message);
+      // Long, gentle backoff — repeatedly exiting and letting Railway instantly
+      // restart just hammers Discord's rate limit harder. Stay in the same
+      // process and wait it out instead: 30s, 1m, 2m, 4m... capped at 10m.
+      const delayMs = Math.min(30_000 * Math.pow(2, attempt - 1), 600_000);
+      console.log(`[Login] Waiting ${Math.round(delayMs / 1000)}s before retrying (not exiting — avoids restart-loop rate limiting)...`);
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
