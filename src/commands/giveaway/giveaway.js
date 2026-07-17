@@ -34,6 +34,11 @@ module.exports = {
       .addIntegerOption(o => o.setName('id').setDescription('Giveaway ID').setRequired(true)))
 
     .addSubcommand(sub => sub
+      .setName('cancel')
+      .setDescription('Cancel a live giveaway with no winner picked')
+      .addIntegerOption(o => o.setName('id').setDescription('Giveaway ID').setRequired(true)))
+
+    .addSubcommand(sub => sub
       .setName('reroll')
       .setDescription('Pick new winner(s) for an ended giveaway')
       .addIntegerOption(o => o.setName('id').setDescription('Giveaway ID').setRequired(true))
@@ -100,6 +105,7 @@ module.exports = {
 
     if (sub === 'start')  return startGiveaway(interaction);
     if (sub === 'end')    return endGiveawayLive(interaction);
+    if (sub === 'cancel') return cancelGiveaway(interaction);
     if (sub === 'reroll') return rerollGiveaway(interaction);
     if (sub === 'list')   return listLiveGiveaways(interaction);
   },
@@ -194,6 +200,9 @@ async function requiredRoleList(interaction) {
 function buildGiveawayEmbed(gw, bonusRoles = [], ended = false, winnerIds = null) {
   const lines = [];
 
+  lines.push(`-# Giveaway ID: ${gw.id}`);
+  lines.push(`# ${gw.prize}`);
+
   if (ended) {
     lines.push(winnerIds?.length
       ? `${e('trophies')} Winner${winnerIds.length > 1 ? 's' : ''}: ${winnerIds.map(id => `<@${id}>`).join(', ')}`
@@ -206,15 +215,15 @@ function buildGiveawayEmbed(gw, bonusRoles = [], ended = false, winnerIds = null
     lines.push(`${e('role')} **Ends:** ${tsF(gw.ends_at)} (${tsR(gw.ends_at)})`);
     if (gw.required_role_ids?.length) lines.push(`${e('rules')} **Requirement:** Must have all of ${gw.required_role_ids.map(id => `<@&${id}>`).join(', ')}`);
     if (bonusRoles.length) {
-      lines.push(`${e('purplesparkle')} **Bonus Entries:** ${bonusRoles.map(r => `<@&${r.role_id}> (+${r.bonus_entries})`).join(', ')}`);
+      lines.push(`${e('purplesparkle')} **Bonus Entries:**`);
+      for (const r of bonusRoles) lines.push(`-# ・<@&${r.role_id}> (+${r.bonus_entries})`);
     }
   }
 
   const embed = new EmbedBuilder()
-    .setColor(ended ? COLORS.grey : COLORS.tbppurple)
-    .setTitle(`${e('gift')} ${ended ? 'Giveaway Ended' : 'Giveaway'} — ${gw.prize}`)
-    .setDescription(lines.join('\n'))
-    .setFooter({ text: `Giveaway ID: ${gw.id}` });
+    .setColor(ended ? 0x5B2C8C : 0xB57EDC)
+    .setTitle(`${e('gift')} ${ended ? 'Giveaway Ended' : 'Giveaway'}`)
+    .setDescription(lines.join('\n'));
 
   if (gw.thumbnail_url) embed.setThumbnail(gw.thumbnail_url);
   if (!ended) embed.setTimestamp(new Date(gw.ends_at));
@@ -337,6 +346,7 @@ async function finishGiveaway(client, giveawayId) {
 
   if (message) {
     await message.edit({ embeds: [buildGiveawayEmbed(gw, [], true, winners)] }).catch(() => {});
+    await message.reactions.removeAll().catch(() => {});
   }
 
   if (winners.length) {
@@ -478,6 +488,36 @@ async function endGiveawayLive(interaction) {
 
   await finishGiveaway(interaction.client, id);
   await interaction.editReply(`${e('checkmark')} Giveaway #${id} ended early.`);
+}
+
+async function cancelGiveaway(interaction) {
+  const id = interaction.options.getInteger('id');
+  await interaction.deferReply({ ephemeral: true });
+
+  const gwRes = await query('SELECT * FROM giveaway_events WHERE id=$1 AND guild_id=$2', [id, interaction.guildId]);
+  if (!gwRes.rows.length) return interaction.editReply(`${e('wrong')} Giveaway not found.`);
+  const gw = gwRes.rows[0];
+
+  if (interaction.user.id !== gw.host_id) {
+    return interaction.editReply(`${e('wrong')} Only the host of this giveaway (<@${gw.host_id}>) can cancel it.`);
+  }
+
+  if (gw.status !== 'active') return interaction.editReply(`${e('wrong')} That giveaway isn't active — can't cancel it.`);
+
+  await query('UPDATE giveaway_events SET status=$1, ended_at=NOW() WHERE id=$2', ['cancelled', id]);
+
+  const channel = await interaction.client.channels.fetch(gw.channel_id).catch(() => null);
+  const message = channel ? await channel.messages.fetch(gw.message_id).catch(() => null) : null;
+  if (message) {
+    await message.edit({ embeds: [new EmbedBuilder()
+      .setColor(0x5B2C8C)
+      .setTitle(`${e('gift')} Giveaway Cancelled`)
+      .setDescription(`-# Giveaway ID: ${gw.id}\n# ${gw.prize}\n\n${e('wrong')} This giveaway was cancelled — no winner was picked.`)]
+    }).catch(() => {});
+    await message.reactions.removeAll().catch(() => {});
+  }
+
+  return interaction.editReply(`${e('checkmark')} Giveaway #${id} cancelled — no winner was picked.`);
 }
 
 async function rerollGiveaway(interaction) {
