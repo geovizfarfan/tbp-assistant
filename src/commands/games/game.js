@@ -84,19 +84,11 @@ async function logGame(interaction) {
   const currency   = 'Goos';
   const startRaw = interaction.options.getString('start_time') || null;
 
+  // Acknowledge the interaction FIRST — the message-link lookup below makes
+  // real Discord API calls and could otherwise blow past the 3-second window.
+  await interaction.deferReply({ ephemeral: true });
+
   let startedAt = new Date();
-  // Try to fetch message timestamp from link
-  try {
-    const parts = link.match(/channels\/([^/]+)\/([^/]+)\/([^/]+)/);
-    if (parts) {
-      const fetchedChannel = await interaction.client.channels.fetch(parts[2]);
-      const fetchedMsg = await fetchedChannel.messages.fetch(parts[3]);
-      startedAt = fetchedMsg.createdAt;
-      console.log(`[GameLog] Got message time: ${startedAt}`);
-    }
-  } catch (err) {
-    console.error(`[GameLog] Could not fetch message time: ${err.message}`);
-  }
   // Try to fetch message timestamp from link
   try {
     const parts = link.match(/channels\/([^/]+)\/([^/]+)\/([^/]+)/);
@@ -114,8 +106,6 @@ async function logGame(interaction) {
     if (unixMatch) startedAt = new Date(parseInt(unixMatch[1]) * 1000);
     else { const parsed = new Date(startRaw); if (!isNaN(parsed)) startedAt = parsed; }
   }
-
-  await interaction.deferReply({ ephemeral: true });
 
   const res = await query(
     `INSERT INTO game_logs (guild_id, channel_id, message_link, host_id, game_name, prize, prize_amount, currency, started_at)
