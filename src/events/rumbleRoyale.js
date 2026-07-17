@@ -82,57 +82,75 @@ function parseBattleStartEmbed(message) {
 }
 
 async function checkAllRolesAchievement(guild, member, client, guildConfig) {
-  // Get active season for this guild
-  const seasonRes = await query('SELECT id FROM rr_seasons WHERE guild_id = $1 AND status = $2', [guild.id, 'active']);
-  const season = seasonRes.rows[0];
-  if (!season) return; // No active season — no achievement tracking
+  // Get ALL active seasons for this guild — multiple can run concurrently,
+  // each independently, with their own role set and their own completions.
+  const seasonsRes = await query('SELECT * FROM rr_seasons WHERE guild_id = $1 AND status = $2', [guild.id, 'active']);
+  if (!seasonsRes.rows.length) return; // No active seasons — no achievement tracking
 
+  for (const season of seasonsRes.rows) {
+    await checkSeasonCompletion(guild, member, client, guildConfig, season);
+  }
+}
+
+async function checkSeasonCompletion(guild, member, client, guildConfig, season) {
   // Get channels defined in this season that have both role+reaction
   const res = await query(
     `SELECT rc.winner_role_id, rc.reaction_emoji
      FROM rr_season_channels sc
      JOIN rr_channel_config rc ON rc.channel_id = sc.channel_id
-     WHERE sc.season_id = $1 AND rc.winner_role_id IS NOT NULL AND rc.reaction_emoji IS NOT NULL`,
+     WHERE sc.season_id = $1 AND rc.winner_role_id IS NOT NULL`,
     [season.id]
   );
-  if (!res.rows.length) return; // No channels in season
+  if (!res.rows.length) return; // No channels in this season
 
   const allWinnerRoles = res.rows.map(r => r.winner_role_id);
   const hasAll = allWinnerRoles.every(roleId => member.roles.cache.has(roleId));
   if (!hasAll) return;
 
-  // No early return — we always fire and increment completions
-
-  // Increment completion count (or insert first time)
+  // Increment completion count for THIS season specifically (or insert first time)
   await query(
-    `INSERT INTO rr_achievements (guild_id, user_id, completions)
-     VALUES ($1, $2, 1)
-     ON CONFLICT (guild_id, user_id)
+    `INSERT INTO rr_achievements (guild_id, user_id, season_id, completions)
+     VALUES ($1, $2, $3, 1)
+     ON CONFLICT (season_id, user_id)
      DO UPDATE SET completions = rr_achievements.completions + 1, achieved_at = NOW()`,
-    [guild.id, member.id]
+    [guild.id, member.id, season.id]
   );
 
   const countRes = await query(
-    'SELECT completions FROM rr_achievements WHERE guild_id = $1 AND user_id = $2',
-    [guild.id, member.id]
+    'SELECT completions FROM rr_achievements WHERE season_id = $1 AND user_id = $2',
+    [season.id, member.id]
   );
   const completions = countRes.rows[0]?.completions || 1;
 
-  const allEmojis = res.rows.map(r => r.reaction_emoji).filter(Boolean).join(' ');
   const ordinal = completions === 1 ? '1st' : completions === 2 ? '2nd' : completions === 3 ? '3rd' : `${completions}th`;
 
-  // Remove all winner roles (prestige reset)
+  // Remove all winner roles for THIS season (prestige reset) — other seasons' roles are untouched
   for (const roleId of allWinnerRoles) {
     await member.roles.remove(roleId).catch(() => {});
+  }
+
+  // If this season is linked to a Wheel Roles campaign, auto-enter the member
+  let wheelNote = '';
+  if (season.linked_wheel_campaign_id) {
+    const campRes = await query(`SELECT * FROM wheel_role_campaigns WHERE id = $1 AND status = 'active'`, [season.linked_wheel_campaign_id]);
+    if (campRes.rows.length) {
+      const campaign = campRes.rows[0];
+      const inserted = await query(
+        `INSERT INTO wheel_role_campaign_entries (campaign_id, user_id, quantity, currently_qualified)
+         VALUES ($1,$2,1,true) ON CONFLICT (campaign_id, user_id) DO NOTHING RETURNING id`,
+        [campaign.id, member.id]
+      );
+      if (inserted.rows.length) wheelNote = `\n\n🎡 You've also been entered into the **${campaign.name}** wheel!`;
+    }
   }
 
   const achieveEmbed = new EmbedBuilder()
     .setColor('#d6c2ee')
     .setTitle('<:rumble:1522372419338375299> ALL RUMBLE ROLES COLLECTED!')
-    .setDescription(`<@${member.id}> has collected all ${allWinnerRoles.length} Rumble Royale winner roles for the **${ordinal} time**! <a:confetti:1512912825935335484> <a:rumblesword:1522372420894330921>\n\nAll roles have been reset — the hunt begins again! <a:again:1522458630795034694>`)
+    .setDescription(`<@${member.id}> has collected all ${allWinnerRoles.length} **${season.name}** winner roles for the **${ordinal} time**! <a:confetti:1512912825935335484> <a:rumblesword:1522372420894330921>\n\nAll roles have been reset — the hunt begins again! <a:again:1522458630795034694>${wheelNote}`)
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
     .addFields({ name: `Total Completions <a:purplesparkle:1512912828489793626>`, value: `**${completions}**`, inline: true })
-    .setFooter({ text: `${guild.name}` })
+    .setFooter({ text: `${guild.name} • ${season.name}` })
     .setTimestamp();
 
   // Post to log channel
@@ -147,9 +165,9 @@ async function checkAllRolesAchievement(guild, member, client, guildConfig) {
     embeds: [new EmbedBuilder()
       .setColor('#d6c2ee')
       .setTitle('<a:trophies:1512912823062364281> You collected all Rumble Royale roles!')
-      .setDescription(`Congratulations! You've collected all reaction roles for the **${ordinal} time** in **${guild.name}**! <a:rumblesword:1522372420894330921> <a:purplesparkle:1512912828489793626>\n\nYour roles have been reset — can you collect them all again? <a:again:1522458630795034694>`)
+      .setDescription(`Congratulations! You've collected all reaction roles for **${season.name}** for the **${ordinal} time** in **${guild.name}**! <a:rumblesword:1522372420894330921> <a:purplesparkle:1512912828489793626>\n\nYour roles have been reset — can you collect them all again? <a:again:1522458630795034694>${wheelNote}`)
       .addFields({ name: 'Your Completions', value: `**${completions}**`, inline: true })
-      .setFooter({ text: `${guild.name} • Receipt` })
+      .setFooter({ text: `${guild.name} • ${season.name} • Receipt` })
       .setTimestamp()]
   }).catch(() => {}); // DM might be closed
 }

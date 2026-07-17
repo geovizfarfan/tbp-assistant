@@ -304,6 +304,34 @@ CREATE TABLE IF NOT EXISTS wheel_role_bonuses (
   UNIQUE(guild_id, role_id)
 );
 
+-- Wheel Roles: role-collection campaigns that build up an entrant pool for a
+-- later wheel spin. A member qualifies once they hold every role in the set.
+CREATE TABLE IF NOT EXISTS wheel_role_campaigns (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  role_ids TEXT[] NOT NULL,
+  auto_signup BOOLEAN NOT NULL DEFAULT FALSE,
+  extra_entries_allowed BOOLEAN NOT NULL DEFAULT FALSE,
+  entry_channel_id TEXT,
+  entry_message_id TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (guild_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS wheel_role_campaign_entries (
+  id SERIAL PRIMARY KEY,
+  campaign_id INTEGER NOT NULL REFERENCES wheel_role_campaigns(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  quantity INT NOT NULL DEFAULT 1,
+  currently_qualified BOOLEAN NOT NULL DEFAULT TRUE,
+  entered_at TIMESTAMPTZ DEFAULT NOW(),
+  last_qualified_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (campaign_id, user_id)
+);
+
 -- Private rooms (auto-archiving private threads)
 CREATE TABLE IF NOT EXISTS private_rooms (
   id SERIAL PRIMARY KEY,
@@ -413,6 +441,18 @@ CREATE TABLE IF NOT EXISTS rr_achievements (
 );
 
 ALTER TABLE rr_achievements ADD COLUMN IF NOT EXISTS completions INT DEFAULT 1;
+ALTER TABLE rr_achievements ADD COLUMN IF NOT EXISTS season_id INTEGER;
+ALTER TABLE rr_achievements DROP CONSTRAINT IF EXISTS rr_achievements_guild_id_user_id_key;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'rr_achievements'::regclass AND contype = 'u'
+      AND conname = 'rr_achievements_season_id_user_id_key'
+  ) THEN
+    ALTER TABLE rr_achievements ADD CONSTRAINT rr_achievements_season_id_user_id_key UNIQUE (season_id, user_id);
+  END IF;
+END $$;
 
 ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS battle_title TEXT DEFAULT NULL;
 ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS battle_description TEXT DEFAULT NULL;
@@ -424,8 +464,10 @@ CREATE TABLE IF NOT EXISTS rr_seasons (
   name TEXT NOT NULL,
   status TEXT DEFAULT 'active',
   started_at TIMESTAMPTZ DEFAULT NOW(),
-  ended_at TIMESTAMPTZ
+  ended_at TIMESTAMPTZ,
+  linked_wheel_campaign_id INTEGER REFERENCES wheel_role_campaigns(id) ON DELETE SET NULL
 );
+ALTER TABLE rr_seasons ADD COLUMN IF NOT EXISTS linked_wheel_campaign_id INTEGER REFERENCES wheel_role_campaigns(id) ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS rr_season_channels (
   id SERIAL PRIMARY KEY,

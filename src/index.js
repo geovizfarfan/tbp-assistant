@@ -209,6 +209,9 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isButton() && interaction.customId.startsWith('wheel_')) {
     return wheelModule.handleButton(interaction, client);
   }
+  if (interaction.isButton() && interaction.customId.startsWith('wheelroles_enter:')) {
+    return wheelModule.handleEnterButton(interaction);
+  }
   if (interaction.isStringSelectMenu() && interaction.customId === 'help_category') {
     return helpModule.handleSelect(interaction, client);
   }
@@ -229,6 +232,14 @@ client.on('interactionCreate', async (interaction) => {
   }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('shop_nickname_modal:')) {
     return shopModule.handleNicknameModal(interaction);
+  }
+  if (interaction.isAutocomplete()) {
+    const command = client.commands.get(interaction.commandName);
+    if (command?.autocomplete) {
+      try { await command.autocomplete(interaction); }
+      catch (err) { console.error(`[Autocomplete Error] ${interaction.commandName}:`, err.message); }
+    }
+    return;
   }
   if (!interaction.isChatInputCommand()) return;
 
@@ -364,6 +375,13 @@ Thank you <@${newMember.id}> for helping us keep the magic alive! <a:BunnyLove:1
       ]}).catch((err) => console.error('[Boost] Failed to send boost message:', err.message));
     }
   } catch(e) { console.error('[Boost]', e.message); }
+});
+
+// Wheel Roles auto-signup — checks role-collection campaigns independently of
+// boost detection, since that listener has an early return that would block it
+client.on('guildMemberUpdate', async (oldMember, newMember) => {
+  try { await wheelModule.checkAutoSignupCampaigns(client, oldMember, newMember); }
+  catch (e) { console.error('[WheelRoles] auto-signup error:', e.message); }
 });
 
 // Ticket tracking
