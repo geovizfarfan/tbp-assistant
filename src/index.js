@@ -261,6 +261,7 @@ client.on('interactionCreate', async (interaction) => {
 
 // Rumble Royale integration
 const { handleMessage: handleRRMessage, handleReaction: handleRRReaction } = require('./events/rumbleRoyale');
+const { handleMessage: handleSlaughterMessage } = require('./events/rumbleSlaughter');
 const grindModule = require('./commands/grind/grind');
 const pingPanelModule = require('./commands/pingpanel/pingpanel');
 const stickyModule    = require('./commands/sticky/sticky');
@@ -274,6 +275,10 @@ const { handleMessageXp } = require('./events/levelXp');
 client.on('messageCreate', async (message) => {
   try { await handleRRMessage(message, client); }
   catch (e) { console.error('[RumbleRoyale]', e.message); }
+});
+client.on('messageCreate', async (message) => {
+  try { await handleSlaughterMessage(message, client); }
+  catch (e) { console.error('[RumbleSlaughter]', e.message); }
 });
 client.on('messageUpdate', async (oldMsg, newMsg) => {
   if (!newMsg.embeds?.length) return;

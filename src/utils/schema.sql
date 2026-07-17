@@ -412,6 +412,16 @@ CREATE TABLE IF NOT EXISTS rr_stats (
 );
 
 -- RR guild config (log channel)
+-- Rumble Slaughter (a game mode inside Play & Regret) — Veloura only auto-assigns
+-- a role to the champion; P&R already handles the Sins/Regret reward itself.
+CREATE TABLE IF NOT EXISTS rumble_slaughter_config (
+  channel_id TEXT PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  winner_role_id TEXT,
+  ping_role_id TEXT,
+  announce BOOLEAN NOT NULL DEFAULT TRUE
+);
+
 CREATE TABLE IF NOT EXISTS rr_guild_config (
   guild_id TEXT PRIMARY KEY,
   log_channel_id TEXT,
