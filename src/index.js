@@ -4,7 +4,9 @@ const path = require('path');
 const { Client, GatewayIntentBits, Collection, REST, Routes, Partials } = require('discord.js');
 
 process.on('unhandledRejection', (error) => {
-  console.error('[UnhandledRejection]', error?.message || error);
+  console.error('[UnhandledRejection]', error?.stack || error?.message || error);
+  if (error?.requestBody) console.error('[UnhandledRejection] requestBody:', JSON.stringify(error.requestBody));
+  if (error?.rawError) console.error('[UnhandledRejection] rawError:', JSON.stringify(error.rawError));
 });
 const { initDB } = require('./utils/database');
 const { startReminderLoop } = require('./utils/reminders');
@@ -87,9 +89,17 @@ client.once('ready', async () => {
   }
   console.log(`[Bot] Member cache primed for ${client.guilds.cache.size} guild(s).`);
 
-  await loadAppEmojis(client.user.id, process.env.DISCORD_TOKEN);
-  await restoreRaffles(client);
-  await initDB();
+  try {
+    await loadAppEmojis(client.user.id, process.env.DISCORD_TOKEN);
+  } catch (e) { console.error('[Emojis] load error:', e.message); }
+
+  try {
+    await restoreRaffles(client);
+  } catch (e) { console.error('[Raffles] restore error:', e.message); }
+
+  try {
+    await initDB();
+  } catch (e) { console.error('[DB] init error:', e.message); }
   // Restore grind auto-delete timers
   try {
     const { query: q } = require('./utils/database');
