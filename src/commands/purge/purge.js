@@ -9,6 +9,11 @@ module.exports = {
     .addRoleOption(o => o.setName('allowed_role').setDescription('Only members with this role can use /purge (admin can always use it)')),
 
   async execute(interaction) {
+    // Acknowledge the interaction FIRST, before any async DB work — otherwise a
+    // slow/hung query risks blowing past Discord's 3-second response window
+    // and failing with "The application did not respond".
+    await interaction.deferReply({ ephemeral: true });
+
     // Check permission — admin always allowed, or has the configured purge role
     const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
                     interaction.user.id === process.env.OWNER_ID;
@@ -18,11 +23,10 @@ module.exports = {
       const res = await query('SELECT purge_role_id FROM guild_config WHERE guild_id = $1', [interaction.guild.id]);
       const purgeRoleId = res.rows[0]?.purge_role_id;
       if (!purgeRoleId || !interaction.member.roles.cache.has(purgeRoleId)) {
-        return interaction.reply({ content: '❌ You don\'t have permission to use this command.', ephemeral: true });
+        return interaction.editReply({ content: '❌ You don\'t have permission to use this command.' });
       }
     }
 
-    await interaction.deferReply({ ephemeral: true });
     const amount = interaction.options.getInteger('amount');
 
     try {
