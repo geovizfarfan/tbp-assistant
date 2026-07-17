@@ -39,6 +39,18 @@ module.exports = {
       .addIntegerOption(o => o.setName('id').setDescription('Giveaway ID').setRequired(true)))
 
     .addSubcommand(sub => sub
+      .setName('edit')
+      .setDescription('Edit a live giveaway (host only) — only fills in fields you provide')
+      .addIntegerOption(o => o.setName('id').setDescription('Giveaway ID').setRequired(true))
+      .addStringOption(o => o.setName('prize').setDescription('New prize text'))
+      .addIntegerOption(o => o.setName('winners').setDescription('New number of winners'))
+      .addIntegerOption(o => o.setName('duration_amount').setDescription('New duration FROM NOW — replaces the current end time'))
+      .addStringOption(o => o.setName('duration_unit').setDescription('Unit for duration_amount').addChoices(
+        { name: 'Minutes', value: 'minutes' }, { name: 'Hours', value: 'hours' }, { name: 'Days', value: 'days' },
+      ))
+      .addAttachmentOption(o => o.setName('thumbnail').setDescription('New thumbnail image')))
+
+    .addSubcommand(sub => sub
       .setName('reroll')
       .setDescription('Pick new winner(s) for an ended giveaway')
       .addIntegerOption(o => o.setName('id').setDescription('Giveaway ID').setRequired(true))
@@ -106,6 +118,7 @@ module.exports = {
     if (sub === 'start')  return startGiveaway(interaction);
     if (sub === 'end')    return endGiveawayLive(interaction);
     if (sub === 'cancel') return cancelGiveaway(interaction);
+    if (sub === 'edit')   return editGiveaway(interaction);
     if (sub === 'reroll') return rerollGiveaway(interaction);
     if (sub === 'list')   return listLiveGiveaways(interaction);
   },
@@ -364,10 +377,14 @@ async function finishGiveaway(client, giveawayId) {
   }
 }
 
+const activeGiveawayTimers = new Map();
+
 function scheduleGiveawayEnd(client, giveawayId, ms) {
-  setTimeout(() => {
+  const handle = setTimeout(() => {
+    activeGiveawayTimers.delete(giveawayId);
     finishGiveaway(client, giveawayId).catch(err => console.error('[Giveaway] finish error:', err.message));
   }, ms);
+  activeGiveawayTimers.set(giveawayId, handle);
 }
 
 async function startGiveaway(interaction) {
@@ -486,6 +503,10 @@ async function endGiveawayLive(interaction) {
   if (!gwRes.rows.length) return interaction.editReply(`${e('wrong')} Giveaway not found.`);
   if (gwRes.rows[0].status !== 'active') return interaction.editReply(`${e('wrong')} That giveaway has already ended.`);
 
+  if (activeGiveawayTimers.has(id)) {
+    clearTimeout(activeGiveawayTimers.get(id));
+    activeGiveawayTimers.delete(id);
+  }
   await finishGiveaway(interaction.client, id);
   await interaction.editReply(`${e('checkmark')} Giveaway #${id} ended early.`);
 }
@@ -504,6 +525,11 @@ async function cancelGiveaway(interaction) {
 
   if (gw.status !== 'active') return interaction.editReply(`${e('wrong')} That giveaway isn't active — can't cancel it.`);
 
+  if (activeGiveawayTimers.has(id)) {
+    clearTimeout(activeGiveawayTimers.get(id));
+    activeGiveawayTimers.delete(id);
+  }
+
   await query('UPDATE giveaway_events SET status=$1, ended_at=NOW() WHERE id=$2', ['cancelled', id]);
 
   const channel = await interaction.client.channels.fetch(gw.channel_id).catch(() => null);
@@ -518,6 +544,73 @@ async function cancelGiveaway(interaction) {
   }
 
   return interaction.editReply(`${e('checkmark')} Giveaway #${id} cancelled — no winner was picked.`);
+}
+
+async function editGiveaway(interaction) {
+  const id = interaction.options.getInteger('id');
+  await interaction.deferReply({ ephemeral: true });
+
+  const gwRes = await query('SELECT * FROM giveaway_events WHERE id=$1 AND guild_id=$2', [id, interaction.guildId]);
+  if (!gwRes.rows.length) return interaction.editReply(`${e('wrong')} Giveaway not found.`);
+  const gw = gwRes.rows[0];
+
+  if (interaction.user.id !== gw.host_id) {
+    return interaction.editReply(`${e('wrong')} Only the host of this giveaway (<@${gw.host_id}>) can edit it.`);
+  }
+  if (gw.status !== 'active') return interaction.editReply(`${e('wrong')} That giveaway isn't active — can't edit it.`);
+
+  const prize        = interaction.options.getString('prize');
+  const winners       = interaction.options.getInteger('winners');
+  const durationAmt   = interaction.options.getInteger('duration_amount');
+  const durationUnit  = interaction.options.getString('duration_unit');
+  const thumbnail     = interaction.options.getAttachment('thumbnail');
+
+  if (!prize && !winners && !durationAmt && !thumbnail) {
+    return interaction.editReply(`${e('wrong')} Provide at least one field to change.`);
+  }
+  if (durationAmt && !durationUnit) {
+    return interaction.editReply(`${e('wrong')} \`duration_unit\` is required when setting \`duration_amount\`.`);
+  }
+
+  let newEndsAt = null;
+  if (durationAmt) {
+    const msMap = { minutes: 60 * 1000, hours: 60 * 60 * 1000, days: 24 * 60 * 60 * 1000 };
+    newEndsAt = new Date(Date.now() + durationAmt * msMap[durationUnit]);
+  }
+
+  await query(`
+    UPDATE giveaway_events SET
+      prize = COALESCE($1, prize),
+      winners_count = COALESCE($2, winners_count),
+      thumbnail_url = COALESCE($3, thumbnail_url),
+      ends_at = COALESCE($4, ends_at)
+    WHERE id = $5
+  `, [prize, winners, thumbnail?.url || null, newEndsAt, id]);
+
+  // If the end time changed, actually reschedule the auto-end timer — not just the display
+  if (newEndsAt) {
+    if (activeGiveawayTimers.has(id)) {
+      clearTimeout(activeGiveawayTimers.get(id));
+      activeGiveawayTimers.delete(id);
+    }
+    const msRemaining = newEndsAt.getTime() - Date.now();
+    if (msRemaining > 0) scheduleGiveawayEnd(interaction.client, id, msRemaining);
+    else await finishGiveaway(interaction.client, id).catch(() => {}); // new time is already in the past
+  }
+
+  // Re-render the live message with updated info
+  const updatedRes = await query('SELECT * FROM giveaway_events WHERE id=$1', [id]);
+  const updatedGw = updatedRes.rows[0];
+  const channel = await interaction.client.channels.fetch(updatedGw.channel_id).catch(() => null);
+  const message = channel ? await channel.messages.fetch(updatedGw.message_id).catch(() => null) : null;
+  if (message && updatedGw.status === 'active') {
+    const bonusRolesInfo = updatedGw.bonus_role_ids?.length
+      ? (await query('SELECT * FROM giveaway_bonus_roles WHERE guild_id=$1 AND role_id = ANY($2)', [interaction.guildId, updatedGw.bonus_role_ids])).rows
+      : [];
+    await message.edit({ embeds: [buildGiveawayEmbed(updatedGw, bonusRolesInfo)] }).catch(() => {});
+  }
+
+  return interaction.editReply(`${e('checkmark')} Giveaway #${id} updated.`);
 }
 
 async function rerollGiveaway(interaction) {
