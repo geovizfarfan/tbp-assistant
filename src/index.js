@@ -212,6 +212,10 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isButton() && interaction.customId.startsWith('wheelroles_enter:')) {
     return wheelModule.handleEnterButton(interaction);
   }
+  if (interaction.isButton() && interaction.customId.startsWith('giveaway_checkentries:')) {
+    const { handleCheckEntriesButton } = require('./commands/giveaway/giveaway');
+    return handleCheckEntriesButton(interaction);
+  }
   if (interaction.isStringSelectMenu() && interaction.customId === 'help_category') {
     return helpModule.handleSelect(interaction, client);
   }

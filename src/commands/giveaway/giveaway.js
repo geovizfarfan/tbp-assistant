@@ -1,6 +1,6 @@
 const {
   SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits,
-  StringSelectMenuBuilder, ActionRowBuilder,
+  StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
 } = require('discord.js');
 const { e } = require('../../utils/appEmojis');
 const { query } = require('../../utils/database');
@@ -125,6 +125,7 @@ module.exports = {
 
   scheduleGiveawayEnd,
   finishGiveaway,
+  handleCheckEntriesButton,
 };
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -210,7 +211,7 @@ async function requiredRoleList(interaction) {
 // Live giveaway system
 // ═══════════════════════════════════════════════════════════════════════
 
-function buildGiveawayEmbed(gw, bonusRoles = [], ended = false, winnerIds = null) {
+function buildGiveawayEmbed(gw, bonusRoles = [], ended = false, winnerIds = null, guildName = '', hostName = '') {
   const lines = [];
 
   lines.push(`-# Giveaway ID: ${gw.id}`);
@@ -238,14 +239,25 @@ function buildGiveawayEmbed(gw, bonusRoles = [], ended = false, winnerIds = null
     .setTitle(`${e('gift')} ${ended ? 'Giveaway Ended' : 'Giveaway'}`)
     .setDescription(lines.join('\n'));
 
+  if (guildName || hostName) {
+    embed.setFooter({ text: [guildName, hostName].filter(Boolean).join('・') });
+  }
+
   if (gw.thumbnail_url) embed.setThumbnail(gw.thumbnail_url);
-  if (!ended) embed.setTimestamp(new Date(gw.ends_at));
 
   return embed;
 }
 
+// Discord.js keys the reactions cache by just the numeric ID for custom emojis
+// (not the full <name:id> text), but by the raw character for unicode emojis.
+// entry_emoji is stored as whatever the host typed, so this bridges the gap.
+function reactionCacheKey(entryEmoji) {
+  const customMatch = entryEmoji?.match(/^<a?:\w+:(\d+)>$/);
+  return customMatch ? customMatch[1] : entryEmoji;
+}
+
 async function fetchAllReactors(message, entryEmoji) {
-  const reaction = message.reactions.cache.get(entryEmoji);
+  const reaction = message.reactions.cache.get(reactionCacheKey(entryEmoji));
   if (!reaction) return [];
 
   let allUsers = [];
@@ -258,6 +270,53 @@ async function fetchAllReactors(message, entryEmoji) {
     after = [...batch.values()].pop().id;
   }
   return allUsers.filter(u => !u.bot);
+}
+
+async function handleCheckEntriesButton(interaction) {
+  const id = parseInt(interaction.customId.split(':')[1], 10);
+  await interaction.deferReply({ ephemeral: true });
+
+  const gwRes = await query('SELECT * FROM giveaway_events WHERE id = $1', [id]);
+  if (!gwRes.rows.length) return interaction.editReply(`${e('wrong')} That giveaway no longer exists.`);
+  const gw = gwRes.rows[0];
+
+  if (gw.status !== 'active') return interaction.editReply(`${e('wrong')} That giveaway has already ended.`);
+
+  const channel = await interaction.client.channels.fetch(gw.channel_id).catch(() => null);
+  const message = channel ? await channel.messages.fetch(gw.message_id).catch(() => null) : null;
+  if (!message) return interaction.editReply(`${e('wrong')} Couldn't find the giveaway message.`);
+
+  const reaction = message.reactions.cache.get(reactionCacheKey(gw.entry_emoji));
+  const reactedUsers = reaction ? await reaction.users.fetch().catch(() => null) : null;
+  const hasReacted = reactedUsers?.has(interaction.user.id) || false;
+
+  if (!hasReacted) {
+    return interaction.editReply(`${e('wrong')} You haven't entered yet! React with ${gw.entry_emoji} to join.`);
+  }
+
+  if (gw.required_role_ids?.length && !gw.required_role_ids.every(rid => interaction.member.roles.cache.has(rid))) {
+    const missing = gw.required_role_ids.filter(rid => !interaction.member.roles.cache.has(rid));
+    return interaction.editReply(`${e('wrong')} You've reacted, but you're missing required role(s): ${missing.map(rid => `<@&${rid}>`).join(', ')} — you won't be included in the draw.`);
+  }
+
+  let tickets = 1;
+  const bonusLines = [];
+  if (gw.bonus_role_ids?.length) {
+    const bonusRes = await query('SELECT role_id, bonus_entries FROM giveaway_bonus_roles WHERE guild_id=$1 AND role_id = ANY($2)', [gw.guild_id, gw.bonus_role_ids]);
+    for (const r of bonusRes.rows) {
+      if (interaction.member.roles.cache.has(r.role_id)) {
+        tickets += r.bonus_entries;
+        bonusLines.push(`-# ・<@&${r.role_id}> (+${r.bonus_entries})`);
+      }
+    }
+  }
+
+  const lines = [`${e('checkmark')} You're entered! You have **${tickets}** ${tickets === 1 ? 'entry' : 'entries'} in this giveaway.`];
+  if (bonusLines.length) {
+    lines.push('', `${e('purplesparkle')} **From your roles:**`, ...bonusLines);
+  }
+
+  return interaction.editReply(lines.join('\n'));
 }
 
 async function buildWeightedEntrants(guild, users, gw) {
@@ -329,7 +388,7 @@ async function finishGiveaway(client, giveawayId) {
 
     // Clean up reactions from anyone who didn't meet the role requirement
     for (const userId of ineligible) {
-      await message.reactions.cache.get(gw.entry_emoji)?.users.remove(userId).catch(() => {});
+      await message.reactions.cache.get(reactionCacheKey(gw.entry_emoji))?.users.remove(userId).catch(() => {});
     }
   }
 
@@ -358,7 +417,8 @@ async function finishGiveaway(client, giveawayId) {
   }
 
   if (message) {
-    await message.edit({ embeds: [buildGiveawayEmbed(gw, [], true, winners)] }).catch(() => {});
+    const hostMember = await channel.guild.members.fetch(gw.host_id).catch(() => null);
+    await message.edit({ embeds: [buildGiveawayEmbed(gw, [], true, winners, channel.guild.name, hostMember?.user?.username || '')], components: [] }).catch(() => {});
     await message.reactions.removeAll().catch(() => {});
   }
 
@@ -418,11 +478,14 @@ async function startGiveaway(interaction) {
       .setPlaceholder('Select bonus-entry roles to apply (optional)')
       .setMinValues(0)
       .setMaxValues(Math.min(libraryRes.rows.length, 25))
-      .addOptions(libraryRes.rows.slice(0, 25).map(r => ({
-        label: `+${r.bonus_entries} entries`.slice(0, 100),
-        value: r.role_id,
-        description: `Role ID ${r.role_id}`.slice(0, 100),
-      })));
+      .addOptions(libraryRes.rows.slice(0, 25).map(r => {
+        const roleName = interaction.guild.roles.cache.get(r.role_id)?.name || `Deleted role (${r.role_id})`;
+        return {
+          label: roleName.slice(0, 100),
+          value: r.role_id,
+          description: `+${r.bonus_entries} ${r.bonus_entries === 1 ? 'entry' : 'entries'}`.slice(0, 100),
+        };
+      }));
     const row = new ActionRowBuilder().addComponents(menu);
 
     const promptMsg = await interaction.editReply({
@@ -451,7 +514,7 @@ async function startGiveaway(interaction) {
       .setMinValues(0)
       .setMaxValues(Math.min(requiredLibraryRes.rows.length, 25))
       .addOptions(requiredLibraryRes.rows.slice(0, 25).map(r => ({
-        label: `Role ID ${r.role_id}`.slice(0, 100),
+        label: (interaction.guild.roles.cache.get(r.role_id)?.name || `Deleted role (${r.role_id})`).slice(0, 100),
         value: r.role_id,
       })));
     const row = new ActionRowBuilder().addComponents(menu);
@@ -486,7 +549,18 @@ async function startGiveaway(interaction) {
     ? libraryRes.rows.filter(r => chosenBonusRoles.includes(r.role_id))
     : [];
 
-  const msg = await channel.send({ embeds: [buildGiveawayEmbed(gw, bonusRolesInfo)] });
+  const checkRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`giveaway_checkentries:${gw.id}`)
+      .setLabel('Check My Entries')
+      .setEmoji('🎫')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  const msg = await channel.send({
+    embeds: [buildGiveawayEmbed(gw, bonusRolesInfo, false, null, interaction.guild.name, interaction.user.username)],
+    components: [checkRow],
+  });
   await msg.react(entryEmoji).catch(() => {});
   await query('UPDATE giveaway_events SET message_id = $1 WHERE id = $2', [msg.id, gw.id]);
 
@@ -535,10 +609,13 @@ async function cancelGiveaway(interaction) {
   const channel = await interaction.client.channels.fetch(gw.channel_id).catch(() => null);
   const message = channel ? await channel.messages.fetch(gw.message_id).catch(() => null) : null;
   if (message) {
+    const hostMember = channel ? await channel.guild.members.fetch(gw.host_id).catch(() => null) : null;
     await message.edit({ embeds: [new EmbedBuilder()
       .setColor(0x5B2C8C)
       .setTitle(`${e('gift')} Giveaway Cancelled`)
-      .setDescription(`-# Giveaway ID: ${gw.id}\n# ${gw.prize}\n\n${e('wrong')} This giveaway was cancelled — no winner was picked.`)]
+      .setDescription(`-# Giveaway ID: ${gw.id}\n# ${gw.prize}\n\n${e('wrong')} This giveaway was cancelled — no winner was picked.`)
+      .setFooter({ text: [channel?.guild?.name, hostMember?.user?.username].filter(Boolean).join('・') })],
+      components: [],
     }).catch(() => {});
     await message.reactions.removeAll().catch(() => {});
   }
@@ -607,7 +684,7 @@ async function editGiveaway(interaction) {
     const bonusRolesInfo = updatedGw.bonus_role_ids?.length
       ? (await query('SELECT * FROM giveaway_bonus_roles WHERE guild_id=$1 AND role_id = ANY($2)', [interaction.guildId, updatedGw.bonus_role_ids])).rows
       : [];
-    await message.edit({ embeds: [buildGiveawayEmbed(updatedGw, bonusRolesInfo)] }).catch(() => {});
+    await message.edit({ embeds: [buildGiveawayEmbed(updatedGw, bonusRolesInfo, false, null, channel.guild.name, (await channel.guild.members.fetch(updatedGw.host_id).catch(() => null))?.user?.username || '')] }).catch(() => {});
   }
 
   return interaction.editReply(`${e('checkmark')} Giveaway #${id} updated.`);
