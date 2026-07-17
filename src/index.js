@@ -637,5 +637,23 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-client.login(process.env.DISCORD_TOKEN);
+async function loginWithRetry(maxAttempts = 5) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await client.login(process.env.DISCORD_TOKEN);
+      return; // success
+    } catch (err) {
+      console.error(`[Login] Attempt ${attempt}/${maxAttempts} failed:`, err.message);
+      if (attempt === maxAttempts) {
+        console.error('[Login] All attempts exhausted — exiting so Railway restarts the container.');
+        process.exit(1); // let the platform's restart policy take over
+      }
+      const delayMs = Math.min(5000 * attempt, 30000); // 5s, 10s, 15s... capped at 30s
+      console.log(`[Login] Retrying in ${delayMs / 1000}s...`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
+loginWithRetry();
 
