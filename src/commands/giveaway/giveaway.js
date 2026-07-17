@@ -23,7 +23,6 @@ module.exports = {
       ))
       .addIntegerOption(o => o.setName('winners').setDescription('Number of winners (default 1)'))
       .addAttachmentOption(o => o.setName('thumbnail').setDescription('Thumbnail image for the giveaway embed'))
-      .addRoleOption(o => o.setName('required_role').setDescription('Only members with this role can enter'))
       .addStringOption(o => o.setName('entry_emoji').setDescription('Emoji members react with to enter (default: 🎉)'))
       .addChannelOption(o => o.setName('channel').setDescription('Channel to post in (default: current channel)'))
       .addIntegerOption(o => o.setName('claim_hours').setDescription('Hours winner has to open a ticket and claim (default: server setting)'))
@@ -58,7 +57,22 @@ module.exports = {
         .addRoleOption(o => o.setName('role').setDescription('Role').setRequired(true)))
       .addSubcommand(sub => sub
         .setName('list')
-        .setDescription('List all configured bonus-entry roles'))),
+        .setDescription('List all configured bonus-entry roles')))
+
+    .addSubcommandGroup(group => group
+      .setName('requiredrole')
+      .setDescription('Manage the reusable entry-requirement role library')
+      .addSubcommand(sub => sub
+        .setName('add')
+        .setDescription('Add one or more roles to the entry-requirement library')
+        .addStringOption(o => o.setName('roles').setDescription('Type @ to mention roles — add as many as you want, e.g. @Role1 @Role2 @Role3').setRequired(true)))
+      .addSubcommand(sub => sub
+        .setName('remove')
+        .setDescription('Remove a role from the entry-requirement library')
+        .addRoleOption(o => o.setName('role').setDescription('Role').setRequired(true)))
+      .addSubcommand(sub => sub
+        .setName('list')
+        .setDescription('List all configured entry-requirement roles'))),
 
   async execute(interaction) {
     const group = interaction.options.getSubcommandGroup(false);
@@ -71,6 +85,16 @@ module.exports = {
       if (sub === 'add')    return bonusRoleAdd(interaction);
       if (sub === 'remove') return bonusRoleRemove(interaction);
       if (sub === 'list')   return bonusRoleList(interaction);
+      return;
+    }
+
+    if (group === 'requiredrole') {
+      if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.reply({ content: `${e('wrong')} Admin only.`, ephemeral: true });
+      }
+      if (sub === 'add')    return requiredRoleAdd(interaction);
+      if (sub === 'remove') return requiredRoleRemove(interaction);
+      if (sub === 'list')   return requiredRoleList(interaction);
       return;
     }
 
@@ -118,6 +142,52 @@ async function bonusRoleList(interaction) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Required role library (admin config) — members must have ALL selected
+// ═══════════════════════════════════════════════════════════════════════
+
+async function requiredRoleAdd(interaction) {
+  const rolesText = interaction.options.getString('roles');
+  const roleIds = [...new Set([...rolesText.matchAll(/<@&(\d+)>/g)].map(m => m[1]))];
+
+  if (!roleIds.length) {
+    return interaction.reply({ content: `${e('wrong')} No role mentions found — type \`@\` and pick roles from Discord's suggestions.`, ephemeral: true });
+  }
+
+  const added = [];
+  const invalid = [];
+  for (const roleId of roleIds) {
+    const role = interaction.guild.roles.cache.get(roleId);
+    if (!role) { invalid.push(roleId); continue; }
+    await query(`
+      INSERT INTO giveaway_required_roles (guild_id, role_id) VALUES ($1,$2)
+      ON CONFLICT (guild_id, role_id) DO NOTHING
+    `, [interaction.guildId, roleId]);
+    added.push(role.id);
+  }
+
+  const lines = [];
+  if (added.length) lines.push(`${e('checkmark')} Added ${added.map(id => `<@&${id}>`).join(', ')} to the entry-requirement library.`);
+  if (invalid.length) lines.push(`${e('wrong')} Couldn't find ${invalid.length} of the mentioned role(s) — skipped.`);
+
+  return interaction.reply({ content: lines.join('\n') || `${e('wrong')} Nothing added.`, ephemeral: true });
+}
+
+async function requiredRoleRemove(interaction) {
+  const role = interaction.options.getRole('role');
+  const del = await query('DELETE FROM giveaway_required_roles WHERE guild_id=$1 AND role_id=$2 RETURNING id', [interaction.guildId, role.id]);
+  if (!del.rows.length) return interaction.reply({ content: `${e('wrong')} That role isn't in the entry-requirement library.`, ephemeral: true });
+  return interaction.reply({ content: `${e('checkmark')} Removed <@&${role.id}> from the entry-requirement library.`, ephemeral: true });
+}
+
+async function requiredRoleList(interaction) {
+  const res = await query('SELECT * FROM giveaway_required_roles WHERE guild_id=$1', [interaction.guildId]);
+  if (!res.rows.length) return interaction.reply({ content: 'No entry-requirement roles configured yet.', ephemeral: true });
+
+  const lines = res.rows.map(r => `<@&${r.role_id}>`).join('\n');
+  return interaction.reply({ embeds: [baseEmbed(`${e('rules')} Entry-Requirement Roles`, COLORS.tbppurple, interaction.guild?.name).setDescription(lines)], ephemeral: true });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Live giveaway system
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -134,7 +204,7 @@ function buildGiveawayEmbed(gw, bonusRoles = [], ended = false, winnerIds = null
     lines.push(`${e('trophies')} **Winners:** ${gw.winners_count}`);
     lines.push(`${e('member')} **Hosted by:** <@${gw.host_id}>`);
     lines.push(`${e('role')} **Ends:** ${tsF(gw.ends_at)} (${tsR(gw.ends_at)})`);
-    if (gw.required_role_id) lines.push(`${e('rules')} **Requirement:** <@&${gw.required_role_id}>`);
+    if (gw.required_role_ids?.length) lines.push(`${e('rules')} **Requirement:** Must have all of ${gw.required_role_ids.map(id => `<@&${id}>`).join(', ')}`);
     if (bonusRoles.length) {
       lines.push(`${e('purplesparkle')} **Bonus Entries:** ${bonusRoles.map(r => `<@&${r.role_id}> (+${r.bonus_entries})`).join(', ')}`);
     }
@@ -186,7 +256,7 @@ async function buildWeightedEntrants(guild, users, gw) {
     const member = await guild.members.fetch(user.id).catch(() => null);
     if (!member) continue;
 
-    if (gw.required_role_id && !member.roles.cache.has(gw.required_role_id)) {
+    if (gw.required_role_ids?.length && !gw.required_role_ids.every(id => member.roles.cache.has(id))) {
       ineligible.push(user.id);
       continue;
     }
@@ -296,7 +366,6 @@ async function startGiveaway(interaction) {
   const durationUnit = interaction.options.getString('duration_unit');
   const winnersCount = interaction.options.getInteger('winners') || 1;
   const thumbnail    = interaction.options.getAttachment('thumbnail');
-  const requiredRole = interaction.options.getRole('required_role');
   const entryEmoji   = interaction.options.getString('entry_emoji') || '🎉';
   const ticketChannel = interaction.options.getChannel('ticket_channel');
   let claimHours      = interaction.options.getInteger('claim_hours');
@@ -343,15 +412,46 @@ async function startGiveaway(interaction) {
     }
   }
 
+  // If there's a required-role library, let the host pick which apply to THIS
+  // giveaway — a member must have ALL selected roles to be eligible to enter
+  const requiredLibraryRes = await query('SELECT * FROM giveaway_required_roles WHERE guild_id=$1', [interaction.guildId]);
+  let requiredRoleIds = [];
+
+  if (requiredLibraryRes.rows.length) {
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId('giveaway_requiredrole_pick')
+      .setPlaceholder('Select required roles for this giveaway (optional)')
+      .setMinValues(0)
+      .setMaxValues(Math.min(requiredLibraryRes.rows.length, 25))
+      .addOptions(requiredLibraryRes.rows.slice(0, 25).map(r => ({
+        label: `Role ID ${r.role_id}`.slice(0, 100),
+        value: r.role_id,
+      })));
+    const row = new ActionRowBuilder().addComponents(menu);
+
+    const promptMsg = await interaction.editReply({
+      content: `${e('rules')} You have entry-requirement roles configured. Select which ones a member must ALL have to enter this giveaway (or wait 60s to skip — no requirement):`,
+      components: [row],
+    });
+
+    try {
+      const selectInteraction = await promptMsg.awaitMessageComponent({ time: 60_000 });
+      requiredRoleIds = selectInteraction.values;
+      await selectInteraction.deferUpdate();
+    } catch {
+      // Timed out — proceed with no requirement
+    }
+  }
+
   const msMap = { minutes: 60 * 1000, hours: 60 * 60 * 1000, days: 24 * 60 * 60 * 1000 };
   const ms = durationAmt * msMap[durationUnit];
   const endsAt = new Date(Date.now() + ms);
 
   const res = await query(
-    `INSERT INTO giveaway_events (guild_id, channel_id, host_id, prize, winners_count, thumbnail_url, required_role_id, bonus_role_ids, entry_emoji, claim_hours, ticket_channel_id, ends_at)
+    `INSERT INTO giveaway_events (guild_id, channel_id, host_id, prize, winners_count, thumbnail_url, required_role_ids, bonus_role_ids, entry_emoji, claim_hours, ticket_channel_id, ends_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
     [interaction.guildId, channel.id, interaction.user.id, prize, winnersCount,
-      thumbnail?.url || null, requiredRole?.id || null, chosenBonusRoles, entryEmoji, claimHours, ticketChannel?.id || null, endsAt]
+      thumbnail?.url || null, requiredRoleIds, chosenBonusRoles, entryEmoji, claimHours, ticketChannel?.id || null, endsAt]
   );
   const gw = res.rows[0];
 
