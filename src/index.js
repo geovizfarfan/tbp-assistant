@@ -8,6 +8,9 @@ process.on('unhandledRejection', (error) => {
   if (error?.requestBody) console.error('[UnhandledRejection] requestBody:', JSON.stringify(error.requestBody));
   if (error?.rawError) console.error('[UnhandledRejection] rawError:', JSON.stringify(error.rawError));
 });
+process.on('uncaughtException', (error) => {
+  console.error('[UncaughtException]', error?.stack || error?.message || error);
+});
 const { initDB } = require('./utils/database');
 const { startReminderLoop } = require('./utils/reminders');
 const { handleTicketMessage, handleThreadCreate, handleChannelDelete } = require('./events/ticketTracker');
