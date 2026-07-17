@@ -23,8 +23,14 @@ module.exports = {
       .addIntegerOption(o => o.setName('level').setDescription('Level to set').setRequired(true)))
 
     .addSubcommand(sub => sub
+      .setName('reset')
+      .setDescription('Reset every member\'s level and XP on this server (admin, cannot be undone)')
+      .addBooleanOption(o => o.setName('confirm').setDescription('Type True to confirm — this cannot be undone').setRequired(true)))
+
+    .addSubcommand(sub => sub
       .setName('config')
       .setDescription('Configure XP gain and level-up announcements (admin)')
+      .addBooleanOption(o => o.setName('enabled').setDescription('Turn XP gain on/off — starts OFF until you enable it'))
       .addChannelOption(o => o.setName('levelup_channel').setDescription('Where level-up announcements post (blank = same channel as the message)'))
       .addBooleanOption(o => o.setName('announce').setDescription('Announce level-ups at all'))
       .addIntegerOption(o => o.setName('xp_min').setDescription('Minimum XP per message'))
@@ -51,11 +57,11 @@ module.exports = {
     const group = interaction.options.getSubcommandGroup(false);
     const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
 
-    if (group === 'exclude' || sub === 'set' || sub === 'config') {
+    if (group === 'exclude' || sub === 'set' || sub === 'config' || sub === 'reset') {
       if (!isAdmin) return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
     }
 
-    await interaction.deferReply({ ephemeral: group === 'exclude' || sub === 'set' || sub === 'config' });
+    await interaction.deferReply({ ephemeral: group === 'exclude' || sub === 'set' || sub === 'config' || sub === 'reset' });
 
     if (group === 'exclude') {
       if (sub === 'add') {
@@ -82,19 +88,22 @@ module.exports = {
       const xpMin = interaction.options.getInteger('xp_min');
       const xpMax = interaction.options.getInteger('xp_max');
       const cooldown = interaction.options.getInteger('cooldown_seconds');
+      const enabled = interaction.options.getBoolean('enabled');
 
       await query(`
-        INSERT INTO level_config (guild_id, levelup_channel_id, announce_levelup, xp_min, xp_max, cooldown_seconds)
-        VALUES ($1,$2,$3,$4,$5,$6)
+        INSERT INTO level_config (guild_id, levelup_channel_id, announce_levelup, xp_min, xp_max, cooldown_seconds, enabled)
+        VALUES ($1,$2,COALESCE($3,true),COALESCE($4,15),COALESCE($5,25),COALESCE($6,60),COALESCE($7,false))
         ON CONFLICT (guild_id) DO UPDATE SET
           levelup_channel_id = COALESCE($2, level_config.levelup_channel_id),
           announce_levelup   = COALESCE($3, level_config.announce_levelup),
           xp_min             = COALESCE($4, level_config.xp_min),
           xp_max             = COALESCE($5, level_config.xp_max),
-          cooldown_seconds   = COALESCE($6, level_config.cooldown_seconds)
-      `, [interaction.guildId, levelupChannel?.id || null, announce, xpMin, xpMax, cooldown]);
+          cooldown_seconds   = COALESCE($6, level_config.cooldown_seconds),
+          enabled            = COALESCE($7, level_config.enabled)
+      `, [interaction.guildId, levelupChannel?.id || null, announce, xpMin, xpMax, cooldown, enabled]);
 
-      return interaction.editReply('✅ Level system config updated.');
+      const statusNote = enabled === true ? '\n🟢 XP gain is now **ON**.' : enabled === false ? '\n🔴 XP gain is now **OFF**.' : '';
+      return interaction.editReply('✅ Level system config updated.' + statusNote);
     }
 
     if (sub === 'set') {
@@ -113,6 +122,15 @@ module.exports = {
       `, [interaction.guildId, user.id, user.username, totalXp, level]);
 
       return interaction.editReply(`✅ Set <@${user.id}> to **Level ${level}**.`);
+    }
+
+    if (sub === 'reset') {
+      const confirm = interaction.options.getBoolean('confirm');
+      if (!confirm) {
+        return interaction.editReply('❌ Reset cancelled — pass `confirm:True` to actually wipe every member\'s level and XP on this server.');
+      }
+      const res = await query('DELETE FROM levels WHERE guild_id = $1', [interaction.guildId]);
+      return interaction.editReply(`✅ Reset complete — cleared level/XP data for **${res.rowCount}** member${res.rowCount === 1 ? '' : 's'} on this server.`);
     }
 
     if (sub === 'check') {

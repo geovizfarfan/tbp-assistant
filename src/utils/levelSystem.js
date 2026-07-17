@@ -24,7 +24,7 @@ function getTier(level) {
 
 async function getLevelConfig(guildId) {
   const res = await query('SELECT * FROM level_config WHERE guild_id = $1', [guildId]);
-  return res.rows[0] || { xp_min: 15, xp_max: 25, cooldown_seconds: 60, announce_levelup: true };
+  return res.rows[0] || { xp_min: 15, xp_max: 25, cooldown_seconds: 60, announce_levelup: true, enabled: false };
 }
 
 async function getUserLevel(guildId, userId) {

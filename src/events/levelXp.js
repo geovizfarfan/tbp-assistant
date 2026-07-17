@@ -9,6 +9,8 @@ async function handleMessageXp(message, client) {
   if (await isChannelExcluded(guildId, message.channel.id)) return;
 
   const config = await getLevelConfig(guildId);
+  if (!config.enabled) return;
+
   const existing = await getUserLevel(guildId, message.author.id);
 
   // Cooldown check

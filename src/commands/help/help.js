@@ -50,10 +50,20 @@ const CATEGORIES = {
     label: 'Giveaways',
     description: 'Live giveaways with entries & bonus roles',
   },
+  level: {
+    emoji: '<a:trophies:1512912823062364281>',
+    label: 'Level System',
+    description: 'XP, levels & leaderboard',
+  },
+  staffpay: {
+    emoji: '<a:payout:1512913911953756291>',
+    label: 'Staff & Payroll',
+    description: 'Staff roster, eligibility & payouts',
+  },
   general: {
     emoji: '🤖',
     label: 'General',
-    description: 'AFK, Purge, Boost, Grind',
+    description: 'Lock, Ban Log, Embed, Wheel & more',
   },
   playregret: {
     emoji: '<a:SINS:1522338148380704910>',
@@ -97,7 +107,9 @@ function buildHomeEmbed() {
       { name: '<:role:1524456992683593979> Role Panels',          value: 'Dropdown & reaction self-assign roles',   inline: true },
       { name: '<a:shop:1524457010714640464> Shop',                value: 'Sins economy — roles, perks & items',     inline: true },
       { name: '<a:purplesparkle:1512912828489793626> Giveaways',  value: 'Live giveaways with bonus entries',       inline: true },
-      { name: '🤖 General',                                       value: 'AFK, Purge, Boost detection & Grind',     inline: true },
+      { name: '<a:trophies:1512912823062364281> Level System',   value: 'XP, levels & leaderboard',                inline: true },
+      { name: '<a:payout:1512913911953756291> Staff & Payroll',  value: 'Staff roster, eligibility & payouts',     inline: true },
+      { name: '🤖 General',                                       value: 'Lock, Ban Log, Embed, Wheel & more',      inline: true },
       { name: '<a:SINS:1522338148380704910> Play & Regret',       value: 'Sins currency & RR integration',          inline: true },
       { name: '⚙️ Server Config',                                 value: 'Setup guide & current server config',     inline: true },
     )
@@ -196,10 +208,47 @@ function buildCategoryEmbed(category) {
       .addFields(
         { name: '<a:afk:1522096882036510791> AFK', value: '`/afk set reason:"Be back soon"` — set yourself as AFK globally\n`/afk clear` — manually clear your AFK status\nBot auto-clears when you send a message and shows how long you were gone.', inline: false },
         { name: '🧹 Purge', value: '`/purge amount:50`\nDeletes up to 100 messages in the current channel. Requires admin or configured purge role.', inline: false },
+        { name: '🔒 Lock', value: '`/lock channel:#ch reason:"..."`\nToggles Send Messages off/on for everyone in one command — works correctly even on role-restricted private channels.', inline: false },
+        { name: '🔨 Ban Log', value: '`/banlog setup channel:#mod-log`\nAuto-posts whenever a member is banned, pulling the reason and who banned them from the audit log.\n`/banlog reason id:5 reason:"..."` — add/fix a reason after the fact\n`/banlog list` — recent bans', inline: false },
+        { name: '📋 Custom Embeds', value: '`/embed create description:"..." title:"..." color:#d6c2ee image: thumbnail: footer: author: channel:`\nPost a fully custom embed anywhere.', inline: false },
         { name: '<a:purplesparkle:1512912828489793626> Boost Detection', value: 'Set with `/settings channels boost:#ch`\nBot auto-posts a thank you message when someone boosts the server.', inline: false },
-        { name: '<:rumble:1522372419338375299> Rumble Grind', value: '`/grind setup channel:#ch role:@Role max_channels:50 duration:1`\nPosts a panel for members to create personal temp Rumble channels.\nChannels auto-delete after the set duration.', inline: false },
+        { name: '<:rumble:1522372419338375299> Rumble Grind', value: '`/grind setup channel:#ch role:@Role max_channels:50 duration:1`\nPosts a panel for members to create personal temp Rumble channels — inherits the category\'s existing permissions.', inline: false },
+        { name: '🎡 Wheel', value: '`/wheel members entries:"@a, @b, @c"` — spin for a winner\n`/wheel prizes prizes:"..." winner:@user` — spin a prize wheel for a winner you picked\n`/wheel combo entries: prizes:` — spin winner then prize in one flow\n`/wheel reactions link: emoji:` — pull entries from message reactions\n`/wheel boosted entries:` — boosted odds spin\n`/wheel role-bonus-add/list/remove` — bonus entries per role\nSins prizes are paid from the host\'s own wallet.', inline: false },
+        { name: '🏆 Member Wins', value: '`/member-wins user:@member`\nSee everything a member has won across raffles, giveaways, and games.', inline: false },
+        { name: '🔐 Private Rooms', value: '`/private-room setup`\nSets up auto-archiving private threads.', inline: false },
+        { name: '💌 GoosDate', value: '`/goosdate setup channel:#ch role:@Role` — configure reminders\n`/goosdate toggle enabled:True/False`\n`/goosdate status`', inline: false },
       )
       .setFooter({ text: 'Use /settings to configure channels and roles' }),
+
+    level: new EmbedBuilder().setColor('#d6c2ee')
+      .setTitle('<a:trophies:1512912823062364281> Level System')
+      .setDescription('Members earn XP by chatting and level up over time — the XP curve gets progressively harder, naturally forming Easy/Medium/Hard tiers.\n\n⚠️ **Off by default** — run `/level config enabled:True` to turn XP gain on for your server.')
+      .addFields(
+        { name: '🟢 Turn On/Off', value: '`/level config enabled:True`\nXP gain is fully opt-in — nothing accrues until this is set.', inline: false },
+        { name: '📊 Check Level', value: '`/level check [user]`\nShows level, tier (🟢 Easy / 🟡 Medium / 🔴 Hard), total XP, and progress to the next level.', inline: false },
+        { name: '🏆 Leaderboard', value: '`/level leaderboard`\nTop 10 members by level.', inline: false },
+        { name: '⚙️ Configure', value: '`/level config levelup_channel:#ch announce:True xp_min:15 xp_max:25 cooldown_seconds:60`\nSet a dedicated channel for level-up announcements (defaults to wherever the message was sent), tune XP range and cooldown, or turn announcements off entirely.', inline: false },
+        { name: '🚫 Exclude Channels', value: '`/level exclude add channel:#bot-commands`\n`/level exclude remove channel:#ch`\n`/level exclude list`\nStop specific channels from earning XP.', inline: false },
+        { name: '✏️ Manually Set Level', value: '`/level set user:@member level:10`\nAdmin override — also what shop level-up items would hook into if built later.', inline: false },
+        { name: '🗑️ Reset Server', value: '`/level reset confirm:True`\nWipes every member\'s level and XP on this server. Cannot be undone.', inline: false },
+      )
+      .setFooter({ text: 'XP curve: 5×level² + 50×level + 100 needed per level (same formula MEE6 uses)' }),
+
+    staffpay: new EmbedBuilder().setColor('#d6c2ee')
+      .setTitle('<a:payout:1512913911953756291> Staff & Payroll')
+      .setDescription('Manage your staff roster, track eligibility, and handle payouts.')
+      .addFields(
+        { name: '👤 Staff Roster', value: '`/staff add user:@member role:staff pay:500 currency:MEE6` — add someone to the roster\n`/staff remove user:@member`\n`/staff list`', inline: false },
+        { name: '📋 Staff Report', value: '`/staff report user:@member`\nFull eligibility report — games hosted, schedule adherence, payout status.', inline: false },
+        { name: '💰 Payment History', value: '`/staff payhistory user:@member`\nShows their last 15 payments plus last-paid and next-due dates.', inline: false },
+        { name: '✅ Mark Paid', value: '`/admin mark-paid user:@member amount:500`\nLogs the payment, DMs a receipt, and updates their next-due date automatically.', inline: false },
+        { name: '📊 Payroll Overview', value: '`/admin payroll [user]` — current status for staff/boosters\n`/admin pay-summary` — full server pay summary, splits into multiple fields if the list is long\n`/admin paycheck-check user:@member` — single-member eligibility check\n`/admin daily-report period:` — daily/weekly staff activity report', inline: false },
+        { name: '⚠️ Late & Missed', value: '`/admin late-payouts` — overdue payouts\n`/admin missed-schedules` — staff who missed scheduled sessions\n`/admin stop-reminder id:` — stop a specific payout reminder', inline: false },
+        { name: '⚙️ Configure Requirements', value: '`/admin set-requirements min_games: min_auto_games: min_raffles: min_giveaways: max_late_payouts: bonus_per_game:`\n`/admin set-daily-goals role: games: autogames: payouts:`\n`/admin set-roles mod_role: admin_role: game_ping_role:`\n`/admin set-channels schedule_channel: winner_channel: ticket_channel: staff_notif_channel: transcript_channel:`\n`/admin set-timezone timezone:`', inline: false },
+        { name: '💎 Boosters', value: '`/booster add user:@member amount:10 currency:MEE6 tier:...` \n`/booster remove user:@member`\n`/booster paid user:@member`\n`/booster list` / `/booster overdue`', inline: false },
+        { name: '💸 My Unpaid Games', value: '`/payout [staff]`\nStaff can check their own unpaid games; admins can check anyone\'s.', inline: false },
+      )
+      .setFooter({ text: 'See /admin settings-summary for a full config snapshot' }),
 
     playregret: new EmbedBuilder().setColor('#d6c2ee')
       .setTitle('<a:SINS:1522338148380704910> Play & Regret Integration')
