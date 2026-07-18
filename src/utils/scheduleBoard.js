@@ -113,9 +113,17 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
 
 async function removeFromBoard(client, guildId, boardMessageId) {
   try {
+    if (!boardMessageId) return;
+    let channelId;
     const configRes = await query(`SELECT schedule_channel_id FROM guild_config WHERE guild_id=$1`, [guildId]);
-    const channelId = configRes.rows[0]?.schedule_channel_id;
-    if (!channelId || !boardMessageId) return;
+    if (configRes.rows.length && configRes.rows[0].schedule_channel_id) {
+      channelId = configRes.rows[0].schedule_channel_id;
+    } else {
+      const boardRes = await query(`SELECT channel_id FROM game_schedule_board WHERE guild_id=$1`, [guildId]);
+      if (!boardRes.rows.length) return;
+      channelId = boardRes.rows[0].channel_id;
+    }
+    if (!channelId) return;
     const guild   = await client.guilds.fetch(guildId);
     const channel = await guild.channels.fetch(channelId);
     const msg = await channel.messages.fetch(boardMessageId);
