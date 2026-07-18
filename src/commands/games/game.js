@@ -394,9 +394,18 @@ async function editGame(interaction) {
     if (!isNaN(unix)) { setClauses.push(`started_at=$${idx++}`); vals.push(new Date(unix * 1000)); }
   }
   if (winner) { setClauses.push(`winner_id=$${idx++}`); vals.push(winner.id); }
+  vals.push(id, interaction.guildId);
 
-  // After updating game_logs, also update the #winners channel embed if winner changed
-  if (winner && res.rows.length) {
+  const res = await query(
+    `UPDATE game_logs SET ${setClauses.join(', ')} WHERE id=$${idx} AND guild_id=$${idx+1} RETURNING *`,
+    vals
+  );
+
+  if (!res.rows.length) return interaction.editReply({ content: `${e('wrong')} Game #${id} not found.` });
+
+  // If a winner announcement was already posted for this game, keep it in sync
+  // with whatever actually changed — winner, prize, and/or game name.
+  if (winner || prize || gameName) {
     try {
       const annRes = await query(
         `SELECT * FROM winner_announcements WHERE game_id=$1 AND guild_id=$2`,
@@ -410,28 +419,24 @@ async function editGame(interaction) {
           const { EmbedBuilder } = require('discord.js');
           const oldEmbed = msg.embeds[0];
           const fields = oldEmbed.fields.map(f => {
-            if (f.name.includes('Winner') || f.name.includes('winner')) {
+            if (winner && (f.name.includes('Winner') || f.name.includes('winner'))) {
               return { name: f.name, value: `<@${winner.id}>`, inline: f.inline };
+            }
+            if (prize && (f.name.includes('Prize') || f.name.includes('prize'))) {
+              return { name: f.name, value: prize, inline: f.inline };
             }
             return { name: f.name, value: f.value, inline: f.inline };
           });
           const updatedEmbed = EmbedBuilder.from(oldEmbed).setFields(fields);
+          if (gameName) updatedEmbed.setTitle(oldEmbed.title?.replace(/—.*$/, `— ${gameName}`) || oldEmbed.title);
           await msg.edit({ embeds: [updatedEmbed] });
-          await query(`UPDATE winner_announcements SET winner_id=$1 WHERE game_id=$2 AND guild_id=$3`, [winner.id, id, interaction.guildId]);
+          if (winner) await query(`UPDATE winner_announcements SET winner_id=$1 WHERE game_id=$2 AND guild_id=$3`, [winner.id, id, interaction.guildId]);
         }
       }
     } catch (err) {
       console.error('[EditGame] Could not update winner embed:', err.message);
     }
   }
-  vals.push(id, interaction.guildId);
-
-  const res = await query(
-    `UPDATE game_logs SET ${setClauses.join(', ')} WHERE id=$${idx} AND guild_id=$${idx+1} RETURNING *`,
-    vals
-  );
-
-  if (!res.rows.length) return interaction.editReply({ content: `${e('wrong')} Game #${id} not found.` });
 
   const lines = [`${e('checkmark')} Game #${id} updated:`];
   if (gameName) lines.push(`${e('controller')} Name → **${gameName}**`);
