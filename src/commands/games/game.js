@@ -280,7 +280,7 @@ async function endGame(interaction) {
                     { name: `${e('members')} Host`,        value: `<@${game.host_id}>`, inline: true },
                     { name: `${e('payout')} Status`,       value: `${e('wrong')} Not Claimed — winner did not open a ticket within ${claimHours}hrs`, inline: false },
                   );
-                await msg.edit({ embeds: [notClaimedEmbed] });
+                await msg.edit({ embeds: [notClaimedEmbed], components: [] });
               } catch {}
             }
           } catch (err) { console.error('[Winners] Not-claimed check failed:', err.message); }
