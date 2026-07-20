@@ -8,12 +8,17 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('payout')
     .setDescription('Confirm a prize was paid out')
-    .addUserOption(o => o.setName('staff').setDescription('Admin only: view another staff members unpaid games').setRequired(false)),
+    .addUserOption(o => o.setName('staff').setDescription('Admin only: view another staff members unpaid games').setRequired(false))
+    .addStringOption(o => o.setName('status').setDescription('Mark as paid, or as not claimed (default: Paid)').addChoices(
+      { name: 'Paid — winner was paid', value: 'paid' },
+      { name: 'Not Claimed — winner never claimed', value: 'not_claimed' },
+    )),
 
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: true });
     const now = new Date();
     const staffOverride = interaction.options.getUser('staff');
+    const statusChoice = interaction.options.getString('status') || 'paid';
 
     const staffRes = await query(`SELECT role FROM staff WHERE user_id=$1 AND active=true`, [interaction.user.id]);
     if (!staffRes.rows.length || !['admin','owner','staff','host','rumble_host'].includes(staffRes.rows[0].role)) {
@@ -92,13 +97,15 @@ module.exports = {
     const foundRes = await query(`SELECT * FROM ${tableMap[foundType]} WHERE id=$1 AND guild_id=$2`, [id, interaction.guildId]);
     if (!foundRes.rows.length) return interaction.editReply({ content: `${e('wrong')} Not found.`, components: [] });
     const found = foundRes.rows[0];
-    if (found.payout_status === 'paid') return interaction.editReply({ content: `${e('wrong')} Already marked as paid.`, components: [] });
+    if (['paid', 'not_claimed'].includes(found.payout_status)) {
+      return interaction.editReply({ content: `${e('wrong')} Already marked as ${found.payout_status === 'paid' ? 'paid' : 'not claimed'}.`, components: [] });
+    }
 
     const finalWinnerId = found.winner_id;
     const prize = found.prize || (found.prize_amount ? `${found.prize_amount} ${found.currency}` : 'N/A');
 
-    await query(`UPDATE ${tableMap[foundType]} SET payout_status='paid', payout_confirmed_at=$1 WHERE id=$2`, [now, id]);
-    await query(`UPDATE member_wins SET payout_status='paid', paid_at=$1 WHERE ref_id=$2 AND type=$3`, [now, id, foundType]);
+    await query(`UPDATE ${tableMap[foundType]} SET payout_status=$1, payout_confirmed_at=$2 WHERE id=$3`, [statusChoice, now, id]);
+    await query(`UPDATE member_wins SET payout_status=$1, paid_at=$2 WHERE ref_id=$3 AND type=$4`, [statusChoice, now, id, foundType]);
     await query(`UPDATE payout_reminders SET resolved=true WHERE type=$1 AND ref_id=$2`, [foundType, id]);
 
     try {
@@ -114,24 +121,27 @@ module.exports = {
         const msg = await winnerCh.messages.fetch(ann.message_id);
         if (msg.embeds[0]) {
           const oldEmbed = msg.embeds[0];
+          const statusText = statusChoice === 'paid'
+            ? `${e('checkmark')} Claimed — paid by <@${interaction.user.id}>`
+            : `${e('wrong')} Not Claimed — confirmed by <@${interaction.user.id}>`;
           // Update the specific winner's line in the Payout field
           const fields = oldEmbed.fields.map(f => {
             if (f.name.includes('Payout') || f.name.includes('payout') || f.name.includes('Status')) {
               const updatedValue = f.value.replace(
                 new RegExp(`${e('Loading')} Pending[^\\n]*`),
-                `${e('checkmark')} Claimed — paid by <@${interaction.user.id}>`
+                statusText
               );
               return { name: f.name, value: updatedValue, inline: f.inline };
             }
             return { name: f.name, value: f.value, inline: f.inline };
           });
-          // Check if all winners claimed
+          // Check if all winners have been resolved (paid or not claimed)
           const payoutField = fields.find(f => f.name.includes('Payout') || f.name.includes('payout') || f.name.includes('Status'));
-          const allClaimed = payoutField && !payoutField.value.includes('Pending');
-          const newColor = allClaimed ? 0x7F36F5 : 0xFF00C1;
-          if (allClaimed) await query(`UPDATE winner_announcements SET status='claimed' WHERE id=$1`, [ann.id]);
+          const allResolved = payoutField && !payoutField.value.includes('Pending');
+          const newColor = statusChoice === 'paid' ? 0x7F36F5 : 0x00FFF9;
+          if (allResolved) await query(`UPDATE winner_announcements SET status=$1 WHERE id=$2`, [statusChoice === 'paid' ? 'claimed' : 'not_claimed', ann.id]);
           const updatedEmbed = EmbedBuilder.from(oldEmbed).setColor(newColor).setFields(fields);
-          await msg.edit({ embeds: [updatedEmbed] });
+          await msg.edit({ embeds: [updatedEmbed], components: [] });
         }
       }
     } catch (err) { console.error('[Payout] Winner message update failed:', err.message); }
@@ -154,7 +164,7 @@ module.exports = {
             { name: `${e('RojasClock')} Started`,      value: tsF(found.started_at), inline: true },
             { name: `${e('confetti')} Ended`,          value: tsF(found.ended_at), inline: true },
             { name: `${e('RojasClock')} Duration`,     value: durationStr, inline: true },
-            { name: `${e('payout')} Payout`,           value: `${e('checkmark')} Confirmed by <@${interaction.user.id}>`, inline: true },
+            { name: `${e('payout')} Payout`,           value: statusChoice === 'paid' ? `${e('checkmark')} Confirmed by <@${interaction.user.id}>` : `${e('wrong')} Not claimed — confirmed by <@${interaction.user.id}>`, inline: true },
             { name: `${e('purplesparkle')} Jump Link`, value: found.message_link ? `[View Game](${found.message_link})` : 'N/A', inline: true },
           );
         await transcriptCh.send({ embeds: [transcriptEmbed] });
@@ -162,7 +172,11 @@ module.exports = {
     } catch (err) { console.error('[Payout] Transcript post failed:', err.message); }
 
     const typeLabel = foundType.charAt(0).toUpperCase() + foundType.slice(1);
-    const embed = baseEmbed(`${e('payout')} Payout Confirmed`, COLORS.softgreen, interaction.guild?.name)
+    const embed = baseEmbed(
+      statusChoice === 'paid' ? `${e('payout')} Payout Confirmed` : `${e('wrong')} Marked Not Claimed`,
+      statusChoice === 'paid' ? COLORS.softgreen : COLORS.grey,
+      interaction.guild?.name
+    )
       .addFields(
         { name: `${e('controller')} Type`,     value: typeLabel, inline: true },
         { name: `${e('trophies')} Winner`,     value: finalWinnerId ? `<@${finalWinnerId}>` : 'N/A', inline: true },
