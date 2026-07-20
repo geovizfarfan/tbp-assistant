@@ -14,12 +14,28 @@ module.exports = {
       .addStringOption(o => o.setName('image').setDescription('Image URL (large, shown at the bottom)'))
       .addStringOption(o => o.setName('thumbnail').setDescription('Thumbnail URL (small, shown top-right)'))
       .addStringOption(o => o.setName('footer').setDescription('Footer text'))
-      .addStringOption(o => o.setName('author').setDescription('Author name shown above the title'))),
+      .addStringOption(o => o.setName('author').setDescription('Author name shown above the title')))
+
+    .addSubcommand(sub => sub
+      .setName('edit')
+      .setDescription('Edit an embed Veloura already posted — only fills in fields you provide')
+      .addStringOption(o => o.setName('message_id').setDescription('ID of the message to edit').setRequired(true))
+      .addChannelOption(o => o.setName('channel').setDescription('Channel the message is in (default: current channel)'))
+      .addStringOption(o => o.setName('title').setDescription('New title'))
+      .addStringOption(o => o.setName('description').setDescription('New body text (use \\n for new lines)'))
+      .addStringOption(o => o.setName('color').setDescription('New hex color, e.g. #d6c2ee'))
+      .addStringOption(o => o.setName('image').setDescription('New image URL'))
+      .addStringOption(o => o.setName('thumbnail').setDescription('New thumbnail URL'))
+      .addStringOption(o => o.setName('footer').setDescription('New footer text'))
+      .addStringOption(o => o.setName('author').setDescription('New author name'))),
 
   async execute(interaction) {
     const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
       interaction.member.permissions.has(PermissionFlagsBits.ManageMessages);
     if (!isAdmin) return interaction.reply({ content: '❌ You need Manage Messages permission to use this.', ephemeral: true });
+
+    const sub = interaction.options.getSubcommand();
+    if (sub === 'edit') return editEmbed(interaction);
 
     const channel     = interaction.options.getChannel('channel') || interaction.channel;
     const title       = interaction.options.getString('title');
@@ -49,3 +65,46 @@ module.exports = {
     return interaction.editReply(`✅ Embed posted in <#${channel.id}>.`);
   },
 };
+
+async function editEmbed(interaction) {
+  const channel   = interaction.options.getChannel('channel') || interaction.channel;
+  const messageId = interaction.options.getString('message_id').trim();
+  const title       = interaction.options.getString('title');
+  const description = interaction.options.getString('description')?.replace(/\\n/g, '\n');
+  const color       = interaction.options.getString('color');
+  const image       = interaction.options.getString('image');
+  const thumbnail   = interaction.options.getString('thumbnail');
+  const footer      = interaction.options.getString('footer');
+  const author      = interaction.options.getString('author');
+
+  await interaction.deferReply({ ephemeral: true });
+
+  const msg = await channel.messages.fetch(messageId).catch(() => null);
+  if (!msg) return interaction.editReply(`❌ Couldn't find a message with that ID in <#${channel.id}>.`);
+  if (msg.author.id !== interaction.client.user.id) {
+    return interaction.editReply(`❌ That message wasn't posted by Veloura — can't edit it.`);
+  }
+  if (!msg.embeds.length) return interaction.editReply(`❌ That message doesn't have an embed to edit.`);
+
+  const oldEmbed = msg.embeds[0];
+  const embed = EmbedBuilder.from(oldEmbed);
+
+  if (title !== null) embed.setTitle(title || null);
+  if (description) embed.setDescription(description);
+  if (color) {
+    const hexColor = /^#[0-9A-Fa-f]{6}$/.test(color) ? color : null;
+    if (!hexColor) return interaction.editReply(`❌ Invalid color — use a hex code like #d6c2ee.`);
+    embed.setColor(hexColor);
+  }
+  if (image) embed.setImage(image);
+  if (thumbnail) embed.setThumbnail(thumbnail);
+  if (footer) embed.setFooter({ text: footer });
+  if (author) embed.setAuthor({ name: author });
+
+  await msg.edit({ embeds: [embed] }).catch((err) => {
+    console.error('[Embed] Failed to edit:', err.message);
+    return null;
+  });
+
+  return interaction.editReply(`✅ Embed updated in <#${channel.id}>.`);
+}
