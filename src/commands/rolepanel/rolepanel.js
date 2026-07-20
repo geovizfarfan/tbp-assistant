@@ -27,7 +27,7 @@ function buildEmbed(panel, options) {
   return embed;
 }
 
-function buildSelectRow(panel, options) {
+function buildSelectRow(panel, options, guild) {
   if (!options.length) return null;
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`rolepanel_select:${panel.id}`)
@@ -35,7 +35,7 @@ function buildSelectRow(panel, options) {
     .setMinValues(0)
     .setMaxValues(options.length)
     .addOptions(options.slice(0, 25).map(o => ({
-      label: o.label.slice(0, 100),
+      label: (guild?.roles.cache.get(o.role_id)?.name || o.label).slice(0, 100),
       value: o.role_id,
       emoji: /^\d+$/.test(o.emoji) ? undefined : o.emoji,
     })));
@@ -52,7 +52,7 @@ async function renderAndPost(client, panel) {
   const embed = buildEmbed(panel, options);
 
   const components = panel.style === 'dropdown'
-    ? [buildSelectRow(panel, options)].filter(Boolean)
+    ? [buildSelectRow(panel, options, channel.guild)].filter(Boolean)
     : [];
 
   // Delete old message
