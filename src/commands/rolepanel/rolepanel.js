@@ -16,7 +16,7 @@ async function getOptions(panelId) {
 
 function buildEmbed(panel, options) {
   const lines = options.length
-    ? options.map(o => `${o.emoji} - **${o.label}**`).join('\n')
+    ? options.map(o => `${o.emoji} - <@&${o.role_id}>`).join('\n')
     : '*No roles added yet — use `/rolepanel addrole`.*';
 
   const embed = new EmbedBuilder()
@@ -108,6 +108,11 @@ module.exports = {
     .addSubcommand(sub => sub
       .setName('delete')
       .setDescription('Delete a panel entirely')
+      .addStringOption(o => o.setName('name').setDescription('Panel ID').setRequired(true)))
+
+    .addSubcommand(sub => sub
+      .setName('repost')
+      .setDescription('Repost a panel — rebuilds it fresh if the message was deleted or looks stale')
       .addStringOption(o => o.setName('name').setDescription('Panel ID').setRequired(true)))
 
     .addSubcommand(sub => sub
@@ -205,6 +210,18 @@ module.exports = {
 
       await query('DELETE FROM role_panels WHERE id = $1', [panel.id]);
       return interaction.editReply(`✅ Panel \`${name}\` deleted.`);
+    }
+
+    // ── repost ────────────────────────────────────────────────────────────
+    if (sub === 'repost') {
+      const name = interaction.options.getString('name').toLowerCase().trim();
+      const panel = await getPanel(interaction.guild.id, name);
+      if (!panel) return interaction.editReply(`❌ No panel named \`${name}\`.`);
+
+      const newMsg = await renderAndPost(interaction.client, panel);
+      if (!newMsg) return interaction.editReply(`❌ Couldn't repost — the panel's channel may no longer exist or Veloura lacks access.`);
+
+      return interaction.editReply(`✅ Panel \`${name}\` reposted in <#${panel.channel_id}>.`);
     }
 
     // ── list ───────────────────────────────────────────────────────────────
