@@ -235,12 +235,12 @@ async function endGame(interaction) {
           const claimedButton = new ButtonBuilder()
             .setCustomId(`gamewin_claimed_${game.id}`)
             .setLabel('Claimed')
-            .setEmoji('✅')
+            .setEmoji('<a:claimed:1528607276368269424>')
             .setStyle(ButtonStyle.Success);
           const notClaimedButton = new ButtonBuilder()
             .setCustomId(`gamewin_notclaimed_${game.id}`)
             .setLabel('Not Claimed')
-            .setEmoji('❌')
+            .setEmoji('<a:x_:1523809293756010517>')
             .setStyle(ButtonStyle.Danger);
           winnerComponents = [new ActionRowBuilder().addComponents(claimedButton, notClaimedButton)];
         }
