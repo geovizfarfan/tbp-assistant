@@ -242,6 +242,10 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isModalSubmit() && interaction.customId.startsWith('shop_nickname_modal:')) {
     return shopModule.handleNicknameModal(interaction);
   }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('embededit_modal:')) {
+    const { handleEditModal } = require('./commands/embed/embed');
+    return handleEditModal(interaction);
+  }
   if (interaction.isAutocomplete()) {
     const command = client.commands.get(interaction.commandName);
     if (command?.autocomplete) {
