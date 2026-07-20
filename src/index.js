@@ -28,6 +28,11 @@ const client = new Client({
   partials: [Partials.Message, Partials.Reaction, Partials.Channel],
 });
 
+// We deliberately register many independent messageCreate/messageUpdate listeners
+// (RR, Rumble Slaughter, tickets, level XP, sticky, shop, etc.) — this is expected
+// by design, not a runaway leak, so raise Node's default warning threshold.
+client.setMaxListeners(25);
+
 client.commands = new Collection();
 
 // Load all commands recursively
