@@ -74,7 +74,7 @@ module.exports = {
 
       const verifyEmbed = new EmbedBuilder()
         .setColor('#d6c2ee')
-        .setTitle('🔓 Start Verification')
+        .setTitle('<a:lock:1520456965245898903> Start Verification')
         .setDescription(`Once you've reacted to the rules in <#${channel.id}>, react with ${verifyEmoji} below to start your captcha.`);
 
       const verifyMsg = await captchaChannel.send({ embeds: [verifyEmbed] }).catch(() => null);
@@ -214,7 +214,7 @@ module.exports = {
 
       const embed = new EmbedBuilder()
         .setColor('#d6c2ee')
-        .setTitle('🔓 Start Verification')
+        .setTitle('<a:lock:1520456965245898903> Start Verification')
         .setDescription(`Once you've reacted to the rules, react with ${cfg.verify_emoji} below to start your captcha.`);
 
       const msg = await channel.send({ embeds: [embed] }).catch(() => null);

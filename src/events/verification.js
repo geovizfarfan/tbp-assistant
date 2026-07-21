@@ -26,13 +26,13 @@ async function buildCaptchaChallenge(cfg, userId, code) {
   const solveButton = new ButtonBuilder()
     .setCustomId(`verify_start:${userId}`)
     .setLabel('Solve Captcha')
-    .setEmoji('🔐')
+    .setEmoji('<a:unlock:1520461704259960842>')
     .setStyle(ButtonStyle.Primary);
 
   const newCodeButton = new ButtonBuilder()
     .setCustomId(`verify_newcode:${userId}`)
     .setLabel('New Code')
-    .setEmoji('🔄')
+    .setEmoji('<a:reroll:1523809294867234886>')
     .setStyle(ButtonStyle.Secondary);
 
   return { embed, row: new ActionRowBuilder().addComponents(solveButton, newCodeButton) };
@@ -236,4 +236,31 @@ async function handleCaptchaModal(interaction) {
   return interaction.editReply('✅ Verified! Welcome to the server.');
 }
 
-module.exports = { handleReactionAdd, handleCaptchaButton, handleNewCodeButton, handleCaptchaModal };
+// Keeps the verify-trigger message glued to the bottom of the captcha channel —
+// every new message posted there (including each member's own captcha challenge)
+// pushes it back down by deleting and reposting it, keeping the tracked ID in sync.
+async function handleCaptchaChannelMessage(message, client) {
+  if (message.author.id === client.user.id && message.embeds[0]?.title === '<a:lock:1520456965245898903> Start Verification') return; // don't react to its own repost
+
+  const cfgRes = await query('SELECT * FROM verify_config WHERE captcha_channel_id = $1', [message.channel.id]);
+  if (!cfgRes.rows.length) return;
+  const cfg = cfgRes.rows[0];
+  if (!cfg.verify_message_id) return;
+  if (message.id === cfg.verify_message_id) return; // this IS the trigger message itself
+
+  const oldMsg = await message.channel.messages.fetch(cfg.verify_message_id).catch(() => null);
+  if (oldMsg) await oldMsg.delete().catch(() => {});
+
+  const embed = new EmbedBuilder()
+    .setColor('#d6c2ee')
+    .setTitle('<a:lock:1520456965245898903> Start Verification')
+    .setDescription(`Once you've reacted to the rules, react with ${cfg.verify_emoji} below to start your captcha.`);
+
+  const newMsg = await message.channel.send({ embeds: [embed] }).catch(() => null);
+  if (!newMsg) return;
+  await newMsg.react(cfg.verify_emoji).catch(() => {});
+
+  await query('UPDATE verify_config SET verify_message_id = $1 WHERE guild_id = $2', [newMsg.id, cfg.guild_id]);
+}
+
+module.exports = { handleReactionAdd, handleCaptchaButton, handleNewCodeButton, handleCaptchaModal, handleCaptchaChannelMessage };
