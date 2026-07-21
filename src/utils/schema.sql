@@ -293,6 +293,24 @@ CREATE TABLE IF NOT EXISTS guild_config (
 );
 
 -- Wheel role-based bonus entries
+-- Custom embeds posted via /embed create — stored so they can be reposted
+-- if the message is accidentally deleted.
+CREATE TABLE IF NOT EXISTS custom_embeds (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  message_id TEXT,
+  title TEXT,
+  description TEXT,
+  color TEXT,
+  image TEXT,
+  thumbnail TEXT,
+  footer TEXT,
+  author TEXT,
+  created_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS wheel_role_bonuses (
   id SERIAL PRIMARY KEY,
   guild_id TEXT NOT NULL,
