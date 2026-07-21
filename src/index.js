@@ -221,6 +221,10 @@ client.on('interactionCreate', async (interaction) => {
     const { handleCheckEntriesButton } = require('./commands/giveaway/giveaway');
     return handleCheckEntriesButton(interaction);
   }
+  if (interaction.isButton() && interaction.customId.startsWith('verify_start:')) {
+    const { handleCaptchaButton } = require('./events/verification');
+    return handleCaptchaButton(interaction);
+  }
   if (interaction.isStringSelectMenu() && interaction.customId === 'help_category') {
     return helpModule.handleSelect(interaction, client);
   }
@@ -245,6 +249,10 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isModalSubmit() && interaction.customId.startsWith('embededit_modal:')) {
     const { handleEditModal } = require('./commands/embed/embed');
     return handleEditModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('verify_modal:')) {
+    const { handleCaptchaModal } = require('./events/verification');
+    return handleCaptchaModal(interaction);
   }
   if (interaction.isAutocomplete()) {
     const command = client.commands.get(interaction.commandName);
@@ -344,6 +352,14 @@ client.on('messageReactionAdd', async (reaction, user) => {
 client.on('messageReactionRemove', async (reaction, user) => {
   try { await rolePanelModule.handleReactionRemove(reaction, user); }
   catch (e) { console.error('[RolePanel] remove:', e.message); }
+});
+
+// Member verification
+client.on('messageReactionAdd', async (reaction, user) => {
+  try {
+    const { handleReactionAdd } = require('./events/verification');
+    await handleReactionAdd(reaction, user, client);
+  } catch (e) { console.error('[Verify] reaction:', e.message); }
 });
 
 // Ban log

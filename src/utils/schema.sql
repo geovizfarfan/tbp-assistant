@@ -311,6 +311,33 @@ CREATE TABLE IF NOT EXISTS custom_embeds (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Member verification: react to rules -> DM with a captcha button -> solve
+-- captcha in a modal -> auto-assign the verified role.
+CREATE TABLE IF NOT EXISTS verify_config (
+  guild_id TEXT PRIMARY KEY,
+  rules_channel_id TEXT,
+  rules_message_id TEXT,
+  rules_text TEXT,
+  rules_emoji TEXT DEFAULT '✅',
+  captcha_channel_id TEXT,
+  verified_role_id TEXT,
+  welcome_channel_id TEXT,
+  welcome_title TEXT,
+  welcome_text TEXT,
+  welcome_image TEXT
+);
+
+CREATE TABLE IF NOT EXISTS verify_pending (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  code TEXT NOT NULL,
+  message_id TEXT,
+  attempts INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (guild_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS wheel_role_bonuses (
   id SERIAL PRIMARY KEY,
   guild_id TEXT NOT NULL,
