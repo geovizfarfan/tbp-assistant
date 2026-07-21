@@ -43,28 +43,52 @@ async function handleReactionAdd(reaction, user, client) {
   if (reaction.partial) await reaction.fetch().catch(() => null);
   if (reaction.message.partial) await reaction.message.fetch().catch(() => null);
 
+  console.log(`[Verify] Reaction from ${user.username} on message ${reaction.message.id} with ${reaction.emoji.id || reaction.emoji.name}`);
+
   const cfgRes = await query(
     'SELECT * FROM verify_config WHERE rules_message_id = $1 OR verify_message_id = $1',
     [reaction.message.id]
   );
-  if (!cfgRes.rows.length) return;
+  if (!cfgRes.rows.length) {
+    console.log(`[Verify] Message ${reaction.message.id} doesn't match any tracked rules/verify message — ignoring.`);
+    return;
+  }
   const cfg = cfgRes.rows[0];
+  console.log(`[Verify] Matched config — rules_message_id=${cfg.rules_message_id}, verify_message_id=${cfg.verify_message_id}`);
 
   const guild = reaction.message.guild;
   const member = await guild.members.fetch(user.id).catch(() => null);
-  if (!member) return;
-  if (member.roles.cache.has(cfg.verified_role_id)) return; // already verified
+  if (!member) {
+    console.log(`[Verify] Could not fetch member ${user.id} — ignoring.`);
+    return;
+  }
+  if (member.roles.cache.has(cfg.verified_role_id)) {
+    console.log(`[Verify] ${user.username} already has the verified role — ignoring.`);
+    return;
+  }
 
-  // Reaction on the RULES message — just acknowledge, no action needed yet.
-  // The check for "have they read the rules" happens when they react to start verification.
+  // Reaction on the RULES message — acknowledge with a nudge toward the next step.
+  // The reaction itself is never removed — it's their permanent proof of step 1.
   if (reaction.message.id === cfg.rules_message_id) {
     if (!matchesEmoji(reaction, cfg.rules_emoji)) return;
-    return; // reaction persists — that's the whole point, nothing else to do here
+
+    const captchaChannel = await client.channels.fetch(cfg.captcha_channel_id).catch(() => null);
+    if (captchaChannel) {
+      const notice = await reaction.message.channel.send({
+        content: `<@${user.id}> ✅ Got it! Now head to <#${cfg.captcha_channel_id}> and react with ${cfg.verify_emoji} to start your captcha.`,
+      }).catch(() => null);
+      if (notice) setTimeout(() => notice.delete().catch(() => {}), 20_000);
+    }
+    return;
   }
 
   // Reaction on the VERIFICATION-TRIGGER message — this is what actually starts the captcha
   if (reaction.message.id === cfg.verify_message_id) {
-    if (!matchesEmoji(reaction, cfg.verify_emoji)) return;
+    console.log(`[Verify] This is the verify-trigger message. Checking emoji match: reacted=${reaction.emoji.id || reaction.emoji.name}, configured=${cfg.verify_emoji}`);
+    if (!matchesEmoji(reaction, cfg.verify_emoji)) {
+      console.log(`[Verify] Emoji didn't match — ignoring.`);
+      return;
+    }
 
     // Require them to have reacted to rules first
     const rulesChannel = await client.channels.fetch(cfg.rules_channel_id).catch(() => null);
@@ -74,9 +98,13 @@ async function handleReactionAdd(reaction, user, client) {
     );
     const rulesUsers = rulesReaction ? await rulesReaction.users.fetch().catch(() => null) : null;
     const hasReadRules = rulesUsers?.has(user.id) || false;
+    console.log(`[Verify] hasReadRules=${hasReadRules} (rulesMsg found=${!!rulesMsg}, rulesReaction found=${!!rulesReaction}, rulesUsers count=${rulesUsers?.size})`);
 
     const captchaChannel = await client.channels.fetch(cfg.captcha_channel_id).catch(() => null);
-    if (!captchaChannel) return;
+    if (!captchaChannel) {
+      console.log(`[Verify] Could not fetch captcha channel ${cfg.captcha_channel_id} — ignoring.`);
+      return;
+    }
 
     if (!hasReadRules) {
       const notice = await captchaChannel.send({
@@ -87,6 +115,7 @@ async function handleReactionAdd(reaction, user, client) {
       return;
     }
 
+    console.log(`[Verify] Generating captcha for ${user.username}...`);
     const code = generateCode();
     await query(`
       INSERT INTO verify_pending (guild_id, user_id, code, attempts)
@@ -95,8 +124,14 @@ async function handleReactionAdd(reaction, user, client) {
     `, [guild.id, user.id, code]);
 
     const { embed, row } = await buildCaptchaChallenge(cfg, user.id, code);
-    const msg = await captchaChannel.send({ embeds: [embed], components: [row] }).catch(() => null);
-    if (msg) await query('UPDATE verify_pending SET message_id = $1 WHERE guild_id = $2 AND user_id = $3', [msg.id, guild.id, user.id]);
+    const msg = await captchaChannel.send({ embeds: [embed], components: [row] }).catch((err) => {
+      console.error(`[Verify] Failed to send captcha challenge:`, err.message);
+      return null;
+    });
+    if (msg) {
+      console.log(`[Verify] Captcha challenge posted successfully: ${msg.id}`);
+      await query('UPDATE verify_pending SET message_id = $1 WHERE guild_id = $2 AND user_id = $3', [msg.id, guild.id, user.id]);
+    }
   }
 }
 

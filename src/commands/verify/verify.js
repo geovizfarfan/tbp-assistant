@@ -145,13 +145,16 @@ module.exports = {
       if (!cfgRes.rows.length) return interaction.editReply('❌ Verification isn\'t set up yet — run `/verify setup` first.');
       const cfg = cfgRes.rows[0];
 
-      await query(`
+      const updateRes = await query(`
         UPDATE verify_config SET
           captcha_title = COALESCE($1, captcha_title),
           captcha_instructions = COALESCE($2, captcha_instructions),
           verify_emoji = COALESCE($3, verify_emoji)
         WHERE guild_id = $4
+        RETURNING captcha_title, captcha_instructions, verify_emoji
       `, [title, instructions, newEmoji, interaction.guildId]);
+
+      console.log('[Verify] customize-captcha update result:', updateRes.rows[0]);
 
       if (newEmoji && newEmoji !== cfg.verify_emoji && cfg.captcha_channel_id && cfg.verify_message_id) {
         const captchaChannel = await interaction.client.channels.fetch(cfg.captcha_channel_id).catch(() => null);
@@ -166,7 +169,8 @@ module.exports = {
         }
       }
 
-      return interaction.editReply('✅ Captcha settings updated.');
+      const saved = updateRes.rows[0];
+      return interaction.editReply(`✅ Captcha settings updated:\nTitle: ${saved.captcha_title}\nInstructions: ${saved.captcha_instructions || '*(none)*'}\nVerify Emoji: ${saved.verify_emoji}\n\nNote: these only appear on a *new* captcha challenge — they won't change the "Start Verification" trigger message text itself. React again (as a test account) to see them applied.`);
     }
 
     if (sub === 'repost-rules') {
