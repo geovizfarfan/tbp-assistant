@@ -371,6 +371,12 @@ client.on('messageCreate', async (message) => {
     await handleCaptchaChannelMessage(message, client);
   } catch (e) { console.error('[Verify] sticky repost:', e.message); }
 });
+client.on('guildMemberAdd', async (member) => {
+  try {
+    const { handleMemberJoin } = require('./events/verification');
+    await handleMemberJoin(member, client);
+  } catch (e) { console.error('[Verify] welcome on join:', e.message); }
+});
 
 // Ban log
 client.on('guildBanAdd', async (ban) => {

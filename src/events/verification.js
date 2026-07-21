@@ -217,22 +217,6 @@ async function handleCaptchaModal(interaction) {
     if (msg) await msg.edit({ embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ <@${ownerId}> verified successfully!`)], components: [] }).catch(() => {});
   }
 
-  // Post the welcome message, if configured
-  if (cfg.welcome_channel_id) {
-    const welcomeChannel = await interaction.client.channels.fetch(cfg.welcome_channel_id).catch(() => null);
-    if (welcomeChannel) {
-      const welcomeText = (cfg.welcome_text || 'Hey {user}, welcome to the server!').replace(/\{user\}/g, `<@${ownerId}>`);
-      const welcomeEmbed = new EmbedBuilder()
-        .setColor('#d6c2ee')
-        .setTitle(cfg.welcome_title || '🎉 Welcome!')
-        .setDescription(welcomeText);
-      if (cfg.welcome_image) welcomeEmbed.setThumbnail(cfg.welcome_image);
-      await welcomeChannel.send({ content: `<@${ownerId}>`, embeds: [welcomeEmbed] }).catch((err) => {
-        console.error('[Verify] Failed to post welcome message:', err.message);
-      });
-    }
-  }
-
   return interaction.editReply('✅ Verified! Welcome to the server.');
 }
 
@@ -285,4 +269,27 @@ async function handleCaptchaChannelMessage(message, client) {
   console.log(`[Verify] sticky: trigger message reposted successfully as ${newMsg.id}.`);
 }
 
-module.exports = { handleReactionAdd, handleCaptchaButton, handleNewCodeButton, handleCaptchaModal, handleCaptchaChannelMessage };
+// Posts the welcome message the moment someone joins, before they've done
+// anything else — first thing they see, not a reward for finishing verification.
+async function handleMemberJoin(member, client) {
+  const cfgRes = await query('SELECT * FROM verify_config WHERE guild_id = $1', [member.guild.id]);
+  if (!cfgRes.rows.length) return;
+  const cfg = cfgRes.rows[0];
+  if (!cfg.welcome_channel_id) return;
+
+  const welcomeChannel = await client.channels.fetch(cfg.welcome_channel_id).catch(() => null);
+  if (!welcomeChannel) return;
+
+  const welcomeText = (cfg.welcome_text || 'Hey {user}, welcome to the server!').replace(/\{user\}/g, `<@${member.id}>`);
+  const welcomeEmbed = new EmbedBuilder()
+    .setColor('#d6c2ee')
+    .setTitle(cfg.welcome_title || '🎉 Welcome!')
+    .setDescription(welcomeText);
+  if (cfg.welcome_image) welcomeEmbed.setThumbnail(cfg.welcome_image);
+
+  await welcomeChannel.send({ content: `<@${member.id}>`, embeds: [welcomeEmbed] }).catch((err) => {
+    console.error('[Verify] Failed to post welcome message on join:', err.message);
+  });
+}
+
+module.exports = { handleReactionAdd, handleCaptchaButton, handleNewCodeButton, handleCaptchaModal, handleCaptchaChannelMessage, handleMemberJoin };
