@@ -321,6 +321,10 @@ CREATE TABLE IF NOT EXISTS verify_config (
   rules_text TEXT,
   rules_emoji TEXT DEFAULT '✅',
   captcha_channel_id TEXT,
+  verify_message_id TEXT,
+  verify_emoji TEXT DEFAULT '🔓',
+  captcha_title TEXT DEFAULT '🔐 Verification',
+  captcha_instructions TEXT,
   verified_role_id TEXT,
   welcome_channel_id TEXT,
   welcome_title TEXT,
@@ -328,6 +332,10 @@ CREATE TABLE IF NOT EXISTS verify_config (
   welcome_image TEXT
 );
 ALTER TABLE verify_config ADD COLUMN IF NOT EXISTS rules_title TEXT DEFAULT '📜 Server Rules';
+ALTER TABLE verify_config ADD COLUMN IF NOT EXISTS verify_message_id TEXT;
+ALTER TABLE verify_config ADD COLUMN IF NOT EXISTS verify_emoji TEXT DEFAULT '🔓';
+ALTER TABLE verify_config ADD COLUMN IF NOT EXISTS captcha_title TEXT DEFAULT '🔐 Verification';
+ALTER TABLE verify_config ADD COLUMN IF NOT EXISTS captcha_instructions TEXT;
 
 CREATE TABLE IF NOT EXISTS verify_pending (
   id SERIAL PRIMARY KEY,

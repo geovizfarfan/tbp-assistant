@@ -4,16 +4,17 @@ const { query } = require('../../utils/database');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('verify')
-    .setDescription('Member verification — react to rules, solve a captcha, get verified')
+    .setDescription('Member verification — react to rules, react to verify, solve a captcha, get verified')
     .addSubcommand(sub => sub
       .setName('setup')
       .setDescription('Configure verification')
       .addRoleOption(o => o.setName('verified_role').setDescription('Role to assign once verified').setRequired(true))
       .addChannelOption(o => o.setName('rules_channel').setDescription('Channel to post the rules message in').setRequired(true))
-      .addChannelOption(o => o.setName('captcha_channel').setDescription('Channel where members solve their captcha').setRequired(true))
+      .addChannelOption(o => o.setName('captcha_channel').setDescription('Channel where members react to start their captcha').setRequired(true))
       .addStringOption(o => o.setName('rules_text').setDescription('Rules text (use \\n for new lines)').setRequired(true))
       .addStringOption(o => o.setName('rules_title').setDescription('Title shown above the rules (default: "📜 Server Rules")'))
-      .addStringOption(o => o.setName('emoji').setDescription('Emoji members react with to start verification (default: ✅)')))
+      .addStringOption(o => o.setName('rules_emoji').setDescription('Emoji members react with on the rules message (default: ✅)'))
+      .addStringOption(o => o.setName('verify_emoji').setDescription('Emoji members react with in the captcha channel to start their captcha (default: 🔓)')))
     .addSubcommand(sub => sub
       .setName('edit-rules')
       .setDescription('Edit the rules message in place — only fills in fields you provide')
@@ -21,8 +22,17 @@ module.exports = {
       .addStringOption(o => o.setName('text').setDescription('New rules text (use \\n for new lines)'))
       .addStringOption(o => o.setName('reaction_emoji').setDescription('New reaction emoji (changes what members react with)')))
     .addSubcommand(sub => sub
+      .setName('customize-captcha')
+      .setDescription('Customize the captcha step — only fills in fields you provide')
+      .addStringOption(o => o.setName('title').setDescription('Title shown on the personal captcha challenge (default: "🔐 Verification")'))
+      .addStringOption(o => o.setName('instructions').setDescription('Extra instructions shown above the code (use \\n for new lines)'))
+      .addStringOption(o => o.setName('verify_emoji').setDescription('New reaction emoji for the verification-trigger message')))
+    .addSubcommand(sub => sub
       .setName('repost-rules')
       .setDescription('Repost the rules message if it was deleted'))
+    .addSubcommand(sub => sub
+      .setName('repost-verify')
+      .setDescription('Repost the verification-trigger message if it was deleted'))
     .addSubcommand(sub => sub
       .setName('welcome')
       .setDescription('Configure a welcome message posted after a member successfully verifies')
@@ -50,25 +60,36 @@ module.exports = {
       const captchaChannel = interaction.options.getChannel('captcha_channel');
       const text    = interaction.options.getString('rules_text').replace(/\\n/g, '\n');
       const title   = interaction.options.getString('rules_title') || '📜 Server Rules';
-      const emoji   = interaction.options.getString('emoji') || '✅';
+      const rulesEmoji  = interaction.options.getString('rules_emoji') || '✅';
+      const verifyEmoji = interaction.options.getString('verify_emoji') || '<a:unlock:1520461704259960842>';
 
-      const embed = new EmbedBuilder()
+      const rulesEmbed = new EmbedBuilder()
         .setColor('#d6c2ee')
         .setTitle(title)
-        .setDescription(`${text}\n\nReact with ${emoji} below to begin verification.`);
+        .setDescription(`${text}\n\nReact with ${rulesEmoji} once you've read and agree.`);
 
-      const msg = await channel.send({ embeds: [embed] }).catch(() => null);
-      if (!msg) return interaction.editReply(`❌ Couldn't post in <#${channel.id}> — check Veloura's permissions.`);
-      await msg.react(emoji).catch(() => {});
+      const rulesMsg = await channel.send({ embeds: [rulesEmbed] }).catch(() => null);
+      if (!rulesMsg) return interaction.editReply(`❌ Couldn't post in <#${channel.id}> — check Veloura's permissions.`);
+      await rulesMsg.react(rulesEmoji).catch(() => {});
+
+      const verifyEmbed = new EmbedBuilder()
+        .setColor('#d6c2ee')
+        .setTitle('🔓 Start Verification')
+        .setDescription(`Once you've reacted to the rules in <#${channel.id}>, react with ${verifyEmoji} below to start your captcha.`);
+
+      const verifyMsg = await captchaChannel.send({ embeds: [verifyEmbed] }).catch(() => null);
+      if (!verifyMsg) return interaction.editReply(`❌ Couldn't post in <#${captchaChannel.id}> — check Veloura's permissions.`);
+      await verifyMsg.react(verifyEmoji).catch(() => {});
 
       await query(`
-        INSERT INTO verify_config (guild_id, rules_channel_id, rules_message_id, rules_title, rules_text, rules_emoji, captcha_channel_id, verified_role_id)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        INSERT INTO verify_config (guild_id, rules_channel_id, rules_message_id, rules_title, rules_text, rules_emoji, captcha_channel_id, verify_message_id, verify_emoji, verified_role_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
         ON CONFLICT (guild_id) DO UPDATE SET
-          rules_channel_id=$2, rules_message_id=$3, rules_title=$4, rules_text=$5, rules_emoji=$6, captcha_channel_id=$7, verified_role_id=$8
-      `, [interaction.guildId, channel.id, msg.id, title, text, emoji, captchaChannel.id, role.id]);
+          rules_channel_id=$2, rules_message_id=$3, rules_title=$4, rules_text=$5, rules_emoji=$6,
+          captcha_channel_id=$7, verify_message_id=$8, verify_emoji=$9, verified_role_id=$10
+      `, [interaction.guildId, channel.id, rulesMsg.id, title, text, rulesEmoji, captchaChannel.id, verifyMsg.id, verifyEmoji, role.id]);
 
-      return interaction.editReply(`✅ Verification set up. Members react with ${emoji} in <#${channel.id}>, solve a captcha in <#${captchaChannel.id}>, then get <@&${role.id}>.`);
+      return interaction.editReply(`✅ Verification set up. Members react with ${rulesEmoji} in <#${channel.id}>, then ${verifyEmoji} in <#${captchaChannel.id}> to get their captcha, then get <@&${role.id}> once solved. Both reactions stay in place permanently as proof of each step.`);
     }
 
     if (sub === 'edit-rules') {
@@ -95,13 +116,12 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setColor('#d6c2ee')
         .setTitle(finalTitle)
-        .setDescription(`${finalText}\n\nReact with ${finalEmoji} below to begin verification.`);
+        .setDescription(`${finalText}\n\nReact with ${finalEmoji} once you've read and agree.`);
 
       await msg.edit({ embeds: [embed] }).catch((err) => {
         console.error('[Verify] Failed to edit rules:', err.message);
       });
 
-      // If the reaction emoji changed, swap the actual reaction on the message too
       if (newEmoji && newEmoji !== cfg.rules_emoji) {
         await msg.reactions.removeAll().catch(() => {});
         await msg.react(newEmoji).catch(() => {});
@@ -112,6 +132,41 @@ module.exports = {
       `, [finalTitle, finalText, finalEmoji, interaction.guildId]);
 
       return interaction.editReply(`✅ Rules updated. ${msg.url}`);
+    }
+
+    if (sub === 'customize-captcha') {
+      const title = interaction.options.getString('title');
+      const instructions = interaction.options.getString('instructions')?.replace(/\\n/g, '\n');
+      const newEmoji = interaction.options.getString('verify_emoji');
+
+      if (!title && !instructions && !newEmoji) return interaction.editReply('❌ Provide at least one of `title`, `instructions`, or `verify_emoji`.');
+
+      const cfgRes = await query('SELECT * FROM verify_config WHERE guild_id = $1', [interaction.guildId]);
+      if (!cfgRes.rows.length) return interaction.editReply('❌ Verification isn\'t set up yet — run `/verify setup` first.');
+      const cfg = cfgRes.rows[0];
+
+      await query(`
+        UPDATE verify_config SET
+          captcha_title = COALESCE($1, captcha_title),
+          captcha_instructions = COALESCE($2, captcha_instructions),
+          verify_emoji = COALESCE($3, verify_emoji)
+        WHERE guild_id = $4
+      `, [title, instructions, newEmoji, interaction.guildId]);
+
+      if (newEmoji && newEmoji !== cfg.verify_emoji && cfg.captcha_channel_id && cfg.verify_message_id) {
+        const captchaChannel = await interaction.client.channels.fetch(cfg.captcha_channel_id).catch(() => null);
+        const verifyMsg = captchaChannel ? await captchaChannel.messages.fetch(cfg.verify_message_id).catch(() => null) : null;
+        if (verifyMsg) {
+          await verifyMsg.reactions.removeAll().catch(() => {});
+          await verifyMsg.react(newEmoji).catch(() => {});
+          const embed = EmbedBuilder.from(verifyMsg.embeds[0]).setDescription(
+            `Once you've reacted to the rules, react with ${newEmoji} below to start your captcha.`
+          );
+          await verifyMsg.edit({ embeds: [embed] }).catch(() => {});
+        }
+      }
+
+      return interaction.editReply('✅ Captcha settings updated.');
     }
 
     if (sub === 'repost-rules') {
@@ -130,7 +185,7 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setColor('#d6c2ee')
         .setTitle(cfg.rules_title || '📜 Server Rules')
-        .setDescription(`${cfg.rules_text}\n\nReact with ${cfg.rules_emoji} below to begin verification.`);
+        .setDescription(`${cfg.rules_text}\n\nReact with ${cfg.rules_emoji} once you've read and agree.`);
 
       const msg = await channel.send({ embeds: [embed] }).catch(() => null);
       if (!msg) return interaction.editReply(`❌ Couldn't repost in <#${channel.id}> — check Veloura's permissions.`);
@@ -138,6 +193,32 @@ module.exports = {
 
       await query('UPDATE verify_config SET rules_message_id = $1 WHERE guild_id = $2', [msg.id, interaction.guildId]);
       return interaction.editReply(`✅ Rules reposted in <#${channel.id}>. ${msg.url}`);
+    }
+
+    if (sub === 'repost-verify') {
+      const cfgRes = await query('SELECT * FROM verify_config WHERE guild_id = $1', [interaction.guildId]);
+      if (!cfgRes.rows.length) return interaction.editReply('❌ Verification isn\'t set up yet — run `/verify setup` first.');
+      const cfg = cfgRes.rows[0];
+
+      const channel = await interaction.client.channels.fetch(cfg.captcha_channel_id).catch(() => null);
+      if (!channel) return interaction.editReply('❌ The configured captcha channel no longer exists.');
+
+      if (cfg.verify_message_id) {
+        const existing = await channel.messages.fetch(cfg.verify_message_id).catch(() => null);
+        if (existing) return interaction.editReply(`✅ The verification message still exists — no repost needed. ${existing.url}`);
+      }
+
+      const embed = new EmbedBuilder()
+        .setColor('#d6c2ee')
+        .setTitle('🔓 Start Verification')
+        .setDescription(`Once you've reacted to the rules, react with ${cfg.verify_emoji} below to start your captcha.`);
+
+      const msg = await channel.send({ embeds: [embed] }).catch(() => null);
+      if (!msg) return interaction.editReply(`❌ Couldn't repost in <#${channel.id}> — check Veloura's permissions.`);
+      await msg.react(cfg.verify_emoji).catch(() => {});
+
+      await query('UPDATE verify_config SET verify_message_id = $1 WHERE guild_id = $2', [msg.id, interaction.guildId]);
+      return interaction.editReply(`✅ Verification message reposted in <#${channel.id}>. ${msg.url}`);
     }
 
     if (sub === 'welcome') {

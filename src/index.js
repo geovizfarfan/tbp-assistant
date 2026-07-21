@@ -225,6 +225,10 @@ client.on('interactionCreate', async (interaction) => {
     const { handleCaptchaButton } = require('./events/verification');
     return handleCaptchaButton(interaction);
   }
+  if (interaction.isButton() && interaction.customId.startsWith('verify_newcode:')) {
+    const { handleNewCodeButton } = require('./events/verification');
+    return handleNewCodeButton(interaction);
+  }
   if (interaction.isStringSelectMenu() && interaction.customId === 'help_category') {
     return helpModule.handleSelect(interaction, client);
   }
