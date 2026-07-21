@@ -365,6 +365,12 @@ client.on('messageReactionAdd', async (reaction, user) => {
     await handleReactionAdd(reaction, user, client);
   } catch (e) { console.error('[Verify] reaction:', e.message); }
 });
+client.on('messageCreate', async (message) => {
+  try {
+    const { handleCaptchaChannelMessage } = require('./events/verification');
+    await handleCaptchaChannelMessage(message, client);
+  } catch (e) { console.error('[Verify] sticky repost:', e.message); }
+});
 
 // Ban log
 client.on('guildBanAdd', async (ban) => {
@@ -418,6 +424,7 @@ Thank you <@${newMember.id}> for helping us keep the magic alive! <a:BunnyLove:1
 // Wheel Roles auto-signup — checks role-collection campaigns independently of
 // boost detection, since that listener has an early return that would block it
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
+  if (typeof wheelModule.checkAutoSignupCampaigns !== 'function') return; // Wheel Roles not yet built
   try { await wheelModule.checkAutoSignupCampaigns(client, oldMember, newMember); }
   catch (e) { console.error('[WheelRoles] auto-signup error:', e.message); }
 });

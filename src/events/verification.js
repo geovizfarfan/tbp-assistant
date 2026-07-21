@@ -240,27 +240,41 @@ async function handleCaptchaModal(interaction) {
 // every new message posted there (including each member's own captcha challenge)
 // pushes it back down by deleting and reposting it, keeping the tracked ID in sync.
 async function handleCaptchaChannelMessage(message, client) {
-  if (message.author.id === client.user.id && message.embeds[0]?.title === '<a:lock:1520456965245898903> Start Verification') return; // don't react to its own repost
-
   const cfgRes = await query('SELECT * FROM verify_config WHERE captcha_channel_id = $1', [message.channel.id]);
-  if (!cfgRes.rows.length) return;
+  if (!cfgRes.rows.length) return; // this channel isn't a tracked captcha channel at all
   const cfg = cfgRes.rows[0];
-  if (!cfg.verify_message_id) return;
-  if (message.id === cfg.verify_message_id) return; // this IS the trigger message itself
 
-  const oldMsg = await message.channel.messages.fetch(cfg.verify_message_id).catch(() => null);
-  if (oldMsg) await oldMsg.delete().catch(() => {});
+  if (!cfg.verify_message_id) {
+    console.log('[Verify] sticky: no verify_message_id tracked yet — skipping.');
+    return;
+  }
+  if (message.id === cfg.verify_message_id) {
+    console.log('[Verify] sticky: this message IS the trigger message itself — skipping.');
+    return;
+  }
+
+  console.log(`[Verify] sticky: new message ${message.id} in captcha channel, moving trigger message ${cfg.verify_message_id} to bottom...`);
+
+  const oldMsg = await message.channel.messages.fetch(cfg.verify_message_id).catch((err) => {
+    console.log(`[Verify] sticky: could not fetch old trigger message: ${err.message}`);
+    return null;
+  });
+  if (oldMsg) await oldMsg.delete().catch((err) => console.log(`[Verify] sticky: could not delete old trigger message: ${err.message}`));
 
   const embed = new EmbedBuilder()
     .setColor('#d6c2ee')
     .setTitle('<a:lock:1520456965245898903> Start Verification')
     .setDescription(`Once you've reacted to the rules, react with ${cfg.verify_emoji} below to start your captcha.`);
 
-  const newMsg = await message.channel.send({ embeds: [embed] }).catch(() => null);
+  const newMsg = await message.channel.send({ embeds: [embed] }).catch((err) => {
+    console.log(`[Verify] sticky: failed to repost trigger message: ${err.message}`);
+    return null;
+  });
   if (!newMsg) return;
-  await newMsg.react(cfg.verify_emoji).catch(() => {});
+  await newMsg.react(cfg.verify_emoji).catch((err) => console.log(`[Verify] sticky: failed to react: ${err.message}`));
 
   await query('UPDATE verify_config SET verify_message_id = $1 WHERE guild_id = $2', [newMsg.id, cfg.guild_id]);
+  console.log(`[Verify] sticky: trigger message reposted successfully as ${newMsg.id}.`);
 }
 
 module.exports = { handleReactionAdd, handleCaptchaButton, handleNewCodeButton, handleCaptchaModal, handleCaptchaChannelMessage };
