@@ -65,6 +65,11 @@ const CATEGORIES = {
     label: 'General',
     description: 'Lock, Ban Log, Embed, Wheel & more',
   },
+  verify: {
+    emoji: '🔐',
+    label: 'Verification',
+    description: 'Rules, captcha & auto role assignment',
+  },
   playregret: {
     emoji: '<a:SINS:1522338148380704910>',
     label: 'Play & Regret',
@@ -110,6 +115,7 @@ function buildHomeEmbed() {
       { name: '<a:trophies:1512912823062364281> Level System',   value: 'XP, levels & leaderboard',                inline: true },
       { name: '<a:payout:1512913911953756291> Staff & Payroll',  value: 'Staff roster, eligibility & payouts',     inline: true },
       { name: '🤖 General',                                       value: 'Lock, Ban Log, Embed, Wheel & more',      inline: true },
+      { name: '🔐 Verification',                                  value: 'Rules, captcha & auto role assignment',  inline: true },
       { name: '<a:SINS:1522338148380704910> Play & Regret',       value: 'Sins currency & RR integration',          inline: true },
       { name: '⚙️ Server Config',                                 value: 'Setup guide & current server config',     inline: true },
     )
@@ -159,7 +165,8 @@ function buildCategoryEmbed(category) {
         { name: '⚙️ Setup Channel', value: '`/rr setup channel:#ch reward:500 ping_role1:@Role winner_role:@Role reaction_emoji:<:emoji:id> announce_style:Embed/Ping`\nConfigures a channel for RR tracking. All fields except channel are optional. `announce_style: Ping Only` posts just a role ping + next room instead of the full embed.', inline: false },
         { name: '📝 Add Host Info', value: '`/rr add channel:#ch other_reward:"Sticker" description:"Tonight: Boardgame era"`\nAnyone on the staff roster (or with the mod/admin role) can add a one-time description or reward — updates the *live* battle announcement immediately if one is currently posted, no need to wait for the next battle.', inline: false },
         { name: '🔁 Repost Announcement', value: '`/rr repost channel:#ch`\nManually resends the battle-start announcement for a channel using its current config (title, image, next room). Staff roster access, same as `/rr add`.', inline: false },
-        { name: '🏆 Season Management', value: '`/rr season start name:"Season 1"` → `/rr season add channel:#ch` → `/rr season end`\nDefines which channels count toward the collection achievement.', inline: false },
+        { name: '🏆 Seasons (multiple, concurrent)', value: '`/rumble season start name:"Season 1" wheel_campaign:"..."` → `/rumble season add season:"Season 1" channel:#ch` → `/rumble season end season:"Season 1"`\nRun several seasons at once, each independent. Optionally link a season to a Wheel Roles campaign — completing it auto-enters members into that wheel. `/rumble season list` and `/rumble season info` to check progress.', inline: false },
+        { name: '💀 Rumble Slaughter', value: '`/rumbleslaughter setup channel:#ch winner_role:@Role ping_role:@Role`\nAuto-assigns a role to the champion of Rumble Slaughter (a Play & Regret game mode) — detected directly from its own announcement, no manual work needed.', inline: false },
         { name: '💰 Currency & Wallet', value: '`/rr currency use_sins:True/False name:"..." emoji:"..."` — choose real Sins or your own currency\n`/rr wallet [user]` — check custom currency balance', inline: false },
         { name: '📋 Log Channels', value: '`/rr log admin channel:#ch` — config change logs\n`/rr log achievement channel:#ch` — collection achievement logs', inline: false },
         { name: '🗑️ Clear Channel', value: '`/rr clear channel:#ch`\nRemoves all RR config for a channel.', inline: false },
@@ -210,10 +217,11 @@ function buildCategoryEmbed(category) {
         { name: '🧹 Purge', value: '`/purge amount:50`\nDeletes up to 100 messages in the current channel. Requires admin or configured purge role.', inline: false },
         { name: '🔒 Lock', value: '`/lock channel:#ch reason:"..."`\nToggles Send Messages off/on for everyone in one command — works correctly even on role-restricted private channels.', inline: false },
         { name: '🔨 Ban Log', value: '`/banlog setup channel:#mod-log`\nAuto-posts whenever a member is banned, pulling the reason and who banned them from the audit log.\n`/banlog reason id:5 reason:"..."` — add/fix a reason after the fact\n`/banlog list` — recent bans', inline: false },
-        { name: '📋 Custom Embeds', value: '`/embed create description:"..." title:"..." color:#d6c2ee image: thumbnail: footer: author: channel:`\nPost a fully custom embed anywhere.', inline: false },
+        { name: '📋 Custom Embeds', value: '`/embed create description:"..." title:"..." color:#d6c2ee image: thumbnail: footer: author: channel:`\nPost a fully custom embed anywhere.\n`/embed edit message_id:` — opens a form pre-filled with the current text, edit in place instead of retyping\n`/embed list [page]` / `/embed repost id:` — recover an embed if its message gets deleted', inline: false },
         { name: '<a:purplesparkle:1512912828489793626> Boost Detection', value: 'Set with `/settings channels boost:#ch`\nBot auto-posts a thank you message when someone boosts the server.', inline: false },
         { name: '<:rumble:1522372419338375299> Rumble Grind', value: '`/grind setup channel:#ch role:@Role max_channels:50 duration:1`\nPosts a panel for members to create personal temp Rumble channels — inherits the category\'s existing permissions.', inline: false },
         { name: '🎡 Wheel', value: '`/wheel members entries:"@a, @b, @c"` — spin for a winner\n`/wheel prizes prizes:"..." winner:@user` — spin a prize wheel for a winner you picked\n`/wheel combo entries: prizes:` — spin winner then prize in one flow\n`/wheel reactions link: emoji:` — pull entries from message reactions\n`/wheel boosted entries:` — boosted odds spin\n`/wheel role-bonus-add/list/remove` — bonus entries per role\nSins prizes are paid from the host\'s own wallet.', inline: false },
+        { name: '🎯 Wheel Roles (auto-entry campaigns)', value: '`/wheel roles create name:"..." roles:@r1 @r2 auto_signup:True/False channel:#ch`\nMembers who collect every listed role qualify — automatically if `auto_signup:True`, or by clicking an Enter button if False.\n`/wheel roles spin name:"..."` — spin against everyone currently qualified\n`/wheel roles entries/list/close/delete` — manage campaigns', inline: false },
         { name: '🏆 Member Wins', value: '`/member-wins user:@member`\nSee everything a member has won across raffles, giveaways, and games.', inline: false },
         { name: '🔐 Private Rooms', value: '`/private-room setup`\nSets up auto-archiving private threads.', inline: false },
         { name: '💌 GoosDate', value: '`/goosdate setup channel:#ch role:@Role` — configure reminders\n`/goosdate toggle enabled:True/False`\n`/goosdate status`', inline: false },
@@ -271,6 +279,7 @@ function buildCategoryEmbed(category) {
         { name: '➖ Remove Role', value: '`/rolepanel removerole name:game-pings role:@Fortnite`', inline: false },
         { name: '📄 List Panels', value: '`/rolepanel list [name]`\nShows all panels, or one panel\'s full role list.', inline: false },
         { name: '🗑️ Delete Panel', value: '`/rolepanel delete name:game-pings`', inline: false },
+        { name: '🔁 Repost', value: '`/rolepanel repost name:game-pings`\nRebuilds and reposts the panel — also refreshes role names live if any were renamed since the panel was created.', inline: false },
       )
       .setFooter({ text: 'Dropdown panels support multi-select — members can toggle several roles in one interaction' }),
 
@@ -294,13 +303,31 @@ function buildCategoryEmbed(category) {
       .setTitle('<a:purplesparkle:1512912828489793626> Giveaways')
       .setDescription('Live, auto-running giveaways — members react to enter, winner(s) picked automatically when time\'s up.')
       .addFields(
-        { name: '🎉 Start', value: '`/giveaway start prize:"Nitro" duration_amount:1 duration_unit:Days winners:1 thumbnail:<upload> required_role:@Member entry_emoji:🎉 claim_hours:6 ticket_channel:#claim`\nOnly `prize` and duration are required.', inline: false },
-        { name: '✨ Bonus Entries', value: '`/giveaway bonusrole add role:@VIP entries:2`\nBuilds a reusable library. When starting a giveaway, pick which configured bonus roles apply via a dropdown — entries stack if someone qualifies for multiple.', inline: false },
-        { name: '🏁 End Early', value: '`/giveaway end id:4`', inline: false },
-        { name: '🔁 Reroll', value: '`/giveaway reroll id:4 count:1`\nPicks new winner(s), excluding previous winners.', inline: false },
-        { name: '📋 List', value: '`/giveaway list`\nShows active giveaways with time remaining.', inline: false },
+        { name: '🎉 Start', value: '`/giveaway start prize:"Nitro" duration_amount:1 duration_unit:Days winners:1 thumbnail:<upload> entry_emoji:🎉 claim_hours:6 ticket_channel:#claim`\nOnly `prize` and duration are required. If you have bonus-entry or required roles configured, you\'ll get a dropdown to pick which apply to this giveaway.', inline: false },
+        { name: '✨ Bonus Entries', value: '`/giveaway bonusrole add role:@VIP entries:2`\nBuilds a reusable library. Entries stack if someone qualifies for multiple roles.', inline: false },
+        { name: '📜 Entry Requirements (unlimited roles)', value: '`/giveaway requiredrole add roles:@Role1 @Role2 @Role3` — add as many at once as you want, one command\nA member must have ALL selected roles to be eligible — pick which ones apply per giveaway from a dropdown at start time.', inline: false },
+        { name: '🎫 Check My Entries', value: 'Every giveaway posts a "Check My Entries" button — members can click it anytime to see their ticket count and which bonus roles are contributing, without needing to ask staff.', inline: false },
+        { name: '📋 See Everyone\'s Entries', value: '`/giveaway entries id:4`\nHost/staff view — every eligible entrant sorted by ticket count, plus anyone who reacted but got excluded for missing a required role.', inline: false },
+        { name: '✏️ Edit', value: '`/giveaway edit id:4 prize:"..." winners:2 duration_amount:1 duration_unit:Hours thumbnail:<upload>`\nHost only. Changing the duration properly reschedules the auto-end, not just the display.', inline: false },
+        { name: '🏁 End Early', value: '`/giveaway end id:4`\nPicks winner(s) now instead of waiting.', inline: false },
+        { name: '❌ Cancel', value: '`/giveaway cancel id:4`\nHost only. Ends it with no winner picked at all — different from `end`, which always picks someone.', inline: false },
+        { name: '🔁 Reroll', value: '`/giveaway reroll id:4 count:1`\nPicks new winner(s) for an already-ended giveaway, excluding previous winners.', inline: false },
+        { name: '🔁 Repost', value: '`/giveaway repost id:4`\nRebuilds the message if it was deleted — does nothing if it still exists, to protect everyone\'s entries.', inline: false },
+        { name: '📋 List', value: '`/giveaway list`\nShows every active giveaway with its ID, time remaining, and channel.', inline: false },
       )
       .setFooter({ text: 'Anyone who reacts with anything other than the entry emoji is simply ignored' }),
+
+    verify: new EmbedBuilder().setColor('#d6c2ee')
+      .setTitle('🔐 Verification')
+      .setDescription('React to rules, solve a captcha in-server, get auto-verified — no DMs involved.')
+      .addFields(
+        { name: '⚙️ Setup', value: '`/verify setup verified_role:@Verified rules_channel:#rules captcha_channel:#verification rules_text:"..." emoji:✅`\nPosts your rules with a reaction. Custom emojis work too — type `<a` or `<:` and pick from your server\'s emoji list.', inline: false },
+        { name: '👤 The Flow', value: '1. Member reacts to rules\n2. Bot posts a personal captcha challenge in the captcha channel with a 6-character code and a "Solve Captcha" button (only they can click it)\n3. Clicking opens a form to type the code back\n4. Correct → instantly get the verified role. Wrong → told how many of their 5 attempts are left, and can react again anytime for a fresh code.', inline: false },
+        { name: '👋 Welcome Message', value: '`/verify welcome channel:#welcome text:"Hey {user}, welcome!\\n\\nCheck out..." title:"Welcome!" image:<url>`\nPosts automatically the moment someone verifies. `{user}` mentions them in your text, and they\'re always pinged for real (mentions inside embeds alone don\'t trigger notifications). Optional — leave unset and nothing extra happens.', inline: false },
+        { name: '🔁 Repost Rules', value: '`/verify repost-rules`\nRebuilds the rules message if it was deleted — does nothing if it still exists.', inline: false },
+        { name: '📋 Status', value: '`/verify status user:@member`\nCheck if someone\'s verified, or mid-captcha with how many attempts used.', inline: false },
+      )
+      .setFooter({ text: 'The code is plain text, not an image — blocks casual bots/spam, not a sophisticated targeted attack' }),
 
     config: new EmbedBuilder().setColor('#d6c2ee')
       .setTitle('⚙️ Server Config')
@@ -362,10 +389,10 @@ async function buildConfigEmbed(guild, client) {
       lines.push('');
     }
 
-    // Active season
-    const season = await query('SELECT * FROM rr_seasons WHERE guild_id=$1 AND status=$2', [guild.id, 'active']);
-    if (season.rows.length) {
-      lines.push(`**<:rumble:1522372419338375299> Active Season:** ${season.rows[0].name}`);
+    // Active seasons (multiple can run concurrently)
+    const seasons = await query('SELECT * FROM rr_seasons WHERE guild_id=$1 AND status=$2', [guild.id, 'active']);
+    if (seasons.rows.length) {
+      lines.push(`**<:rumble:1522372419338375299> Active Season(s):** ${seasons.rows.map(s => s.name).join(', ')}`);
       lines.push('');
     }
 
