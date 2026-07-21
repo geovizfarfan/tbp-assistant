@@ -240,6 +240,14 @@ async function handleCaptchaModal(interaction) {
 // every new message posted there (including each member's own captcha challenge)
 // pushes it back down by deleting and reposting it, keeping the tracked ID in sync.
 async function handleCaptchaChannelMessage(message, client) {
+  // Check this FIRST, before any database round-trip — the bot's own repost
+  // message fires messageCreate for itself, and if we wait on a DB read to
+  // recognize that, the event can arrive before the database write finishes,
+  // causing it to think its own repost is a new message and cascade forever.
+  if (message.author.id === client.user.id && message.embeds[0]?.title === '<a:lock:1520456965245898903> Start Verification') {
+    return;
+  }
+
   const cfgRes = await query('SELECT * FROM verify_config WHERE captcha_channel_id = $1', [message.channel.id]);
   if (!cfgRes.rows.length) return; // this channel isn't a tracked captcha channel at all
   const cfg = cfgRes.rows[0];
