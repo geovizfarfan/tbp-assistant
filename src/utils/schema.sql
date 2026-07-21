@@ -317,6 +317,7 @@ CREATE TABLE IF NOT EXISTS verify_config (
   guild_id TEXT PRIMARY KEY,
   rules_channel_id TEXT,
   rules_message_id TEXT,
+  rules_title TEXT DEFAULT '📜 Server Rules',
   rules_text TEXT,
   rules_emoji TEXT DEFAULT '✅',
   captcha_channel_id TEXT,
@@ -326,6 +327,7 @@ CREATE TABLE IF NOT EXISTS verify_config (
   welcome_text TEXT,
   welcome_image TEXT
 );
+ALTER TABLE verify_config ADD COLUMN IF NOT EXISTS rules_title TEXT DEFAULT '📜 Server Rules';
 
 CREATE TABLE IF NOT EXISTS verify_pending (
   id SERIAL PRIMARY KEY,

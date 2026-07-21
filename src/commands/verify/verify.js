@@ -12,7 +12,14 @@ module.exports = {
       .addChannelOption(o => o.setName('rules_channel').setDescription('Channel to post the rules message in').setRequired(true))
       .addChannelOption(o => o.setName('captcha_channel').setDescription('Channel where members solve their captcha').setRequired(true))
       .addStringOption(o => o.setName('rules_text').setDescription('Rules text (use \\n for new lines)').setRequired(true))
+      .addStringOption(o => o.setName('rules_title').setDescription('Title shown above the rules (default: "📜 Server Rules")'))
       .addStringOption(o => o.setName('emoji').setDescription('Emoji members react with to start verification (default: ✅)')))
+    .addSubcommand(sub => sub
+      .setName('edit-rules')
+      .setDescription('Edit the rules message in place — only fills in fields you provide')
+      .addStringOption(o => o.setName('title').setDescription('New title, e.g. "🎲 Server Rules"'))
+      .addStringOption(o => o.setName('text').setDescription('New rules text (use \\n for new lines)'))
+      .addStringOption(o => o.setName('reaction_emoji').setDescription('New reaction emoji (changes what members react with)')))
     .addSubcommand(sub => sub
       .setName('repost-rules')
       .setDescription('Repost the rules message if it was deleted'))
@@ -42,11 +49,12 @@ module.exports = {
       const channel = interaction.options.getChannel('rules_channel');
       const captchaChannel = interaction.options.getChannel('captcha_channel');
       const text    = interaction.options.getString('rules_text').replace(/\\n/g, '\n');
+      const title   = interaction.options.getString('rules_title') || '📜 Server Rules';
       const emoji   = interaction.options.getString('emoji') || '✅';
 
       const embed = new EmbedBuilder()
         .setColor('#d6c2ee')
-        .setTitle('📜 Server Rules')
+        .setTitle(title)
         .setDescription(`${text}\n\nReact with ${emoji} below to begin verification.`);
 
       const msg = await channel.send({ embeds: [embed] }).catch(() => null);
@@ -54,13 +62,56 @@ module.exports = {
       await msg.react(emoji).catch(() => {});
 
       await query(`
-        INSERT INTO verify_config (guild_id, rules_channel_id, rules_message_id, rules_text, rules_emoji, captcha_channel_id, verified_role_id)
-        VALUES ($1,$2,$3,$4,$5,$6,$7)
+        INSERT INTO verify_config (guild_id, rules_channel_id, rules_message_id, rules_title, rules_text, rules_emoji, captcha_channel_id, verified_role_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
         ON CONFLICT (guild_id) DO UPDATE SET
-          rules_channel_id=$2, rules_message_id=$3, rules_text=$4, rules_emoji=$5, captcha_channel_id=$6, verified_role_id=$7
-      `, [interaction.guildId, channel.id, msg.id, text, emoji, captchaChannel.id, role.id]);
+          rules_channel_id=$2, rules_message_id=$3, rules_title=$4, rules_text=$5, rules_emoji=$6, captcha_channel_id=$7, verified_role_id=$8
+      `, [interaction.guildId, channel.id, msg.id, title, text, emoji, captchaChannel.id, role.id]);
 
       return interaction.editReply(`✅ Verification set up. Members react with ${emoji} in <#${channel.id}>, solve a captcha in <#${captchaChannel.id}>, then get <@&${role.id}>.`);
+    }
+
+    if (sub === 'edit-rules') {
+      const title = interaction.options.getString('title');
+      const text  = interaction.options.getString('text')?.replace(/\\n/g, '\n');
+      const newEmoji = interaction.options.getString('reaction_emoji');
+
+      if (!title && !text && !newEmoji) return interaction.editReply('❌ Provide at least one of `title`, `text`, or `reaction_emoji`.');
+
+      const cfgRes = await query('SELECT * FROM verify_config WHERE guild_id = $1', [interaction.guildId]);
+      if (!cfgRes.rows.length) return interaction.editReply('❌ Verification isn\'t set up yet — run `/verify setup` first.');
+      const cfg = cfgRes.rows[0];
+
+      const channel = await interaction.client.channels.fetch(cfg.rules_channel_id).catch(() => null);
+      if (!channel) return interaction.editReply('❌ The configured rules channel no longer exists.');
+
+      const msg = cfg.rules_message_id ? await channel.messages.fetch(cfg.rules_message_id).catch(() => null) : null;
+      if (!msg) return interaction.editReply('❌ Couldn\'t find the rules message — run `/verify repost-rules` first, or `/verify setup` to recreate it.');
+
+      const finalTitle = title || cfg.rules_title || '📜 Server Rules';
+      const finalText  = text || cfg.rules_text;
+      const finalEmoji = newEmoji || cfg.rules_emoji;
+
+      const embed = new EmbedBuilder()
+        .setColor('#d6c2ee')
+        .setTitle(finalTitle)
+        .setDescription(`${finalText}\n\nReact with ${finalEmoji} below to begin verification.`);
+
+      await msg.edit({ embeds: [embed] }).catch((err) => {
+        console.error('[Verify] Failed to edit rules:', err.message);
+      });
+
+      // If the reaction emoji changed, swap the actual reaction on the message too
+      if (newEmoji && newEmoji !== cfg.rules_emoji) {
+        await msg.reactions.removeAll().catch(() => {});
+        await msg.react(newEmoji).catch(() => {});
+      }
+
+      await query(`
+        UPDATE verify_config SET rules_title = $1, rules_text = $2, rules_emoji = $3 WHERE guild_id = $4
+      `, [finalTitle, finalText, finalEmoji, interaction.guildId]);
+
+      return interaction.editReply(`✅ Rules updated. ${msg.url}`);
     }
 
     if (sub === 'repost-rules') {
@@ -78,7 +129,7 @@ module.exports = {
 
       const embed = new EmbedBuilder()
         .setColor('#d6c2ee')
-        .setTitle('📜 Server Rules')
+        .setTitle(cfg.rules_title || '📜 Server Rules')
         .setDescription(`${cfg.rules_text}\n\nReact with ${cfg.rules_emoji} below to begin verification.`);
 
       const msg = await channel.send({ embeds: [embed] }).catch(() => null);
