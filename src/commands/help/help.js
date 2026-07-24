@@ -126,211 +126,117 @@ function buildHomeEmbed() {
 function buildCategoryEmbed(category) {
   const embeds = {
     getstarted: new EmbedBuilder().setColor('#d6c2ee')
-      .setTitle('🚀 Getting Started with VELOURA')
-      .setDescription('Recommended setup order for a brand-new server. Each step links to the relevant `/help` category for full details.')
+      .setTitle('🌟 Getting Started')
       .addFields(
-        { name: '1️⃣ Core Channels', value: '`/settings channels schedule:#ch winners:#ch ticket:#ch staff_notif:#ch transcript:#ch boost:#ch`\nSet these once — everything else reads from here. All optional, set only what you need.', inline: false },
-        { name: '2️⃣ Staff Roster', value: '`/staff add user:@member role:staff`\nAdds them to payroll/eligibility tracking and unlocks staff-only commands like `/rr add`.', inline: false },
-        { name: '3️⃣ Tickets', value: '`/ticket setup staff_role:@Staff staff_channel:#staff-tickets transcript:#logs` → `/ticket panel title:"Support"`\nSee **Tickets** category for panel types, close flow, and repost.', inline: false },
-        { name: '4️⃣ Rumble Royale', value: '`/rr setup channel:#ch reward:500 winner_role:@Winner ping_role1:@Role`\nRepeat per RR channel. See **Rumble Royale** category for seasons, stats, and announce styles.', inline: false },
-        { name: '5️⃣ Shop', value: '`/shop setup shop_channel:#shop fulfillment_channel:#staff-orders` → `/shop additem ...`\nSee **Shop** category for item types (Role, Auto Reaction, Nickname, Custom) and the buy → use flow.', inline: false },
-        { name: '6️⃣ Role Panels & Ping Panels', value: '`/rolepanel create` for dropdown/reaction self-assign roles.\n`/pingpanel post` for simple single-role notification toggles.', inline: false },
-        { name: '7️⃣ Sticky Notes', value: '`/sticky set channel:#ch message:"..."`\nKeeps an important message pinned to the bottom of a channel.', inline: false },
-        { name: '8️⃣ Giveaways', value: '`/giveaway bonusrole add role:@VIP entries:2` (optional, one-time setup)\nThen `/giveaway start prize:"..." duration_amount:1 duration_unit:Days` whenever you want to run one.', inline: false },
-        { name: '9️⃣ Payments', value: '`/pay seller add user:@member` → `/pay methods set seller:@member method:CashApp value:"$tag"`\nLets approved sellers track and receipt payments to members.', inline: false },
-        { name: '🔍 Check Your Work', value: 'Run `/help` → **Server Config** any time to see a live snapshot of everything currently configured — channels, active panels, shop items, giveaways, and more.', inline: false },
-      )
-      .setFooter({ text: 'You don\'t need to do this all at once — set up what you need, when you need it' }),
+        { name: 'How do I set up the server for the first time?', value: 'Run `/server-setup` — it\'s the central hub for channels, roles, staff, and everything else fundamental to running Veloura.', inline: false },
+        { name: 'How do I add staff members?', value: '`/staff add user:@member role:staff` — unlocks payroll tracking and staff-only commands like `/rr reward add`.', inline: false },
+        { name: 'Where do I see my current config?', value: '`/help` → Server Config, for a live snapshot of everything configured right now.', inline: false },
+      ),
 
     tickets: new EmbedBuilder().setColor('#d6c2ee')
-      .setTitle('<a:tickets:1523139713278672996> Ticket System')
-      .setDescription('Create private thread tickets with staff notifications, transcripts and ratings.')
+      .setTitle('🎫 Tickets')
       .addFields(
-        { name: '⚙️ Setup', value: '`/ticket setup staff_role:@Role category:#Cat transcript:#Ch staff_channel:#Ch`\nConfigures the ticket system. Run once to get started.', inline: false },
-        { name: '📋 Create Panel', value: '`/ticket panel title:"Title" description:"..." color:#hex`\nPosts a ticket panel. Use `single_button:true` for one button.', inline: false },
-        { name: '➕ Add Ticket Type', value: '`/ticket addtype panel_id:1 name:"Boost" emoji:🎲 questions:"Q1|Q2"`\nAdds a button to the panel. Run multiple times for more buttons.', inline: false },
-        { name: '✏️ Edit Panel', value: '`/ticket edit panel_id:1 title:"New Title" description:"..."`\nUpdate any panel field without recreating it.', inline: false },
-        { name: '📄 List Panels', value: '`/ticket panels`\nShows all panels and their IDs.', inline: false },
-        { name: '🗑️ Remove Panel', value: '`/ticket removepanel panel_id:1`\nDeletes a panel and all its buttons.', inline: false },
-        { name: '🔒 Close Ticket', value: 'Click the **Close Ticket** button, or run `/ticket close reason:"..."` inside the thread. Transcript is auto-sent to member + transcript channel.', inline: false },
-        { name: '🔁 Repost Panel', value: '`/ticket repost panel_id:1`\nRebuilds and reposts a panel if its message was accidentally deleted — no need to recreate types.', inline: false },
-        { name: '👤 Add/Remove User', value: '`/ticket add @user` / `/ticket remove @user`\nAdd or remove staff from a ticket thread.', inline: false },
-      )
-      .setFooter({ text: 'Members open tickets via panel buttons • Staff join via staff channel notification' }),
+        { name: 'How do I set up tickets?', value: '`/ticket setup` — configures staff role, category, and core behavior.', inline: false },
+        { name: 'How do I create a ticket panel?', value: '`/ticket panel` to build one, `/ticket panels addtype` to add ticket types to it.', inline: false },
+        { name: 'How does a member open or close a ticket?', value: 'They click the panel button to open; staff use `/ticket close reason:` to close.', inline: false },
+        { name: 'What if a panel gets deleted?', value: '`/ticket panels repost panel_id:` rebuilds it.', inline: false },
+      ),
 
     rumble: new EmbedBuilder().setColor('#d6c2ee')
-      .setTitle('<:rumble:1522372419338375299> Rumble Royale')
-      .setDescription('Track Rumble Royale battles, wins, seasons and auto-award Sins to winners.')
+      .setTitle('⚔️ Rumble Royale & Slaughter')
       .addFields(
-        { name: '⚙️ Setup Channel', value: '`/rr setup channel:#ch reward:500 ping_role1:@Role winner_role:@Role reaction_emoji:<:emoji:id> announce_style:Embed/Ping`\nConfigures a channel for RR tracking. All fields except channel are optional. `announce_style: Ping Only` posts just a role ping + next room instead of the full embed.', inline: false },
-        { name: '📝 Add Host Info', value: '`/rr add channel:#ch other_reward:"Sticker" description:"Tonight: Boardgame era"`\nAnyone on the staff roster (or with the mod/admin role) can add a one-time description or reward — updates the *live* battle announcement immediately if one is currently posted, no need to wait for the next battle.', inline: false },
-        { name: '🔁 Repost Announcement', value: '`/rr repost channel:#ch`\nManually resends the battle-start announcement for a channel using its current config (title, image, next room). Staff roster access, same as `/rr add`.', inline: false },
-        { name: '🏆 Seasons (multiple, concurrent)', value: '`/rumble season start name:"Season 1" wheel_campaign:"..."` → `/rumble season add season:"Season 1" channel:#ch` → `/rumble season end season:"Season 1"`\nRun several seasons at once, each independent. Optionally link a season to a Wheel Roles campaign — completing it auto-enters members into that wheel. `/rumble season list` and `/rumble season info` to check progress.', inline: false },
-        { name: '💀 Rumble Slaughter', value: '`/rumbleslaughter setup channel:#ch winner_role:@Role ping_role:@Role`\nAuto-assigns a role to the champion of Rumble Slaughter (a Play & Regret game mode) — detected directly from its own announcement, no manual work needed.', inline: false },
-        { name: '💰 Currency & Wallet', value: '`/rr currency use_sins:True/False name:"..." emoji:"..."` — choose real Sins or your own currency\n`/rr wallet [user]` — check custom currency balance', inline: false },
-        { name: '📋 Log Channels', value: '`/rr log admin channel:#ch` — config change logs\n`/rr log achievement channel:#ch` — collection achievement logs', inline: false },
-        { name: '🗑️ Clear Channel', value: '`/rr clear channel:#ch`\nRemoves all RR config for a channel.', inline: false },
-      )
-      .setFooter({ text: 'Winners auto-receive Sins from Play & Regret • Reactions auto-applied to winner role holders' }),
+        { name: 'How do I set up Rumble Royale?', value: '`/rr setup channel:#ch` — configure reward, winner role, ping roles, and announcement style for a channel.', inline: false },
+        { name: 'How do I add a one-time bonus reward?', value: '`/rr reward add channel:#ch other_reward:"..."` — updates the *live* announcement immediately. `/rr reward remove` clears it.', inline: false },
+        { name: 'How do I set up Rumble Slaughter?', value: '`/rs setup channel:#ch winner_role:@Role` — mirrors RR setup; Veloura detects the champion and posts its own summary automatically.', inline: false },
+        { name: 'Can I run multiple seasons at once?', value: 'Yes — `/rumble season start name:"..."` supports several concurrent seasons, each independent. Can link a season to a Wheel Roles campaign too.', inline: false },
+      ),
 
     payments: new EmbedBuilder().setColor('#d6c2ee')
-      .setTitle('<a:payout:1512913911953756291> Payment Tracking')
-      .setDescription('Track payments between sellers and members. Each seller manages their own records independently.')
+      .setTitle('💳 Payments')
       .addFields(
-        { name: '👤 Approve Sellers', value: '`/pay seller add @user`\nOwner approves who can use seller commands.', inline: false },
-        { name: '💳 Set Payment Methods', value: '`/pay methods set paypal:https://paypal.me/you venmo:... cashapp:... applepay:... zelle:...`\nEach seller sets their own links.', inline: false },
-        { name: '📋 Log Payment', value: '`/pay log @user amount:10 service:"Sticker Pack" method:PayPal paid:false`\nLogs a payment and DMs the member a receipt.', inline: false },
-        { name: '✅ Mark Paid', value: '`/pay mark id:123`\nMarks a payment as fully paid and DMs a receipt.', inline: false },
-        { name: '⏳ Partial Payment', value: '`/pay partial id:123 amount:5`\nLogs a partial payment, shows remaining balance.', inline: false },
-        { name: '✏️ Edit Entry', value: '`/pay edit id:123 amount: service: method: notes:`\nEdit any field — member is notified of changes.', inline: false },
-        { name: '🗑️ Remove Entry', value: '`/pay remove id:123`', inline: false },
-        { name: '📊 Your List', value: '`/pay list [status:unpaid/partial/paid/all]`\nYour full records with IDs, amounts, timestamps and totals.', inline: false },
-        { name: '👛 Member Balance', value: '`/pay balance @seller`\nAnyone can check their own balance with a seller and see payment links.', inline: false },
-        { name: '🔍 Show Payment Methods', value: '`/pay methods show seller:@seller method:CashApp`\nAnyone can view a seller\'s payment links.', inline: false },
-      )
-      .setFooter({ text: 'Sellers only see their own records • Members only see their own balance' }),
+        { name: 'How do I log a payment I made?', value: '`/pay log user:@member amount:500 service:"..." method:"..."`', inline: false },
+        { name: 'How do I check what I\'m owed?', value: '`/payout` — shows your own unpaid games; admins can check anyone\'s.', inline: false },
+        { name: 'How do I add a seller or payment method?', value: '`/pay seller add user:@member` and `/pay methods set` for someone\'s payout info.', inline: false },
+      ),
 
     sticky: new EmbedBuilder().setColor('#d6c2ee')
       .setTitle('📌 Sticky Notes')
-      .setDescription('Persistent messages that always stay at the bottom of a channel.')
       .addFields(
-        { name: '📌 Set Sticky', value: '`/sticky set message:"Your text here" title:"Optional Title" color:#hex`\nRun in the channel where you want the sticky. Use `\\n` for line breaks.', inline: false },
-        { name: '✏️ Edit Sticky', value: '`/sticky edit message:"New text" title:"New Title"`\nUpdate the sticky in the current channel.', inline: false },
-        { name: '🗑️ Remove Sticky', value: '`/sticky remove`\nRun in the channel to remove and delete the sticky message.', inline: false },
-      )
-      .setFooter({ text: 'Sticky reposts to the bottom every time someone sends a message' }),
+        { name: 'How do I make a message stick to the bottom of a channel?', value: '`/sticky set message:"..."` — Veloura reposts it automatically as new messages come in.', inline: false },
+        { name: 'How do I edit or remove one?', value: '`/sticky edit` to change it, `/sticky remove` to take it down.', inline: false },
+      ),
 
     panels: new EmbedBuilder().setColor('#d6c2ee')
-      .setTitle('🔔 Ping Panels')
-      .setDescription('Sticky panels with Get Notified / Remove Ping buttons for role toggles.')
+      .setTitle('📋 Ping Panels')
       .addFields(
-        { name: '📋 Post Panel', value: '`/pingpanel post role:@Role title:"Get notified for X" description:"..." color:#hex`\nPosts a sticky panel in the current channel (or specify a channel).', inline: false },
-        { name: '🗑️ Remove Panel', value: '`/pingpanel remove channel:#ch`\nRemoves the sticky panel from a channel.', inline: false },
-        { name: 'ℹ️ How it works', value: 'The panel auto-reposts to the bottom when messages are sent.\nMembers click **Get Notified** to receive the role or **Remove Ping** to remove it.', inline: false },
-      )
-      .setFooter({ text: 'Each channel can have one ping panel' }),
+        { name: 'How do I post a role-ping panel?', value: '`/pingpanel post role:@Role title:"..." channel:#ch` — one click for members to ping that role.', inline: false },
+      ),
 
     general: new EmbedBuilder().setColor('#d6c2ee')
-      .setTitle('🤖 General Commands')
+      .setTitle('🤖 General')
       .addFields(
-        { name: '<a:afk:1522096882036510791> AFK', value: '`/afk set reason:"Be back soon"` — set yourself as AFK globally\n`/afk clear` — manually clear your AFK status\nBot auto-clears when you send a message and shows how long you were gone.', inline: false },
-        { name: '🧹 Purge', value: '`/purge amount:50`\nDeletes up to 100 messages in the current channel. Requires admin or configured purge role.', inline: false },
-        { name: '🔒 Lock', value: '`/lock channel:#ch reason:"..."`\nToggles Send Messages off/on for everyone in one command — works correctly even on role-restricted private channels.', inline: false },
-        { name: '🔨 Ban Log', value: '`/banlog setup channel:#mod-log`\nAuto-posts whenever a member is banned, pulling the reason and who banned them from the audit log.\n`/banlog reason id:5 reason:"..."` — add/fix a reason after the fact\n`/banlog list` — recent bans', inline: false },
-        { name: '📋 Custom Embeds', value: '`/embed create description:"..." title:"..." color:#d6c2ee image: thumbnail: footer: author: channel:`\nPost a fully custom embed anywhere.\n`/embed edit message_id:` — opens a form pre-filled with the current text, edit in place instead of retyping\n`/embed list [page]` / `/embed repost id:` — recover an embed if its message gets deleted', inline: false },
-        { name: '<a:purplesparkle:1512912828489793626> Boost Detection', value: 'Set with `/settings channels boost:#ch`\nBot auto-posts a thank you message when someone boosts the server.', inline: false },
-        { name: '<:rumble:1522372419338375299> Rumble Grind', value: '`/grind setup channel:#ch role:@Role max_channels:50 duration:1`\nPosts a panel for members to create personal temp Rumble channels — inherits the category\'s existing permissions.', inline: false },
-        { name: '🎡 Wheel', value: '`/wheel members entries:"@a, @b, @c"` — spin for a winner\n`/wheel prizes prizes:"..." winner:@user` — spin a prize wheel for a winner you picked\n`/wheel combo entries: prizes:` — spin winner then prize in one flow\n`/wheel reactions link: emoji:` — pull entries from message reactions\n`/wheel boosted entries:` — boosted odds spin\n`/wheel role-bonus-add/list/remove` — bonus entries per role\nSins prizes are paid from the host\'s own wallet.', inline: false },
-        { name: '🎯 Wheel Roles (auto-entry campaigns)', value: '`/wheel roles create name:"..." roles:@r1 @r2 auto_signup:True/False channel:#ch`\nMembers who collect every listed role qualify — automatically if `auto_signup:True`, or by clicking an Enter button if False.\n`/wheel roles spin name:"..."` — spin against everyone currently qualified\n`/wheel roles entries/list/close/delete` — manage campaigns', inline: false },
-        { name: '🏆 Member Wins', value: '`/member-wins user:@member`\nSee everything a member has won across raffles, giveaways, and games.', inline: false },
-        { name: '🔐 Private Rooms', value: '`/private-room setup`\nSets up auto-archiving private threads.', inline: false },
-        { name: '💌 GoosDate', value: '`/goosdate setup channel:#ch role:@Role` — configure reminders\n`/goosdate toggle enabled:True/False`\n`/goosdate status`', inline: false },
-      )
-      .setFooter({ text: 'Use /settings to configure channels and roles' }),
+        { name: 'How do I lock a channel?', value: '`/lock channel:#ch reason:"..."`', inline: false },
+        { name: 'How do I set up ban logging?', value: '`/banlog setup channel:#ch`', inline: false },
+        { name: 'How do I post a custom embed?', value: '`/embed create description:"..."` — `/embed edit` to change it later without retyping.', inline: false },
+        { name: 'How do I spin a wheel for a winner?', value: '`/wheel members entries:"@a, @b, @c"`', inline: false },
+      ),
 
     level: new EmbedBuilder().setColor('#d6c2ee')
-      .setTitle('<a:trophies:1512912823062364281> Level System')
-      .setDescription('Members earn XP by chatting and level up over time — the XP curve gets progressively harder, naturally forming Easy/Medium/Hard tiers.\n\n⚠️ **Off by default** — run `/level config enabled:True` to turn XP gain on for your server.')
+      .setTitle('🏅 Level System')
       .addFields(
-        { name: '🟢 Turn On/Off', value: '`/level config enabled:True`\nXP gain is fully opt-in — nothing accrues until this is set.', inline: false },
-        { name: '📊 Check Level', value: '`/level check [user]`\nShows level, tier (🟢 Easy / 🟡 Medium / 🔴 Hard), total XP, and progress to the next level.', inline: false },
-        { name: '🏆 Leaderboard', value: '`/level leaderboard`\nTop 10 members by level.', inline: false },
-        { name: '⚙️ Configure', value: '`/level config levelup_channel:#ch announce:True xp_min:15 xp_max:25 cooldown_seconds:60`\nSet a dedicated channel for level-up announcements (defaults to wherever the message was sent), tune XP range and cooldown, or turn announcements off entirely.', inline: false },
-        { name: '🚫 Exclude Channels', value: '`/level exclude add channel:#bot-commands`\n`/level exclude remove channel:#ch`\n`/level exclude list`\nStop specific channels from earning XP.', inline: false },
-        { name: '✏️ Manually Set Level', value: '`/level set user:@member level:10`\nAdmin override — also what shop level-up items would hook into if built later.', inline: false },
-        { name: '🗑️ Reset Server', value: '`/level reset confirm:True`\nWipes every member\'s level and XP on this server. Cannot be undone.', inline: false },
-      )
-      .setFooter({ text: 'XP curve: 5×level² + 50×level + 100 needed per level (same formula MEE6 uses)' }),
+        { name: 'How do I turn leveling on?', value: '`/level config enabled:True` — off by default.', inline: false },
+        { name: 'How do I check my level?', value: '`/level check` — or `/level leaderboard` for the top of the server.', inline: false },
+      ),
 
     staffpay: new EmbedBuilder().setColor('#d6c2ee')
-      .setTitle('<a:payout:1512913911953756291> Staff & Payroll')
-      .setDescription('Manage your staff roster, track eligibility, and handle payouts.')
+      .setTitle('👥 Staff & Payroll')
       .addFields(
-        { name: '👤 Staff Roster', value: '`/staff add user:@member role:staff pay:500 currency:MEE6` — add someone to the roster\n`/staff remove user:@member`\n`/staff list`', inline: false },
-        { name: '📋 Staff Report', value: '`/staff report user:@member`\nFull eligibility report — games hosted, schedule adherence, payout status.', inline: false },
-        { name: '💰 Payment History', value: '`/staff payhistory user:@member`\nShows their last 15 payments plus last-paid and next-due dates.', inline: false },
-        { name: '✅ Mark Paid', value: '`/admin mark-paid user:@member amount:500`\nLogs the payment, DMs a receipt, and updates their next-due date automatically.', inline: false },
-        { name: '📊 Payroll Overview', value: '`/admin payroll [user]` — current status for staff/boosters\n`/admin pay-summary` — full server pay summary, splits into multiple fields if the list is long\n`/admin paycheck-check user:@member` — single-member eligibility check\n`/admin daily-report period:` — daily/weekly staff activity report', inline: false },
-        { name: '⚠️ Late & Missed', value: '`/admin late-payouts` — overdue payouts\n`/admin missed-schedules` — staff who missed scheduled sessions\n`/admin stop-reminder id:` — stop a specific payout reminder', inline: false },
-        { name: '⚙️ Configure Requirements', value: '`/admin set-requirements min_games: min_auto_games: min_raffles: min_giveaways: max_late_payouts: bonus_per_game:`\n`/admin set-daily-goals role: games: autogames: payouts:`\n`/admin set-roles mod_role: admin_role: game_ping_role:`\n`/admin set-channels schedule_channel: winner_channel: ticket_channel: staff_notif_channel: transcript_channel:`\n`/admin set-timezone timezone:`', inline: false },
-        { name: '💎 Boosters', value: '`/booster add user:@member amount:10 currency:MEE6 tier:...` \n`/booster remove user:@member`\n`/booster paid user:@member`\n`/booster list` / `/booster overdue`', inline: false },
-        { name: '💸 My Unpaid Games', value: '`/payout [staff]`\nStaff can check their own unpaid games; admins can check anyone\'s.', inline: false },
-      )
-      .setFooter({ text: 'See /admin settings-summary for a full config snapshot' }),
+        { name: 'How do I add someone to staff?', value: '`/staff add user:@member role:staff`', inline: false },
+        { name: 'How do I mark someone as paid?', value: '`/admin mark-paid user:@member amount:500`', inline: false },
+        { name: 'How do I see staff activity or pay status?', value: '`/admin staff-report period:` for activity, `/admin payroll` for pay status.', inline: false },
+        { name: 'How do I configure pay requirements or goals?', value: 'That\'s in `/settings` — `requirements`, `daily-goals`, `roles`, `channels`, `timezone`.', inline: false },
+      ),
 
     playregret: new EmbedBuilder().setColor('#d6c2ee')
-      .setTitle('<a:SINS:1522338148380704910> Play & Regret Integration')
-      .setDescription('VELOURA connects directly to the **Play & Regret** bot\'s database to award <:sins:1522291331672703100> **Sins** currency automatically.')
+      .setTitle('<a:SINS:1522338148380704910> Play & Regret')
       .addFields(
-        { name: 'How it works', value: 'When a Rumble Royale battle ends, VELOURA detects the winner and automatically adds Sins to their Play & Regret balance. No manual action needed.', inline: false },
-        { name: '⚔️ Set Reward Amount', value: 'Use `/rr setup reward:500` to configure how many Sins winners receive per channel. Each channel can have a different reward.', inline: false },
-        { name: '<a:moneybag:1522373120147849226> Check Balance', value: 'Members can check their Sins balance using Play & Regret\'s `!bal` command.', inline: false },
-        { name: '<a:SINS:1522338148380704910> Sins Commands (Play & Regret)', value: '`/sins balance` — check your balance\n`/sins give @user amount:100` — transfer Sins to another member\n`/grantsins @user amount:100` — owner grants Sins without deducting', inline: false },
-        { name: '⚙️ Setup Required', value: 'The `PLAY_AND_REGRET_DB_URL` environment variable must be set in VELOURA\'s Railway config to enable the connection.', inline: false },
-      )
-      .setFooter({ text: 'Sins are awarded automatically on every RR win' }),
+        { name: 'What is Sins?', value: 'Play & Regret\'s currency — Veloura reads/writes to the same wallet for RR rewards, shop purchases, and wheel prizes.', inline: false },
+        { name: 'How do I check a wallet balance?', value: '`/rr wallet user:@member`', inline: false },
+      ),
 
     rolepanel: new EmbedBuilder().setColor('#d6c2ee')
-      .setTitle('<:role:1524456992683593979> Role Panels')
-      .setDescription('Self-assign role panels — members pick their own roles via dropdown or reaction.')
+      .setTitle('🎭 Role Panels')
       .addFields(
-        { name: '⚙️ Create Panel', value: '`/rolepanel create name:game-pings title:"Game Pings" style:Dropdown channel:#roles description:"..."`\nCreates a panel. `style` is `Dropdown` (multi-select menu) or `Reaction` (react to toggle).', inline: false },
-        { name: '➕ Add Role', value: '`/rolepanel addrole name:game-pings role:@Fortnite emoji:🎮 label:"Fortnite"`\nAdds a role option — panel auto-reposts with the new option.', inline: false },
-        { name: '➖ Remove Role', value: '`/rolepanel removerole name:game-pings role:@Fortnite`', inline: false },
-        { name: '📄 List Panels', value: '`/rolepanel list [name]`\nShows all panels, or one panel\'s full role list.', inline: false },
-        { name: '🗑️ Delete Panel', value: '`/rolepanel delete name:game-pings`', inline: false },
-        { name: '🔁 Repost', value: '`/rolepanel repost name:game-pings`\nRebuilds and reposts the panel — also refreshes role names live if any were renamed since the panel was created.', inline: false },
-      )
-      .setFooter({ text: 'Dropdown panels support multi-select — members can toggle several roles in one interaction' }),
+        { name: 'How do I create a role panel?', value: '`/rolepanel create name:"..." title:"..." channel:#ch` then `/rolepanel addrole` to add roles to it.', inline: false },
+        { name: 'What if the panel message gets deleted?', value: '`/rolepanel repost name:"..."` rebuilds it — also refreshes role names if any were renamed.', inline: false },
+      ),
 
     shop: new EmbedBuilder().setColor('#d6c2ee')
-      .setTitle('<a:shop:1524457010714640464> Shop')
-      .setDescription('Spend Sins on Roles, Auto Reactions, Nicknames, Level Ups, and Custom items — buy now, activate with `/shop use` when ready.')
+      .setTitle('🛒 Shop')
       .addFields(
-        { name: '⚙️ Setup', value: '`/shop setup shop_channel:#shop fulfillment_channel:#staff-orders`\nAlso settable via `/settings channels shop:#ch shop_fulfillment:#ch`.', inline: false },
-        { name: '➕ Add Item', value: '`/shop additem name:"VIP Role" price:5000 type:Role role:@VIP category:"Roles" duration_amount:7 duration_unit:Days`\nTypes: Role, Auto Reaction (buyer picks their own emoji), Nickname (rename another member), Nickname Remover (reset your own), Level Up (grants +N levels — set `levels:`), Custom (staff fulfills).', inline: false },
-        { name: '🛍️ Buy', value: 'Members pick an item from the shop panel dropdown. This charges Sins and adds it to their inventory — nothing activates yet. A DM receipt is sent automatically.', inline: false },
-        { name: '✅ Use', value: '`/shop use item_id:3`\nActivates an item from inventory — grants the role, prompts for an emoji/nickname target if needed, adds levels, or notifies staff (Custom items). This is what removes it from inventory.', inline: false },
-        { name: '🎁 Gift', value: '`/shop gift item_id:3 to:@friend`\nSend an unused item straight to someone else\'s inventory — free, no purchase needed on their end.', inline: false },
-        { name: '🎒 Inventory', value: '`/shop inventory [user]`\nShows unused items (need `/shop use`) and active items (with expiry countdowns).', inline: false },
-        { name: '✏️ Edit / Remove Item', value: '`/shop edititem item_id:3 price:6000` — only fills in fields you provide\n`/shop removeitem item_id:3`', inline: false },
-        { name: '🔄 Revoke', value: '`/shop revoke user:@member item_id:3`\nPulls back a used role/nickname and marks the purchase expired.', inline: false },
-        { name: '📋 List / Repost', value: '`/shop list` — admin view of all items, grouped by category\n`/shop repost` — rebuilds the panel if its message was deleted', inline: false },
-      )
-      .setFooter({ text: 'Each category gets its own embed + dropdown, so the panel never hits Discord\'s size limits' }),
+        { name: 'How do I set up the shop?', value: '`/shop setup shop_channel:#ch fulfillment_channel:#ch`', inline: false },
+        { name: 'How do I add an item?', value: '`/shop additem name:"..." price:100 type:"..."`', inline: false },
+        { name: 'How does a member buy or use something?', value: 'They browse the posted panel; `/shop use item_id:` to use it, `/shop gift` to give it to someone else.', inline: false },
+      ),
 
     giveaway: new EmbedBuilder().setColor('#d6c2ee')
-      .setTitle('<a:purplesparkle:1512912828489793626> Giveaways')
-      .setDescription('Live, auto-running giveaways — members react to enter, winner(s) picked automatically when time\'s up.')
+      .setTitle('🎁 Giveaways')
       .addFields(
-        { name: '🎉 Start', value: '`/giveaway start prize:"Nitro" duration_amount:1 duration_unit:Days winners:1 thumbnail:<upload> entry_emoji:🎉 claim_hours:6 ticket_channel:#claim`\nOnly `prize` and duration are required. If you have bonus-entry or required roles configured, you\'ll get a dropdown to pick which apply to this giveaway.', inline: false },
-        { name: '✨ Bonus Entries', value: '`/giveaway bonusrole add role:@VIP entries:2`\nBuilds a reusable library. Entries stack if someone qualifies for multiple roles.', inline: false },
-        { name: '📜 Entry Requirements (unlimited roles)', value: '`/giveaway requiredrole add roles:@Role1 @Role2 @Role3` — add as many at once as you want, one command\nA member must have ALL selected roles to be eligible — pick which ones apply per giveaway from a dropdown at start time.', inline: false },
-        { name: '🎫 Check My Entries', value: 'Every giveaway posts a "Check My Entries" button — members can click it anytime to see their ticket count and which bonus roles are contributing, without needing to ask staff.', inline: false },
-        { name: '📋 See Everyone\'s Entries', value: '`/giveaway entries id:4`\nHost/staff view — every eligible entrant sorted by ticket count, plus anyone who reacted but got excluded for missing a required role.', inline: false },
-        { name: '✏️ Edit', value: '`/giveaway edit id:4 prize:"..." winners:2 duration_amount:1 duration_unit:Hours thumbnail:<upload>`\nHost only. Changing the duration properly reschedules the auto-end, not just the display.', inline: false },
-        { name: '🏁 End Early', value: '`/giveaway end id:4`\nPicks winner(s) now instead of waiting.', inline: false },
-        { name: '❌ Cancel', value: '`/giveaway cancel id:4`\nHost only. Ends it with no winner picked at all — different from `end`, which always picks someone.', inline: false },
-        { name: '🔁 Reroll', value: '`/giveaway reroll id:4 count:1`\nPicks new winner(s) for an already-ended giveaway, excluding previous winners.', inline: false },
-        { name: '🔁 Repost', value: '`/giveaway repost id:4`\nRebuilds the message if it was deleted — does nothing if it still exists, to protect everyone\'s entries.', inline: false },
-        { name: '📋 List', value: '`/giveaway list`\nShows every active giveaway with its ID, time remaining, and channel.', inline: false },
-      )
-      .setFooter({ text: 'Anyone who reacts with anything other than the entry emoji is simply ignored' }),
+        { name: 'How do I start a giveaway?', value: '`/giveaway start prize:"..." duration_amount:1 duration_unit:Days`', inline: false },
+        { name: 'How do I give certain roles extra entries?', value: '`/giveaway bonusrole add role:@VIP entries:2`', inline: false },
+        { name: 'How do I require a role to enter?', value: '`/giveaway requiredrole add roles:@Role1 @Role2`', inline: false },
+        { name: 'How can members check their own entries?', value: 'Every giveaway has a "Check My Entries" button — no command needed.', inline: false },
+        { name: 'How do I edit, cancel, or end one early?', value: '`/giveaway edit id:`, `/giveaway cancel id:` (host only, no winner picked), `/giveaway end id:` (picks a winner now).', inline: false },
+      ),
 
     verify: new EmbedBuilder().setColor('#d6c2ee')
       .setTitle('🔐 Verification')
-      .setDescription('Two separate reactions — rules, then a verification trigger — followed by a captcha, all in-server, no DMs involved.')
       .addFields(
-        { name: '⚙️ Setup', value: '`/verify setup verified_role:@Verified rules_channel:#rules captcha_channel:#verification rules_text:"..." rules_emoji:✅ verify_emoji:🔓`\nPosts TWO messages: rules in `rules_channel`, and a separate "Start Verification" trigger in `captcha_channel`. Custom emojis work for both — type `<a` or `<:` and pick from your server\'s list.', inline: false },
-        { name: '👤 The Flow', value: '1. Member reacts to rules (✅ or your custom emoji) — this reaction is permanent, never removed, and triggers a quick self-deleting nudge pointing them to the captcha channel\n2. Member reacts to the "Start Verification" message there — also stays reacted permanently. If they skipped step 1, they\'re told to go do that first instead.\n3. Bot posts their personal captcha code with "Solve Captcha" and "New Code" buttons\n4. Correct code → instant verified role. Wrong → told how many of their 5 attempts are left, or click "New Code" anytime for a fresh one (no need to touch any reaction).', inline: false },
-        { name: '📌 Stays Glued to the Bottom', value: 'The "Start Verification" message automatically reposts itself to stay at the bottom of the captcha channel as new captcha challenges get posted — it\'ll never get buried by other verifications happening.', inline: false },
-        { name: '🎨 Customize the Captcha', value: '`/verify customize-captcha title:"..." instructions:"..." verify_emoji:<emoji>`\nOnly applies to \*new\* captcha challenges going forward — doesn\'t change the trigger message text itself.', inline: false },
-        { name: '✏️ Edit Rules', value: '`/verify edit-rules title:"..." text:"..." reaction_emoji:<emoji>`\nEdits the rules message in place — only fills in fields you provide.', inline: false },
-        { name: '👋 Welcome Message', value: '`/verify welcome channel:#welcome text:"Hey {user}, welcome!\\n\\nCheck out..." title:"Welcome!" image:<url>`\nPosts automatically the moment someone verifies. `{user}` mentions them in your text, and they\'re always pinged for real regardless (mentions inside embeds alone don\'t trigger notifications). Optional — leave unset and nothing extra happens.', inline: false },
-        { name: '🔁 Repost', value: '`/verify repost-rules` / `/verify repost-verify`\nRebuilds either message if it was deleted — does nothing if it still exists, to avoid duplicates.', inline: false },
-        { name: '📋 Status', value: '`/verify status user:@member`\nCheck if someone\'s verified, or mid-captcha with how many attempts used.', inline: false },
-      )
-      .setFooter({ text: 'The code is plain text, not an image — blocks casual bots/spam, not a sophisticated targeted attack' }),
+        { name: 'How do I set up verification?', value: '`/verify setup verified_role:@Role rules_channel:#ch captcha_channel:#ch rules_text:"..."`', inline: false },
+        { name: 'How does a member actually verify?', value: 'React to rules → react to start the captcha → solve the code → role assigned automatically.', inline: false },
+        { name: 'How do I add a welcome message?', value: '`/verify welcome channel:#ch text:"Hey {user}, welcome!"` — posts the moment someone joins.', inline: false },
+        { name: 'How do I edit the rules later?', value: '`/verify edit-rules text:"..."` — only fills in what you provide.', inline: false },
+      ),
 
     config: new EmbedBuilder().setColor('#d6c2ee')
       .setTitle('⚙️ Server Config')
