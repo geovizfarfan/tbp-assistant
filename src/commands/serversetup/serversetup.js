@@ -60,15 +60,10 @@ const CATEGORIES = {
     ],
   },
   goosty: {
-    label: 'Ghosty Settings',
-    emoji: '👻',
-    description: 'GoosDate reminders and private rooms.',
-    items: [
-      'Set GoosDate — `/goosdate set`',
-      'GoosDate toggle — `/settings goosdate enabled:`',
-      'GoosDate status — `/goosdate status`',
-      'Private room setup — `/privateroom setup`',
-    ],
+    label: 'Extras & Utilities',
+    emoji: '✨',
+    description: 'GoosDate reminders and private rooms — buttons below.',
+    items: [],
   },
   boosters: {
     label: 'Server Booster Set',
@@ -241,6 +236,30 @@ function buildStaffUserPicker(action) {
   return new ActionRowBuilder().addComponents(menu);
 }
 
+function buildExtrasButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_extras:goosdatesetup').setLabel('GoosDate Setup').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('serversetup_extras:goosdateon').setLabel('GoosDate ON').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('serversetup_extras:goosdateoff').setLabel('GoosDate OFF').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('serversetup_extras:goosdatestatus').setLabel('GoosDate Status').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_extras:privateroom').setLabel('Post Private Room Button').setStyle(ButtonStyle.Secondary),
+  );
+}
+
+function buildGoosdateChannelPicker() {
+  const menu = new ChannelSelectMenuBuilder()
+    .setCustomId('serversetup_goosdatechan')
+    .setPlaceholder('Pick the channel for GoosDate reminders');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildGoosdateRolePicker(channelId) {
+  const menu = new RoleSelectMenuBuilder()
+    .setCustomId(`serversetup_goosdaterole:${channelId}`)
+    .setPlaceholder('Pick the role to ping');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -313,6 +332,13 @@ module.exports = {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
         components: [buildStaffButtons(), buildBackButton()],
+      });
+    }
+
+    if (key === 'goosty') {
+      return interaction.update({
+        embeds: [buildCategoryEmbed(key, interaction.guild)],
+        components: [buildExtrasButtons(), buildBackButton()],
       });
     }
 
@@ -583,5 +609,71 @@ module.exports = {
     );
 
     return interaction.editReply(`✅ <@${user.id}> added as **${role}** — ${pay} ${currency}/period.`);
+  },
+
+  async handleExtrasButton(interaction) {
+    const [, action] = interaction.customId.split(':');
+
+    if (action === 'goosdatesetup') {
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the channel for GoosDate reminders:')],
+        components: [buildGoosdateChannelPicker(), buildBackButton()],
+      });
+    }
+
+    if (action === 'goosdatestatus') {
+      const { status } = require('../goosdate/goosdate');
+      return status(interaction);
+    }
+
+    if (action === 'privateroom') {
+      const { setupButton } = require('../privateroom/privateroom');
+      return setupButton(interaction);
+    }
+
+    if (action === 'goosdateon' || action === 'goosdateoff') {
+      await interaction.deferUpdate();
+      const enabled = action === 'goosdateon';
+      const res = await query(
+        `UPDATE goosdate_config SET enabled=$1, updated_at=NOW() WHERE guild_id=$2 RETURNING *`,
+        [enabled, interaction.guildId]
+      );
+      if (!res.rows.length) {
+        return interaction.editReply({
+          embeds: [new EmbedBuilder().setColor('#ff4444').setDescription('❌ GoosDate hasn\'t been set up yet — use GoosDate Setup first.')],
+          components: [buildExtrasButtons(), buildBackButton()],
+        });
+      }
+      return interaction.editReply({
+        embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ GoosDate reminders are now **${enabled ? 'ON' : 'OFF'}**.`)],
+        components: [buildExtrasButtons(), buildBackButton()],
+      });
+    }
+  },
+
+  async handleGoosdateChannelPicked(interaction) {
+    const channel = interaction.channels.first();
+    return interaction.update({
+      embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription(`Channel set to <#${channel.id}>. Now pick the role to ping:`)],
+      components: [buildGoosdateRolePicker(channel.id), buildBackButton()],
+    });
+  },
+
+  async handleGoosdateRolePicked(interaction) {
+    const [, channelId] = interaction.customId.split(':');
+    const role = interaction.roles.first();
+    await interaction.deferUpdate();
+
+    await query(
+      `INSERT INTO goosdate_config (guild_id, channel_id, role_id, enabled)
+       VALUES ($1,$2,$3,true)
+       ON CONFLICT (guild_id) DO UPDATE SET channel_id=$2, role_id=$3, enabled=true`,
+      [interaction.guildId, channelId, role.id]
+    );
+
+    return interaction.editReply({
+      embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ GoosDate reminders will post in <#${channelId}> and ping <@&${role.id}>.`)],
+      components: [buildExtrasButtons(), buildBackButton()],
+    });
   },
 };

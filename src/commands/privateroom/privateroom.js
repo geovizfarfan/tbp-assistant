@@ -15,6 +15,7 @@ module.exports = {
     const sub = interaction.options.getSubcommand();
     if (sub === 'setup') return setupButton(interaction);
   },
+  setupButton,
 };
 
 async function setupButton(interaction) {

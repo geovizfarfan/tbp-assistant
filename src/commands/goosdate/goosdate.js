@@ -28,6 +28,7 @@ module.exports = {
     if (sub === 'toggle') return toggle(interaction);
     if (sub === 'status') return status(interaction);
   },
+  status,
 };
 
 async function setup(interaction) {

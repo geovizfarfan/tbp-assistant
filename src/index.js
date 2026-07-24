@@ -265,6 +265,18 @@ client.on('interactionCreate', async (interaction) => {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleStaffUserPicked(interaction);
   }
+  if (interaction.isButton() && interaction.customId.startsWith('serversetup_extras:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleExtrasButton(interaction);
+  }
+  if (interaction.isChannelSelectMenu() && interaction.customId === 'serversetup_goosdatechan') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleGoosdateChannelPicked(interaction);
+  }
+  if (interaction.isRoleSelectMenu() && interaction.customId.startsWith('serversetup_goosdaterole:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleGoosdateRolePicked(interaction);
+  }
   if (interaction.isStringSelectMenu() && interaction.customId === 'help_category') {
     return helpModule.handleSelect(interaction, client);
   }
