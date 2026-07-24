@@ -58,12 +58,15 @@ module.exports = {
         .addChannelOption(o => o.setName('channel').setDescription('Channel for admin logs (leave empty to clear)'))))
 
     // ── add (host description/reward) ────────────────────────────────────
-    .addSubcommand(sub => sub
-      .setName('add')
-      .setDescription('Add a one-time reward or description to the next battle (staff/mod)')
-      .addChannelOption(o => o.setName('channel').setDescription('RR channel').setRequired(true))
-      .addStringOption(o => o.setName('other_reward').setDescription('Custom reward (e.g. Sticker, Nitro Basic)'))
-      .addStringOption(o => o.setName('description').setDescription('One-time battle description (use \\n for new lines)')))
+    .addSubcommandGroup(group => group
+      .setName('reward')
+      .setDescription('One-time rewards for the next battle')
+      .addSubcommand(sub => sub
+        .setName('add')
+        .setDescription('Add a one-time reward or description to the next battle (staff/mod)')
+        .addChannelOption(o => o.setName('channel').setDescription('RR channel').setRequired(true))
+        .addStringOption(o => o.setName('other_reward').setDescription('Custom reward (e.g. Sticker, Nitro Basic)'))
+        .addStringOption(o => o.setName('description').setDescription('One-time battle description (use \\n for new lines)'))))
 
     // ── repost (manually resend battle-start announcement) ──────────────────
     .addSubcommand(sub => sub
@@ -268,7 +271,7 @@ module.exports = {
     }
 
     // ── /rr add ───────────────────────────────────────────────────────────
-    if (sub === 'add') {
+    if (group === 'reward' && sub === 'add') {
       // Check mod/admin role OR staff roster membership
       const gcRes = await query('SELECT mod_role_id, admin_role_id FROM guild_config WHERE guild_id = $1', [interaction.guild.id]);
       const gc = gcRes.rows[0];

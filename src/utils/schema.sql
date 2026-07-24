@@ -474,8 +474,18 @@ CREATE TABLE IF NOT EXISTS rumble_slaughter_config (
   guild_id TEXT NOT NULL,
   winner_role_id TEXT,
   ping_role_id TEXT,
+  next_channel_id TEXT,
+  battle_title TEXT,
+  description TEXT,
+  other_reward TEXT,
+  host_description TEXT,
   announce BOOLEAN NOT NULL DEFAULT TRUE
 );
+ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS next_channel_id TEXT;
+ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS battle_title TEXT;
+ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS other_reward TEXT;
+ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS host_description TEXT;
 
 CREATE TABLE IF NOT EXISTS rr_guild_config (
   guild_id TEXT PRIMARY KEY,

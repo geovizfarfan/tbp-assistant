@@ -36,13 +36,18 @@ async function handleMessage(message, client) {
 
   if (await alreadyProcessed(message.id)) return;
 
-  // Winner is now a direct mention: "<@123456789> wins..."
+  // Winner is a direct mention: "<@123456789> wins..."
   const match = embed.description?.match(/^<@!?(\d+)>\s+wins/i);
   if (!match) {
     console.log('[RumbleSlaughter] Could not parse winner mention from champion message:', embed.description?.slice(0, 80));
     return;
   }
   const winnerId = match[1];
+
+  // Pull the pot they actually won, straight from Play & Regret's own message —
+  // Veloura never awards this itself, just summarizes what they already got.
+  const potMatch = embed.description?.match(/\+([\d,]+)\s*sins/i);
+  const pot = potMatch ? potMatch[1] : null;
 
   const config = await query('SELECT * FROM rumble_slaughter_config WHERE channel_id = $1', [message.channel.id]);
   if (!config.rows.length || !config.rows[0].winner_role_id) return; // Not configured for this channel
@@ -65,15 +70,34 @@ async function handleMessage(message, client) {
 
   if (!cfg.announce) return;
 
-  const pingLine = cfg.ping_role_id ? `<@&${cfg.ping_role_id}> ` : '';
+  const descLines = [];
+  descLines.push(`<@${member.id}> has been crowned champion and awarded <@&${cfg.winner_role_id}>!`);
+  if (pot) descLines.push(`🪙 **Pot Won:** ${pot} Sins`);
+  if (cfg.other_reward) descLines.push(`🎁 **Bonus Reward:** ${cfg.other_reward}`);
+  if (cfg.host_description) descLines.push(cfg.host_description);
+  if (cfg.description) descLines.push(cfg.description);
+  if (cfg.next_channel_id) descLines.push(`➡️ **Next Game:** <#${cfg.next_channel_id}>`);
+
   const roleEmbed = new EmbedBuilder()
     .setColor('#d6c2ee')
-    .setTitle('💀 Rumble Slaughter — Champion!')
-    .setDescription(`${pingLine}<@${member.id}> has been crowned champion of Rumble Slaughter and awarded <@&${cfg.winner_role_id}>!`)
+    .setTitle(cfg.battle_title || '💀 Rumble Slaughter — Champion!')
+    .setDescription(descLines.join('\n'))
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
     .setTimestamp();
 
   await message.channel.send({ embeds: [roleEmbed] }).catch(() => {});
+
+  // Ping to get a new game going
+  if (cfg.ping_role_id) {
+    await message.channel.send({
+      content: `<@&${cfg.ping_role_id}> ready to run another round of Rumble Slaughter?`,
+    }).catch(() => {});
+  }
+
+  // Clear the one-time reward/description now that it's been used
+  if (cfg.other_reward || cfg.host_description) {
+    await query('UPDATE rumble_slaughter_config SET other_reward = NULL, host_description = NULL WHERE channel_id = $1', [message.channel.id]).catch(() => {});
+  }
 }
 
 module.exports = { handleMessage };

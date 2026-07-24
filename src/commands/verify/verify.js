@@ -22,12 +22,6 @@ module.exports = {
       .addStringOption(o => o.setName('text').setDescription('New rules text (use \\n for new lines)'))
       .addStringOption(o => o.setName('reaction_emoji').setDescription('New reaction emoji (changes what members react with)')))
     .addSubcommand(sub => sub
-      .setName('customize-captcha')
-      .setDescription('Customize the captcha step — only fills in fields you provide')
-      .addStringOption(o => o.setName('title').setDescription('Title shown on the personal captcha challenge (default: "🔐 Verification")'))
-      .addStringOption(o => o.setName('instructions').setDescription('Extra instructions shown above the code (use \\n for new lines)'))
-      .addStringOption(o => o.setName('verify_emoji').setDescription('New reaction emoji for the verification-trigger message')))
-    .addSubcommand(sub => sub
       .setName('repost-rules')
       .setDescription('Repost the rules message if it was deleted'))
     .addSubcommand(sub => sub
@@ -132,45 +126,6 @@ module.exports = {
       `, [finalTitle, finalText, finalEmoji, interaction.guildId]);
 
       return interaction.editReply(`✅ Rules updated. ${msg.url}`);
-    }
-
-    if (sub === 'customize-captcha') {
-      const title = interaction.options.getString('title');
-      const instructions = interaction.options.getString('instructions')?.replace(/\\n/g, '\n');
-      const newEmoji = interaction.options.getString('verify_emoji');
-
-      if (!title && !instructions && !newEmoji) return interaction.editReply('❌ Provide at least one of `title`, `instructions`, or `verify_emoji`.');
-
-      const cfgRes = await query('SELECT * FROM verify_config WHERE guild_id = $1', [interaction.guildId]);
-      if (!cfgRes.rows.length) return interaction.editReply('❌ Verification isn\'t set up yet — run `/verify setup` first.');
-      const cfg = cfgRes.rows[0];
-
-      const updateRes = await query(`
-        UPDATE verify_config SET
-          captcha_title = COALESCE($1, captcha_title),
-          captcha_instructions = COALESCE($2, captcha_instructions),
-          verify_emoji = COALESCE($3, verify_emoji)
-        WHERE guild_id = $4
-        RETURNING captcha_title, captcha_instructions, verify_emoji
-      `, [title, instructions, newEmoji, interaction.guildId]);
-
-      console.log('[Verify] customize-captcha update result:', updateRes.rows[0]);
-
-      if (newEmoji && newEmoji !== cfg.verify_emoji && cfg.captcha_channel_id && cfg.verify_message_id) {
-        const captchaChannel = await interaction.client.channels.fetch(cfg.captcha_channel_id).catch(() => null);
-        const verifyMsg = captchaChannel ? await captchaChannel.messages.fetch(cfg.verify_message_id).catch(() => null) : null;
-        if (verifyMsg) {
-          await verifyMsg.reactions.removeAll().catch(() => {});
-          await verifyMsg.react(newEmoji).catch(() => {});
-          const embed = EmbedBuilder.from(verifyMsg.embeds[0]).setDescription(
-            `Once you've reacted to the rules, react with ${newEmoji} below to start your captcha.`
-          );
-          await verifyMsg.edit({ embeds: [embed] }).catch(() => {});
-        }
-      }
-
-      const saved = updateRes.rows[0];
-      return interaction.editReply(`✅ Captcha settings updated:\nTitle: ${saved.captcha_title}\nInstructions: ${saved.captcha_instructions || '*(none)*'}\nVerify Emoji: ${saved.verify_emoji}\n\nNote: these only appear on a *new* captcha challenge — they won't change the "Start Verification" trigger message text itself. React again (as a test account) to see them applied.`);
     }
 
     if (sub === 'repost-rules') {
