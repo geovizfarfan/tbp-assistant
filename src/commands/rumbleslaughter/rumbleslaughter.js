@@ -23,7 +23,11 @@ module.exports = {
         .setDescription('Add a one-time reward or description to the next champion announcement (staff/mod)')
         .addChannelOption(o => o.setName('channel').setDescription('RS channel').setRequired(true))
         .addStringOption(o => o.setName('other_reward').setDescription('Custom reward (e.g. Sticker, Nitro Basic)'))
-        .addStringOption(o => o.setName('description').setDescription('One-time description (use \\n for new lines)'))))
+        .addStringOption(o => o.setName('description').setDescription('One-time description (use \\n for new lines)')))
+      .addSubcommand(sub => sub
+        .setName('remove')
+        .setDescription('Clear the pending one-time reward before it gets used')
+        .addChannelOption(o => o.setName('channel').setDescription('RS channel').setRequired(true))))
     .addSubcommand(sub => sub
       .setName('info')
       .setDescription('View the current config for a channel')
@@ -79,6 +83,19 @@ module.exports = {
         [otherReward, description, channel.id]);
 
       return interaction.editReply(`✅ One-time reward/description added — will appear on the next champion announcement in <#${channel.id}>, then clear automatically.`);
+    }
+
+    if (group === 'reward' && sub === 'remove') {
+      const channel = interaction.options.getChannel('channel');
+      const res = await query('SELECT * FROM rumble_slaughter_config WHERE channel_id = $1', [channel.id]);
+      if (!res.rows.length) return interaction.editReply(`❌ <#${channel.id}> isn't configured yet — run \`/rs setup\` first.`);
+
+      if (!res.rows[0].other_reward && !res.rows[0].host_description) {
+        return interaction.editReply(`❌ There's no pending one-time reward to remove for <#${channel.id}>.`);
+      }
+
+      await query(`UPDATE rumble_slaughter_config SET other_reward = NULL, host_description = NULL WHERE channel_id = $1`, [channel.id]);
+      return interaction.editReply(`✅ Pending one-time reward removed for <#${channel.id}>.`);
     }
 
     if (sub === 'info') {

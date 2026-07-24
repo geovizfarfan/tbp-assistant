@@ -66,7 +66,11 @@ module.exports = {
         .setDescription('Add a one-time reward or description to the next battle (staff/mod)')
         .addChannelOption(o => o.setName('channel').setDescription('RR channel').setRequired(true))
         .addStringOption(o => o.setName('other_reward').setDescription('Custom reward (e.g. Sticker, Nitro Basic)'))
-        .addStringOption(o => o.setName('description').setDescription('One-time battle description (use \\n for new lines)'))))
+        .addStringOption(o => o.setName('description').setDescription('One-time battle description (use \\n for new lines)')))
+      .addSubcommand(sub => sub
+        .setName('remove')
+        .setDescription('Clear the pending one-time reward before it gets used')
+        .addChannelOption(o => o.setName('channel').setDescription('RR channel').setRequired(true))))
 
     // ── repost (manually resend battle-start announcement) ──────────────────
     .addSubcommand(sub => sub
@@ -316,6 +320,44 @@ module.exports = {
         .setTitle('<:rumble:1522372419338375299> Battle Info Added!')
         .setDescription((lines.join('\n') || 'Nothing added.') + liveUpdateNote)
         .setFooter({ text: liveUpdateNote ? 'Updated the live announcement — no need to wait for the next battle.' : 'This will appear in the next battle announcement and clear after.' })]});
+    }
+
+    if (group === 'reward' && sub === 'remove') {
+      const gcRes = await query('SELECT mod_role_id, admin_role_id FROM guild_config WHERE guild_id = $1', [interaction.guild.id]);
+      const gc = gcRes.rows[0];
+      const staffRes = await query('SELECT 1 FROM staff WHERE user_id = $1 AND active = true', [interaction.user.id]);
+      const isAllowed = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
+        interaction.user.id === process.env.OWNER_ID ||
+        (gc?.mod_role_id && interaction.member.roles.cache.has(gc.mod_role_id)) ||
+        (gc?.admin_role_id && interaction.member.roles.cache.has(gc.admin_role_id)) ||
+        staffRes.rows.length > 0;
+
+      if (!isAllowed) return interaction.editReply('❌ Staff/Mod only.');
+
+      const channel = interaction.options.getChannel('channel');
+      const cfgRes = await query('SELECT * FROM rr_channel_config WHERE channel_id = $1', [channel.id]);
+      if (!cfgRes.rows.length) return interaction.editReply('❌ That channel is not configured for RR tracking.');
+
+      if (!cfgRes.rows[0].other_reward && !cfgRes.rows[0].host_description) {
+        return interaction.editReply('❌ There\'s no pending one-time reward to remove for that channel.');
+      }
+
+      await query(`UPDATE rr_channel_config SET other_reward = NULL, host_description = NULL WHERE channel_id = $1`, [channel.id]);
+
+      // Also clear it from the currently-live battle announcement, if one exists
+      let liveUpdateNote = '';
+      if (cfgRes.rows[0].last_battle_message_id && cfgRes.rows[0].announce_style !== 'ping') {
+        const liveMsg = await channel.messages.fetch(cfgRes.rows[0].last_battle_message_id).catch(() => null);
+        if (liveMsg) {
+          const { buildBattleAnnouncement } = require('../../events/rumbleRoyale');
+          const freshCfgRes = await query('SELECT * FROM rr_channel_config WHERE channel_id = $1', [channel.id]);
+          const announcement = await buildBattleAnnouncement(freshCfgRes.rows[0], channel, liveMsg.embeds[0]?.footer?.text?.match(/Hosted by: ([^•]+)/)?.[1]?.trim() || 'Unknown');
+          await liveMsg.edit({ embeds: announcement.embeds }).catch(() => {});
+          liveUpdateNote = ' The live announcement was also updated.';
+        }
+      }
+
+      return interaction.editReply(`✅ Pending one-time reward removed.${liveUpdateNote}`);
     }
 
     // ── /rr repost ────────────────────────────────────────────────────────
