@@ -229,6 +229,18 @@ client.on('interactionCreate', async (interaction) => {
     const { handleNewCodeButton } = require('./events/verification');
     return handleNewCodeButton(interaction);
   }
+  if (interaction.isButton() && interaction.customId.startsWith('serversetup_nav:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleButton(interaction);
+  }
+  if (interaction.isStringSelectMenu() && interaction.customId === 'serversetup_channelpick') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleChannelSettingSelect(interaction);
+  }
+  if (interaction.isChannelSelectMenu() && interaction.customId.startsWith('serversetup_channelset:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleChannelPicked(interaction);
+  }
   if (interaction.isStringSelectMenu() && interaction.customId === 'help_category') {
     return helpModule.handleSelect(interaction, client);
   }

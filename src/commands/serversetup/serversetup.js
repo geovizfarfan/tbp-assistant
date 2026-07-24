@@ -1,4 +1,14 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, StringSelectMenuBuilder, ChannelSelectMenuBuilder } = require('discord.js');
+const { query } = require('../../utils/database');
+
+const CHANNEL_SETTINGS = {
+  schedule:  { label: 'Game Schedule Board',   column: 'schedule_channel_id' },
+  winners:   { label: 'Winners Channel',       column: 'winner_channel_id' },
+  ticket:    { label: 'Ticket Channel',        column: 'ticket_channel_id' },
+  staff_notif: { label: 'Staff Notifications', column: 'staff_notif_channel_id' },
+  boost:     { label: 'Boost Announcement',    column: 'boost_channel_id' },
+  transcript: { label: 'Game Transcripts',     column: 'game_transcript_channel_id' },
+};
 
 const CATEGORIES = {
   channels: {
@@ -150,6 +160,25 @@ function buildBackButton() {
   );
 }
 
+function buildChannelSettingSelect() {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId('serversetup_channelpick')
+    .setPlaceholder('Which channel do you want to set?')
+    .addOptions(Object.entries(CHANNEL_SETTINGS).map(([key, cfg]) => ({
+      label: cfg.label,
+      value: key,
+    })));
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildChannelPicker(settingKey) {
+  const menu = new ChannelSelectMenuBuilder()
+    .setCustomId(`serversetup_channelset:${settingKey}`)
+    .setPlaceholder(`Pick the channel for ${CHANNEL_SETTINGS[settingKey].label}`);
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('server-setup')
@@ -196,9 +225,55 @@ module.exports = {
       });
     }
 
+    if (key === 'channels') {
+      return interaction.update({
+        embeds: [buildCategoryEmbed(key, interaction.guild)],
+        components: [buildChannelSettingSelect(), buildBackButton()],
+      });
+    }
+
     return interaction.update({
       embeds: [buildCategoryEmbed(key, interaction.guild)],
       components: [buildBackButton()],
+    });
+  },
+
+  async handleChannelSettingSelect(interaction) {
+    const settingKey = interaction.values[0];
+    const cfg = CHANNEL_SETTINGS[settingKey];
+
+    const embed = new EmbedBuilder()
+      .setColor('#d6c2ee')
+      .setTitle(`📺 Set ${cfg.label}`)
+      .setDescription('Pick the channel below.');
+
+    return interaction.update({
+      embeds: [embed],
+      components: [buildChannelPicker(settingKey), buildChannelSettingSelect(), buildBackButton()],
+    });
+  },
+
+  async handleChannelPicked(interaction) {
+    const [, settingKey] = interaction.customId.split(':');
+    const cfg = CHANNEL_SETTINGS[settingKey];
+    if (!cfg) return;
+
+    const channel = interaction.channels.first();
+    await interaction.deferUpdate();
+
+    await query(`
+      INSERT INTO guild_config (guild_id, ${cfg.column})
+      VALUES ($1, $2)
+      ON CONFLICT (guild_id) DO UPDATE SET ${cfg.column} = $2
+    `, [interaction.guildId, channel.id]);
+
+    const embed = new EmbedBuilder()
+      .setColor('#2ecc71')
+      .setDescription(`✅ **${cfg.label}** set to <#${channel.id}>.`);
+
+    return interaction.editReply({
+      embeds: [embed],
+      components: [buildChannelSettingSelect(), buildBackButton()],
     });
   },
 };
