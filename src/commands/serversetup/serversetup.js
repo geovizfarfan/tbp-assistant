@@ -78,6 +78,12 @@ const CATEGORIES = {
       'Boost announcement channel — configure via Server Channel Set',
     ],
   },
+  staff: {
+    label: 'Staff & Payroll',
+    emoji: '👥',
+    description: 'Staff roster and pay tracking — buttons below.',
+    items: [],
+  },
   summary: {
     label: 'Settings Summary',
     emoji: '📋',
@@ -218,6 +224,23 @@ function buildBoosterUserPicker(action) {
   return new ActionRowBuilder().addComponents(menu);
 }
 
+function buildStaffButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_staff:add').setLabel('Add Staff').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('serversetup_staff:remove').setLabel('Remove Staff').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('serversetup_staff:list').setLabel('List').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_staff:report').setLabel('Full Report').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('serversetup_staff:payhistory').setLabel('Pay History').setStyle(ButtonStyle.Secondary),
+  );
+}
+
+function buildStaffUserPicker(action) {
+  const menu = new UserSelectMenuBuilder()
+    .setCustomId(`serversetup_staffuser:${action}`)
+    .setPlaceholder(`Pick who to ${action}`);
+  return new ActionRowBuilder().addComponents(menu);
+}
+
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -283,6 +306,13 @@ module.exports = {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
         components: [buildBoosterButtons(), buildBackButton()],
+      });
+    }
+
+    if (key === 'staff') {
+      return interaction.update({
+        embeds: [buildCategoryEmbed(key, interaction.guild)],
+        components: [buildStaffButtons(), buildBackButton()],
       });
     }
 
@@ -469,5 +499,89 @@ module.exports = {
     );
 
     return interaction.editReply(`✅ <@${user.id}> added as a **${tier}** booster — ${amount} ${currency}/month.`);
+  },
+
+  async handleStaffButton(interaction) {
+    const [, action] = interaction.customId.split(':');
+
+    if (action === 'list') {
+      const { listStaff } = require('../staff/staff');
+      return listStaff(interaction);
+    }
+
+    return interaction.update({
+      embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription(`Pick who to ${action}:`)],
+      components: [buildStaffUserPicker(action), buildBackButton()],
+    });
+  },
+
+  async handleStaffUserPicked(interaction) {
+    const [, action] = interaction.customId.split(':');
+    const user = interaction.users.first();
+
+    if (action === 'add') {
+      const modal = new ModalBuilder()
+        .setCustomId(`serversetup_staffmodal:${user.id}`)
+        .setTitle(`Add Staff: ${user.username}`);
+
+      const roleInput = new TextInputBuilder().setCustomId('role').setLabel('Role (owner/admin/staff/host/rumble_host)').setStyle(TextInputStyle.Short).setRequired(true);
+      const currencyInput = new TextInputBuilder().setCustomId('currency').setLabel('Pay Currency (Crowns / Sins / Goos)').setStyle(TextInputStyle.Short).setRequired(false);
+      const payInput = new TextInputBuilder().setCustomId('pay').setLabel('Pay Amount').setStyle(TextInputStyle.Short).setRequired(false);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(roleInput),
+        new ActionRowBuilder().addComponents(currencyInput),
+        new ActionRowBuilder().addComponents(payInput),
+      );
+      return interaction.showModal(modal);
+    }
+
+    if (action === 'remove') {
+      await interaction.deferUpdate();
+      await query(`UPDATE staff SET active=false WHERE user_id=$1`, [user.id]);
+      return interaction.editReply({
+        embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ <@${user.id}> removed from staff.`)],
+        components: [buildStaffButtons(), buildBackButton()],
+      });
+    }
+
+    if (action === 'report') {
+      const { staffReport } = require('../staff/staff');
+      return staffReport(interaction, user);
+    }
+
+    if (action === 'payhistory') {
+      const { payHistory } = require('../staff/staff');
+      return payHistory(interaction, user);
+    }
+  },
+
+  async handleStaffAddModal(interaction) {
+    const [, userId] = interaction.customId.split(':');
+    await interaction.deferReply({ ephemeral: true });
+
+    const role = interaction.fields.getTextInputValue('role').toLowerCase().trim();
+    const currency = interaction.fields.getTextInputValue('currency') || 'Crowns';
+    const payRaw = interaction.fields.getTextInputValue('pay');
+    const pay = payRaw ? parseInt(payRaw, 10) : 0;
+
+    const validRoles = ['owner', 'admin', 'staff', 'host', 'rumble_host'];
+    if (!validRoles.includes(role)) return interaction.editReply(`❌ Role must be one of: ${validRoles.join(', ')}`);
+    if (payRaw && isNaN(pay)) return interaction.editReply('❌ Pay amount must be a number.');
+
+    const user = await interaction.client.users.fetch(userId).catch(() => null);
+    if (!user) return interaction.editReply('❌ Could not find that user.');
+
+    const nextDue = new Date();
+    nextDue.setDate(nextDue.getDate() + 30);
+
+    await query(
+      `INSERT INTO staff (user_id, username, role, pay_currency, pay_amount, next_pay_due_at, added_by, guild_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (user_id) DO UPDATE SET role=$3, pay_currency=$4, pay_amount=$5, active=true, guild_id=$8`,
+      [user.id, user.username, role, currency, pay, nextDue, interaction.user.id, interaction.guildId]
+    );
+
+    return interaction.editReply(`✅ <@${user.id}> added as **${role}** — ${pay} ${currency}/period.`);
   },
 };

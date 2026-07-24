@@ -63,6 +63,9 @@ module.exports = {
     if (sub === 'report') await staffReport(interaction);
     if (sub === 'payhistory') await payHistory(interaction);
   },
+  listStaff,
+  staffReport,
+  payHistory,
 };
 
 async function addStaff(interaction) {
@@ -125,8 +128,8 @@ async function listStaff(interaction) {
   await interaction.editReply({ embeds: [embed] });
 }
 
-async function staffReport(interaction) {
-  const user = interaction.options.getUser('user');
+async function staffReport(interaction, userOverride) {
+  const user = userOverride || interaction.options.getUser('user');
   await interaction.deferReply();
 
   const staffRes = await query(`SELECT * FROM staff WHERE user_id=$1`, [user.id]);
@@ -165,8 +168,8 @@ async function staffReport(interaction) {
   await interaction.editReply({ embeds: [embed] });
 }
 
-async function payHistory(interaction) {
-  const user = interaction.options.getUser('user');
+async function payHistory(interaction, userOverride) {
+  const user = userOverride || interaction.options.getUser('user');
   await interaction.deferReply();
 
   const staffRes = await query(`SELECT * FROM staff WHERE user_id=$1`, [user.id]);
