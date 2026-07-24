@@ -249,6 +249,14 @@ client.on('interactionCreate', async (interaction) => {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleRolePicked(interaction);
   }
+  if (interaction.isButton() && interaction.customId.startsWith('serversetup_booster:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleBoosterButton(interaction);
+  }
+  if (interaction.isUserSelectMenu() && interaction.customId.startsWith('serversetup_boosteruser:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleBoosterUserPicked(interaction);
+  }
   if (interaction.isStringSelectMenu() && interaction.customId === 'help_category') {
     return helpModule.handleSelect(interaction, client);
   }
@@ -273,6 +281,10 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isModalSubmit() && interaction.customId.startsWith('embededit_modal:')) {
     const { handleEditModal } = require('./commands/embed/embed');
     return handleEditModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('serversetup_boostermodal:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleBoosterAddModal(interaction);
   }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('verify_modal:')) {
     const { handleCaptchaModal } = require('./events/verification');

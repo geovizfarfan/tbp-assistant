@@ -54,6 +54,8 @@ module.exports = {
     if (sub === 'list')    await listBoosters(interaction);
     if (sub === 'overdue') await overdueBoosters(interaction);
   },
+  listBoosters,
+  overdueBoosters,
 };
 
 async function addBooster(interaction) {

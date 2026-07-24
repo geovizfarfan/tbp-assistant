@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, StringSelectMenuBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, StringSelectMenuBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, UserSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { query } = require('../../utils/database');
 
 const CHANNEL_SETTINGS = {
@@ -73,10 +73,9 @@ const CATEGORIES = {
   boosters: {
     label: 'Server Booster Set',
     emoji: '🚀',
-    description: 'Server boost tracking and announcements.',
+    description: 'Server boost tracking and announcements — buttons below.',
     items: [
-      'Booster add/remove/list — *not yet built, coming in a later phase*',
-      'Boost announcement channel — `/settings channels boost:`',
+      'Boost announcement channel — configure via Server Channel Set',
     ],
   },
   summary: {
@@ -202,6 +201,23 @@ function buildRolePicker(settingKey) {
   return new ActionRowBuilder().addComponents(menu);
 }
 
+function buildBoosterButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_booster:add').setLabel('Add Booster').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('serversetup_booster:remove').setLabel('Remove Booster').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('serversetup_booster:paid').setLabel('Mark Paid').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('serversetup_booster:list').setLabel('List').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_booster:overdue').setLabel('Overdue').setStyle(ButtonStyle.Secondary),
+  );
+}
+
+function buildBoosterUserPicker(action) {
+  const menu = new UserSelectMenuBuilder()
+    .setCustomId(`serversetup_boosteruser:${action}`)
+    .setPlaceholder(`Pick who to ${action}`);
+  return new ActionRowBuilder().addComponents(menu);
+}
+
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -260,6 +276,13 @@ module.exports = {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
         components: [buildRoleSettingSelect(), buildBackButton()],
+      });
+    }
+
+    if (key === 'boosters') {
+      return interaction.update({
+        embeds: [buildCategoryEmbed(key, interaction.guild)],
+        components: [buildBoosterButtons(), buildBackButton()],
       });
     }
 
@@ -345,5 +368,106 @@ module.exports = {
       embeds: [embed],
       components: [buildRoleSettingSelect(), buildBackButton()],
     });
+  },
+
+  async handleBoosterButton(interaction) {
+    const [, action] = interaction.customId.split(':');
+
+    if (action === 'list') {
+      const { listBoosters } = require('../admin/booster');
+      return listBoosters(interaction);
+    }
+    if (action === 'overdue') {
+      const { overdueBoosters } = require('../admin/booster');
+      return overdueBoosters(interaction);
+    }
+
+    // add / remove / paid all need a user first
+    return interaction.update({
+      embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription(`Pick who to ${action}:`)],
+      components: [buildBoosterUserPicker(action), buildBackButton()],
+    });
+  },
+
+  async handleBoosterUserPicked(interaction) {
+    const [, action] = interaction.customId.split(':');
+    const user = interaction.users.first();
+
+    if (action === 'add') {
+      const modal = new ModalBuilder()
+        .setCustomId(`serversetup_boostermodal:${user.id}`)
+        .setTitle(`Add Booster: ${user.username}`);
+
+      const amountInput = new TextInputBuilder().setCustomId('amount').setLabel('Monthly Amount').setStyle(TextInputStyle.Short).setRequired(true);
+      const currencyInput = new TextInputBuilder().setCustomId('currency').setLabel('Currency (Crowns / Sins / Goos)').setStyle(TextInputStyle.Short).setRequired(false);
+      const tierInput = new TextInputBuilder().setCustomId('tier').setLabel('Tier (basic / standard / premium)').setStyle(TextInputStyle.Short).setRequired(false);
+      const notesInput = new TextInputBuilder().setCustomId('notes').setLabel('Notes').setStyle(TextInputStyle.Paragraph).setRequired(false);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(amountInput),
+        new ActionRowBuilder().addComponents(currencyInput),
+        new ActionRowBuilder().addComponents(tierInput),
+        new ActionRowBuilder().addComponents(notesInput),
+      );
+      return interaction.showModal(modal);
+    }
+
+    await interaction.deferUpdate();
+
+    if (action === 'remove') {
+      await query(`UPDATE boosters SET active=false WHERE guild_id=$1 AND user_id=$2`, [interaction.guildId, user.id]);
+      return interaction.editReply({
+        embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ <@${user.id}> removed from booster tracking.`)],
+        components: [buildBoosterButtons(), buildBackButton()],
+      });
+    }
+
+    if (action === 'paid') {
+      const now = new Date();
+      const nextDue = new Date();
+      nextDue.setDate(nextDue.getDate() + 30);
+      const res = await query(
+        `UPDATE boosters SET last_paid_at=$1, next_pay_due_at=$2 WHERE guild_id=$3 AND user_id=$4 RETURNING *`,
+        [now, nextDue, interaction.guildId, user.id]
+      );
+      if (!res.rows.length) {
+        return interaction.editReply({
+          embeds: [new EmbedBuilder().setColor('#ff4444').setDescription(`❌ <@${user.id}> isn't tracked as a booster.`)],
+          components: [buildBoosterButtons(), buildBackButton()],
+        });
+      }
+      return interaction.editReply({
+        embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ <@${user.id}> marked paid — ${res.rows[0].amount_owed} ${res.rows[0].currency}. Next due in 30 days.`)],
+        components: [buildBoosterButtons(), buildBackButton()],
+      });
+    }
+  },
+
+  async handleBoosterAddModal(interaction) {
+    const [, userId] = interaction.customId.split(':');
+    await interaction.deferReply({ ephemeral: true });
+
+    const amount = parseInt(interaction.fields.getTextInputValue('amount'), 10);
+    const currency = interaction.fields.getTextInputValue('currency') || 'Crowns';
+    const tier = (interaction.fields.getTextInputValue('tier') || 'basic').toLowerCase();
+    const notes = interaction.fields.getTextInputValue('notes') || null;
+
+    if (isNaN(amount)) return interaction.editReply('❌ Amount must be a number.');
+    if (!['basic', 'standard', 'premium'].includes(tier)) return interaction.editReply('❌ Tier must be basic, standard, or premium.');
+
+    const user = await interaction.client.users.fetch(userId).catch(() => null);
+    if (!user) return interaction.editReply('❌ Could not find that user.');
+
+    const nextDue = new Date();
+    nextDue.setDate(nextDue.getDate() + 30);
+
+    await query(
+      `INSERT INTO boosters (guild_id, user_id, username, boost_tier, amount_owed, currency, next_pay_due_at, added_by, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (guild_id, user_id) DO UPDATE SET boost_tier=$4, amount_owed=$5, currency=$6, active=true, notes=$9`,
+      [interaction.guildId, user.id, user.username, tier, amount, currency, nextDue, interaction.user.id, notes]
+    );
+
+    return interaction.editReply(`✅ <@${user.id}> added as a **${tier}** booster — ${amount} ${currency}/month.`);
   },
 };
