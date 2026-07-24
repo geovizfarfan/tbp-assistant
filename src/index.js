@@ -241,6 +241,14 @@ client.on('interactionCreate', async (interaction) => {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleChannelPicked(interaction);
   }
+  if (interaction.isStringSelectMenu() && interaction.customId === 'serversetup_rolepick') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleRoleSettingSelect(interaction);
+  }
+  if (interaction.isRoleSelectMenu() && interaction.customId.startsWith('serversetup_roleset:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleRolePicked(interaction);
+  }
   if (interaction.isStringSelectMenu() && interaction.customId === 'help_category') {
     return helpModule.handleSelect(interaction, client);
   }

@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, StringSelectMenuBuilder, ChannelSelectMenuBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, StringSelectMenuBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder } = require('discord.js');
 const { query } = require('../../utils/database');
 
 const CHANNEL_SETTINGS = {
@@ -8,6 +8,12 @@ const CHANNEL_SETTINGS = {
   staff_notif: { label: 'Staff Notifications', column: 'staff_notif_channel_id' },
   boost:     { label: 'Boost Announcement',    column: 'boost_channel_id' },
   transcript: { label: 'Game Transcripts',     column: 'game_transcript_channel_id' },
+};
+
+const ROLE_SETTINGS = {
+  mod:       { label: 'Mod Role',       column: 'mod_role_id' },
+  admin:     { label: 'Admin Role',     column: 'admin_role_id' },
+  game_ping: { label: 'Game Ping Role', column: 'game_ping_role_id' },
 };
 
 const CATEGORIES = {
@@ -178,6 +184,24 @@ function buildChannelPicker(settingKey) {
   return new ActionRowBuilder().addComponents(menu);
 }
 
+function buildRoleSettingSelect() {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId('serversetup_rolepick')
+    .setPlaceholder('Which role do you want to set?')
+    .addOptions(Object.entries(ROLE_SETTINGS).map(([key, cfg]) => ({
+      label: cfg.label,
+      value: key,
+    })));
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildRolePicker(settingKey) {
+  const menu = new RoleSelectMenuBuilder()
+    .setCustomId(`serversetup_roleset:${settingKey}`)
+    .setPlaceholder(`Pick the role for ${ROLE_SETTINGS[settingKey].label}`);
+  return new ActionRowBuilder().addComponents(menu);
+}
+
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -232,6 +256,13 @@ module.exports = {
       });
     }
 
+    if (key === 'roles') {
+      return interaction.update({
+        embeds: [buildCategoryEmbed(key, interaction.guild)],
+        components: [buildRoleSettingSelect(), buildBackButton()],
+      });
+    }
+
     return interaction.update({
       embeds: [buildCategoryEmbed(key, interaction.guild)],
       components: [buildBackButton()],
@@ -274,6 +305,45 @@ module.exports = {
     return interaction.editReply({
       embeds: [embed],
       components: [buildChannelSettingSelect(), buildBackButton()],
+    });
+  },
+
+  async handleRoleSettingSelect(interaction) {
+    const settingKey = interaction.values[0];
+    const cfg = ROLE_SETTINGS[settingKey];
+
+    const embed = new EmbedBuilder()
+      .setColor('#d6c2ee')
+      .setTitle(`🎭 Set ${cfg.label}`)
+      .setDescription('Pick the role below.');
+
+    return interaction.update({
+      embeds: [embed],
+      components: [buildRolePicker(settingKey), buildRoleSettingSelect(), buildBackButton()],
+    });
+  },
+
+  async handleRolePicked(interaction) {
+    const [, settingKey] = interaction.customId.split(':');
+    const cfg = ROLE_SETTINGS[settingKey];
+    if (!cfg) return;
+
+    const role = interaction.roles.first();
+    await interaction.deferUpdate();
+
+    await query(`
+      INSERT INTO guild_config (guild_id, ${cfg.column})
+      VALUES ($1, $2)
+      ON CONFLICT (guild_id) DO UPDATE SET ${cfg.column} = $2
+    `, [interaction.guildId, role.id]);
+
+    const embed = new EmbedBuilder()
+      .setColor('#2ecc71')
+      .setDescription(`✅ **${cfg.label}** set to <@&${role.id}>.`);
+
+    return interaction.editReply({
+      embeds: [embed],
+      components: [buildRoleSettingSelect(), buildBackButton()],
     });
   },
 };
