@@ -75,11 +75,6 @@ const CATEGORIES = {
     label: 'Play & Regret',
     description: 'Sins currency & connection',
   },
-  config: {
-    emoji: '⚙️',
-    label: 'Server Config',
-    description: 'Setup guide & current config',
-  },
 };
 
 function buildSelectMenu(selected = null) {
@@ -238,10 +233,6 @@ function buildCategoryEmbed(category) {
         { name: 'How do I edit the rules later?', value: '`/verify edit-rules text:"..."` — only fills in what you provide.', inline: false },
       ),
 
-    config: new EmbedBuilder().setColor('#d6c2ee')
-      .setTitle('⚙️ Server Config')
-      .setDescription('Loading your server configuration...')
-      .setTimestamp(),
   };
 
   return embeds[category] || buildHomeEmbed();
@@ -374,7 +365,7 @@ async function buildConfigEmbed(guild, client) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('help')
-    .setDescription('VELOURA help center — commands, guides and server config'),
+    .setDescription('VELOURA help center — commands and guides'),
 
   async execute(interaction) {
     await interaction.reply({
@@ -388,21 +379,13 @@ module.exports = {
     if (interaction.customId !== 'help_category') return;
     const category = interaction.values[0];
 
-    let embed;
-    if (category === 'config') {
-      if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
-          interaction.user.id !== process.env.OWNER_ID) {
-        embed = new EmbedBuilder().setColor('#ff4444').setDescription('❌ Server config is admin only.');
-      } else {
-        embed = await buildConfigEmbed(interaction.guild, client);
-      }
-    } else {
-      embed = buildCategoryEmbed(category);
-    }
+    const embed = buildCategoryEmbed(category);
 
     await interaction.update({
       embeds: [embed],
       components: [buildSelectMenu(category)],
     });
   },
+
+  buildConfigEmbed,
 };
