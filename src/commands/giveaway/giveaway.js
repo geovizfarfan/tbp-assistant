@@ -132,6 +132,8 @@ module.exports = {
   scheduleGiveawayEnd,
   finishGiveaway,
   handleCheckEntriesButton,
+  bonusRoleList,
+  requiredRoleList,
 };
 
 // ═══════════════════════════════════════════════════════════════════════

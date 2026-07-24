@@ -89,14 +89,10 @@ const CATEGORIES = {
     ],
   },
   giveaways: {
-    label: 'Giveaway Settings',
+    label: 'Giveaway & Raffle Settings',
     emoji: '🎁',
-    description: 'Everything for giveaways and raffles.',
-    items: [
-      'Bonus role add/remove/list — `/giveaway bonusrole add/remove/list`',
-      'Required roles — `/giveaway requiredrole add/remove/list`',
-      'Raffle settings — `/raffle` commands',
-    ],
+    description: 'Bonus-entry and required-role libraries for giveaways — buttons below. Raffles have no separate settings; running one is `/raffle start`.',
+    items: [],
   },
   sellers: {
     label: 'Seller Settings',
@@ -260,6 +256,52 @@ function buildGoosdateRolePicker(channelId) {
   return new ActionRowBuilder().addComponents(menu);
 }
 
+function buildGiveawayButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_gw:bonusadd').setLabel('Add Bonus Role').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('serversetup_gw:bonusremove').setLabel('Remove Bonus Role').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('serversetup_gw:bonuslist').setLabel('List Bonus Roles').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_gw:reqadd').setLabel('Add Required Roles').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('serversetup_gw:reqremove').setLabel('Remove Required Role').setStyle(ButtonStyle.Danger),
+  );
+}
+
+function buildGiveawayButtons2() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_gw:reqlist').setLabel('List Required Roles').setStyle(ButtonStyle.Secondary),
+  );
+}
+
+function buildBonusRolePicker() {
+  const menu = new RoleSelectMenuBuilder()
+    .setCustomId('serversetup_gwbonusrole')
+    .setPlaceholder('Pick the bonus-entry role');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildBonusRemovePicker() {
+  const menu = new RoleSelectMenuBuilder()
+    .setCustomId('serversetup_gwbonusremove')
+    .setPlaceholder('Pick the role to remove');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildRequiredRoleAddPicker() {
+  const menu = new RoleSelectMenuBuilder()
+    .setCustomId('serversetup_gwreqadd')
+    .setPlaceholder('Pick up to 10 required roles')
+    .setMinValues(1)
+    .setMaxValues(10);
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildRequiredRemovePicker() {
+  const menu = new RoleSelectMenuBuilder()
+    .setCustomId('serversetup_gwreqremove')
+    .setPlaceholder('Pick the role to remove');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -339,6 +381,13 @@ module.exports = {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
         components: [buildExtrasButtons(), buildBackButton()],
+      });
+    }
+
+    if (key === 'giveaways') {
+      return interaction.update({
+        embeds: [buildCategoryEmbed(key, interaction.guild)],
+        components: [buildGiveawayButtons(), buildGiveawayButtons2(), buildBackButton()],
       });
     }
 
@@ -674,6 +723,108 @@ module.exports = {
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ GoosDate reminders will post in <#${channelId}> and ping <@&${role.id}>.`)],
       components: [buildExtrasButtons(), buildBackButton()],
+    });
+  },
+
+  async handleGiveawayButton(interaction) {
+    const [, action] = interaction.customId.split(':');
+
+    if (action === 'bonuslist') {
+      const { bonusRoleList } = require('../giveaway/giveaway');
+      return bonusRoleList(interaction);
+    }
+    if (action === 'reqlist') {
+      const { requiredRoleList } = require('../giveaway/giveaway');
+      return requiredRoleList(interaction);
+    }
+
+    const pickers = {
+      bonusadd: [buildBonusRolePicker(), 'Pick the role that should grant bonus entries:'],
+      bonusremove: [buildBonusRemovePicker(), 'Pick the bonus-entry role to remove:'],
+      reqadd: [buildRequiredRoleAddPicker(), 'Pick up to 10 roles to require (member must have ALL of them):'],
+      reqremove: [buildRequiredRemovePicker(), 'Pick the required role to remove:'],
+    };
+    const [picker, prompt] = pickers[action] || [];
+    if (!picker) return;
+
+    return interaction.update({
+      embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription(prompt)],
+      components: [picker, buildBackButton()],
+    });
+  },
+
+  async handleBonusRolePicked(interaction) {
+    const role = interaction.roles.first();
+
+    const modal = new ModalBuilder()
+      .setCustomId(`serversetup_gwbonusmodal:${role.id}`)
+      .setTitle(`Bonus Entries: ${role.name}`);
+
+    const entriesInput = new TextInputBuilder().setCustomId('entries').setLabel('Extra entries this role grants').setStyle(TextInputStyle.Short).setRequired(true);
+    modal.addComponents(new ActionRowBuilder().addComponents(entriesInput));
+    return interaction.showModal(modal);
+  },
+
+  async handleBonusRoleModal(interaction) {
+    const [, roleId] = interaction.customId.split(':');
+    await interaction.deferReply({ ephemeral: true });
+
+    const entries = parseInt(interaction.fields.getTextInputValue('entries'), 10);
+    if (isNaN(entries) || entries <= 0) return interaction.editReply('❌ Entries must be a whole number greater than 0.');
+
+    await query(`
+      INSERT INTO giveaway_bonus_roles (guild_id, role_id, bonus_entries)
+      VALUES ($1,$2,$3)
+      ON CONFLICT (guild_id, role_id) DO UPDATE SET bonus_entries = EXCLUDED.bonus_entries
+    `, [interaction.guildId, roleId, entries]);
+
+    return interaction.editReply(`✅ <@&${roleId}> now grants **+${entries}** bonus ${entries === 1 ? 'entry' : 'entries'}.`);
+  },
+
+  async handleBonusRoleRemovePicked(interaction) {
+    const role = interaction.roles.first();
+    await interaction.deferUpdate();
+
+    const del = await query('DELETE FROM giveaway_bonus_roles WHERE guild_id=$1 AND role_id=$2 RETURNING id', [interaction.guildId, role.id]);
+    const msg = del.rows.length
+      ? `✅ Removed <@&${role.id}> from the bonus-entry library.`
+      : `❌ <@&${role.id}> wasn't in the bonus-entry library.`;
+
+    return interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(del.rows.length ? '#2ecc71' : '#ff4444').setDescription(msg)],
+      components: [buildGiveawayButtons(), buildGiveawayButtons2(), buildBackButton()],
+    });
+  },
+
+  async handleRequiredRoleAddPicked(interaction) {
+    await interaction.deferUpdate();
+    const roles = [...interaction.roles.values()];
+
+    for (const role of roles) {
+      await query(`
+        INSERT INTO giveaway_required_roles (guild_id, role_id) VALUES ($1,$2)
+        ON CONFLICT (guild_id, role_id) DO NOTHING
+      `, [interaction.guildId, role.id]);
+    }
+
+    return interaction.editReply({
+      embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Added to the entry-requirement library: ${roles.map(r => `<@&${r.id}>`).join(', ')}`)],
+      components: [buildGiveawayButtons(), buildGiveawayButtons2(), buildBackButton()],
+    });
+  },
+
+  async handleRequiredRoleRemovePicked(interaction) {
+    const role = interaction.roles.first();
+    await interaction.deferUpdate();
+
+    const del = await query('DELETE FROM giveaway_required_roles WHERE guild_id=$1 AND role_id=$2 RETURNING id', [interaction.guildId, role.id]);
+    const msg = del.rows.length
+      ? `✅ Removed <@&${role.id}> from the entry-requirement library.`
+      : `❌ <@&${role.id}> wasn't in the entry-requirement library.`;
+
+    return interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(del.rows.length ? '#2ecc71' : '#ff4444').setDescription(msg)],
+      components: [buildGiveawayButtons(), buildGiveawayButtons2(), buildBackButton()],
     });
   },
 };

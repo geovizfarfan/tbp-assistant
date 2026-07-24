@@ -277,6 +277,26 @@ client.on('interactionCreate', async (interaction) => {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleGoosdateRolePicked(interaction);
   }
+  if (interaction.isButton() && interaction.customId.startsWith('serversetup_gw:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleGiveawayButton(interaction);
+  }
+  if (interaction.isRoleSelectMenu() && interaction.customId === 'serversetup_gwbonusrole') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleBonusRolePicked(interaction);
+  }
+  if (interaction.isRoleSelectMenu() && interaction.customId === 'serversetup_gwbonusremove') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleBonusRoleRemovePicked(interaction);
+  }
+  if (interaction.isRoleSelectMenu() && interaction.customId === 'serversetup_gwreqadd') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleRequiredRoleAddPicked(interaction);
+  }
+  if (interaction.isRoleSelectMenu() && interaction.customId === 'serversetup_gwreqremove') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleRequiredRoleRemovePicked(interaction);
+  }
   if (interaction.isStringSelectMenu() && interaction.customId === 'help_category') {
     return helpModule.handleSelect(interaction, client);
   }
@@ -309,6 +329,10 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isModalSubmit() && interaction.customId.startsWith('serversetup_staffmodal:')) {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleStaffAddModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('serversetup_gwbonusmodal:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleBonusRoleModal(interaction);
   }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('verify_modal:')) {
     const { handleCaptchaModal } = require('./events/verification');
