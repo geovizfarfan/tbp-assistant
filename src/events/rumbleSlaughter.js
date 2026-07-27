@@ -83,10 +83,9 @@ async function handleArenaOpen(message, embed) {
     descLines.push('');
   }
   if (cfg.host_description) descLines.push('', cfg.host_description, '');
-  descLines.push(`<@${hostId}> just opened the arena — jump in!`);
-  if (entryFee) descLines.push(`🪙 **Entry Fee:** ${entryFee} Sins`);
-  if (cfg.other_reward) descLines.push(`🎁 **Bonus Reward:** ${cfg.other_reward}`);
-  if (cfg.next_channel_id) descLines.push(`➡️ **Next Room:** <#${cfg.next_channel_id}>`);
+  if (entryFee) descLines.push(`<a:moneybag:1522373120147849226> **Entry Fee:** ${entryFee} Sins`);
+  if (cfg.other_reward) descLines.push(`<a:gift:1512915751458050268> **Bonus Reward:** ${cfg.other_reward}`);
+  if (cfg.next_channel_id) descLines.push(`<a:rumblesword:1522372420894330921> **Next Room:** <#${cfg.next_channel_id}>`);
 
   const startEmbed = new EmbedBuilder()
     .setColor(cfg.embed_color || '#d6c2ee')
@@ -155,11 +154,11 @@ async function handleChampion(message, embed) {
 
   const descLines = [];
   descLines.push(`<@${member.id}> has been crowned champion and awarded <@&${cfg.winner_role_id}>!`);
-  if (pot) descLines.push(`🪙 **Pot Won:** ${pot} Sins`);
-  if (cfg.other_reward) descLines.push(`🎁 **Bonus Reward:** ${cfg.other_reward}`);
+  if (pot) descLines.push(`<a:moneybag:1522373120147849226> **Pot Won:** ${pot} Sins`);
+  if (cfg.other_reward) descLines.push(`<a:gift:1512915751458050268> **Bonus Reward:** ${cfg.other_reward}`);
   if (cfg.host_description) descLines.push(cfg.host_description);
   if (cfg.description) descLines.push(cfg.description);
-  if (cfg.next_channel_id) descLines.push(`➡️ **Next Game:** <#${cfg.next_channel_id}>`);
+  if (cfg.next_channel_id) descLines.push(`<a:rumblesword:1522372420894330921> **Next Game:** <#${cfg.next_channel_id}>`);
 
   const roleEmbed = new EmbedBuilder()
     .setColor(cfg.embed_color || '#d6c2ee')
