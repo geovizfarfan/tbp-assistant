@@ -24,7 +24,7 @@ async function handleMessage(message, client) {
   if (!message.embeds?.length) return;
 
   const embed = message.embeds[0];
-  if (!embed.title || !embed.title.includes('RUMBLE SLAUGHTER') || !embed.title.includes('CHAMPION')) return;
+  if (!embed.title || !embed.title.includes('RUMBLE SLAUGHTER')) return;
 
   // Ignore anything not genuinely fresh — same protection RR uses against
   // old/edited messages being reprocessed as brand new events.
@@ -33,6 +33,50 @@ async function handleMessage(message, client) {
     console.log(`[RumbleSlaughter] Ignoring stale message ${message.id} — ${Math.round(ageMs / 60000)}m old.`);
     return;
   }
+
+  if (embed.title.includes('CHAMPION')) return handleChampion(message, embed);
+  return handleArenaOpen(message, embed);
+}
+
+async function handleArenaOpen(message, embed) {
+  // Host is a direct mention: "<@123456789> opened the arena."
+  const match = embed.description?.match(/^<@!?(\d+)>\s+opened the arena/i);
+  if (!match) {
+    console.log('[RumbleSlaughter] Could not parse host mention from arena-open message:', embed.description?.slice(0, 80));
+    return;
+  }
+  const hostId = match[1];
+
+  if (await alreadyProcessed(message.id)) return;
+
+  const config = await query('SELECT * FROM rumble_slaughter_config WHERE channel_id = $1', [message.channel.id]);
+  if (!config.rows.length) return; // Not configured for this channel
+  const cfg = config.rows[0];
+  if (!cfg.announce) return;
+
+  const entryMatch = embed.description?.match(/Entry fee:\s*\*{0,2}([\d,]+)\s*sins/i);
+  const entryFee = entryMatch ? entryMatch[1] : null;
+  const eraMatch = embed.description?.match(/Era:\s*\*{0,2}([^\n*]+)/i);
+  const era = eraMatch ? eraMatch[1].trim() : null;
+
+  const descLines = [`<@${hostId}> just opened a Rumble Slaughter arena — jump in!`];
+  if (entryFee) descLines.push(`🪙 **Entry Fee:** ${entryFee} Sins`);
+  if (era) descLines.push(`✨ **Era:** ${era}`);
+  if (cfg.other_reward) descLines.push(`🎁 **Bonus Reward:** ${cfg.other_reward}`);
+  if (cfg.host_description) descLines.push(cfg.host_description);
+  if (cfg.description) descLines.push(cfg.description);
+
+  const startEmbed = new EmbedBuilder()
+    .setColor('#d6c2ee')
+    .setTitle('⚔️ Rumble Slaughter — Arena Open!')
+    .setDescription(descLines.join('\n'))
+    .setTimestamp();
+
+  const content = cfg.ping_role_id ? `<@&${cfg.ping_role_id}>` : undefined;
+  await message.channel.send({ content, embeds: [startEmbed] }).catch(() => {});
+}
+
+async function handleChampion(message, embed) {
 
   if (await alreadyProcessed(message.id)) return;
 
