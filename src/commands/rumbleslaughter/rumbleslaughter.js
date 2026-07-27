@@ -15,6 +15,7 @@ module.exports = {
       .addStringOption(o => o.setName('battle_title').setDescription('Custom title for the champion announcement'))
       .addStringOption(o => o.setName('description').setDescription('Custom description (use \\n for new lines)'))
       .addAttachmentOption(o => o.setName('image').setDescription('Upload image shown on the arena-open and champion announcements'))
+      .addStringOption(o => o.setName('image_url').setDescription('Or paste image URL'))
       .addBooleanOption(o => o.setName('announce').setDescription('Post a confirmation embed when a role is assigned (default: True)')))
     .addSubcommandGroup(group => group
       .setName('reward')
@@ -56,7 +57,7 @@ module.exports = {
       const battleTitle = interaction.options.getString('battle_title');
       const description = interaction.options.getString('description')?.replace(/\\n/g, '\n');
       const imageAttach = interaction.options.getAttachment('image');
-      const imageUrl = imageAttach?.url || null;
+      const imageUrl = imageAttach?.url || interaction.options.getString('image_url') || null;
       const announce = interaction.options.getBoolean('announce');
 
       await query(`
