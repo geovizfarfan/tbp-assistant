@@ -19,6 +19,11 @@ async function alreadyProcessed(messageId) {
   return res.rows.length === 0;
 }
 
+function buildPings(cfg) {
+  return [cfg.ping_role_id, cfg.ping_role2_id, cfg.ping_role3_id]
+    .filter(Boolean).map(id => `<@&${id}>`).join(' ');
+}
+
 async function handleMessage(message, client) {
   if (message.author.id !== PLAY_AND_REGRET_BOT_ID) return;
   if (!message.embeds?.length) return;
@@ -54,6 +59,14 @@ async function handleArenaOpen(message, embed) {
   const cfg = config.rows[0];
   if (!cfg.announce) return;
 
+  const pings = buildPings(cfg);
+
+  if (cfg.announce_style === 'ping') {
+    const nextLine = cfg.next_channel_id ? `➡️ Next Room: <#${cfg.next_channel_id}>` : '';
+    await message.channel.send({ content: `${pings}\n${nextLine}`.trim() }).catch(() => {});
+    return;
+  }
+
   const entryMatch = embed.description?.match(/Entry fee:\s*\*{0,2}([\d,]+)\s*sins/i);
   const entryFee = entryMatch ? entryMatch[1] : null;
   const eraMatch = embed.description?.match(/Era:\s*\*{0,2}([^\n*]+)/i);
@@ -76,26 +89,24 @@ async function handleArenaOpen(message, embed) {
   if (cfg.next_channel_id) descLines.push(`➡️ **Next Room:** <#${cfg.next_channel_id}>`);
 
   const startEmbed = new EmbedBuilder()
-    .setColor('#d6c2ee')
+    .setColor(cfg.embed_color || '#d6c2ee')
     .setAuthor({ name: (message.channel.name || '').slice(0, 256) })
     .setTitle((cfg.battle_title || '⚔️ Rumble Slaughter — Arena Open!').slice(0, 256))
     .setDescription(descLines.join('\n').slice(0, 4096))
     .setFooter({ text: `${message.guild.name} • Hosted by: ${hostName}${era ? ` • Era: ${era}` : ''}` });
   if (cfg.image_url) startEmbed.setImage(cfg.image_url);
 
-  const pingContent = cfg.ping_role_id ? `<@&${cfg.ping_role_id}>` : undefined;
-  const sentMsg = await message.channel.send({ content: pingContent, embeds: [startEmbed] }).catch(() => null);
+  const sentMsg = await message.channel.send({ content: pings || undefined, embeds: [startEmbed] }).catch(() => null);
 
   if (sentMsg) {
     await query(`
       UPDATE rumble_slaughter_config SET last_message_id = $1, last_embed_json = $2, last_ping_content = $3
       WHERE channel_id = $4
-    `, [sentMsg.id, JSON.stringify(startEmbed.toJSON()), pingContent || null, message.channel.id]).catch(() => {});
+    `, [sentMsg.id, JSON.stringify(startEmbed.toJSON()), pings || null, message.channel.id]).catch(() => {});
   }
 }
 
 async function handleChampion(message, embed) {
-
   if (await alreadyProcessed(message.id)) return;
 
   // Winner is a direct mention: "<@123456789> wins..."
@@ -132,6 +143,16 @@ async function handleChampion(message, embed) {
 
   if (!cfg.announce) return;
 
+  const pings = buildPings(cfg);
+
+  if (cfg.announce_style === 'ping') {
+    await message.channel.send({ content: `${pings}\n<@${member.id}> is the champion!`.trim() }).catch(() => {});
+    if (cfg.other_reward || cfg.host_description) {
+      await query('UPDATE rumble_slaughter_config SET other_reward = NULL, host_description = NULL WHERE channel_id = $1', [message.channel.id]).catch(() => {});
+    }
+    return;
+  }
+
   const descLines = [];
   descLines.push(`<@${member.id}> has been crowned champion and awarded <@&${cfg.winner_role_id}>!`);
   if (pot) descLines.push(`🪙 **Pot Won:** ${pot} Sins`);
@@ -141,7 +162,7 @@ async function handleChampion(message, embed) {
   if (cfg.next_channel_id) descLines.push(`➡️ **Next Game:** <#${cfg.next_channel_id}>`);
 
   const roleEmbed = new EmbedBuilder()
-    .setColor('#d6c2ee')
+    .setColor(cfg.embed_color || '#d6c2ee')
     .setAuthor({ name: (message.channel.name || '').slice(0, 256) })
     .setTitle(cfg.battle_title || '💀 Rumble Slaughter — Champion!')
     .setDescription(descLines.join('\n'))
@@ -160,10 +181,8 @@ async function handleChampion(message, embed) {
   }
 
   // Ping to get a new game going
-  if (cfg.ping_role_id) {
-    await message.channel.send({
-      content: `<@&${cfg.ping_role_id}> ready to run another round of Rumble Slaughter?`,
-    }).catch(() => {});
+  if (pings) {
+    await message.channel.send({ content: `${pings} ready to run another round of Rumble Slaughter?` }).catch(() => {});
   }
 
   // Clear the one-time reward/description now that it's been used
@@ -172,4 +191,34 @@ async function handleChampion(message, embed) {
   }
 }
 
-module.exports = { handleMessage };
+// Auto-react to chat messages posted by members holding an RS winner role —
+// mirrors Rumble Royale's "flex your win" reaction, unrelated to the
+// announcements themselves. Fires on every guild message, same as RR's version.
+const reactedMessages = new Set();
+async function handleReaction(message) {
+  if (message.author.bot) return;
+  if (reactedMessages.has(message.id)) return;
+  reactedMessages.add(message.id);
+  if (reactedMessages.size > 2000) reactedMessages.clear();
+
+  try {
+    const res = await query(
+      'SELECT winner_role_id, reaction_emoji FROM rumble_slaughter_config WHERE guild_id = $1 AND winner_role_id IS NOT NULL AND reaction_emoji IS NOT NULL',
+      [message.guild.id]
+    );
+    if (!res.rows.length) return;
+
+    const member = await message.guild.members.fetch(message.author.id).catch(() => null);
+    if (!member) return;
+
+    for (const row of res.rows) {
+      if (member.roles.cache.has(row.winner_role_id)) {
+        await message.react(row.reaction_emoji).catch((e) => {
+          console.error('[RumbleSlaughter] react error:', e.message);
+        });
+      }
+    }
+  } catch (e) { console.error('[RumbleSlaughter] handleReaction error:', e.message); }
+}
+
+module.exports = { handleMessage, handleReaction };

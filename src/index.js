@@ -469,6 +469,12 @@ client.on('messageCreate', async (message) => {
   try { await handleRRReaction(message, client); }
   catch (e) { /* ignore reaction errors */ }
 });
+client.on('messageCreate', async (message) => {
+  try {
+    const { handleReaction } = require('./events/rumbleSlaughter');
+    await handleReaction(message);
+  } catch (e) { /* ignore reaction errors */ }
+});
 
 // Auto-react to messages from members who bought a shop reaction perk
 client.on('messageCreate', async (message) => {

@@ -474,12 +474,17 @@ CREATE TABLE IF NOT EXISTS rumble_slaughter_config (
   guild_id TEXT NOT NULL,
   winner_role_id TEXT,
   ping_role_id TEXT,
+  ping_role2_id TEXT,
+  ping_role3_id TEXT,
   next_channel_id TEXT,
   battle_title TEXT,
   description TEXT,
   other_reward TEXT,
   host_description TEXT,
   image_url TEXT,
+  embed_color TEXT,
+  reaction_emoji TEXT,
+  announce_style TEXT DEFAULT 'embed',
   announce BOOLEAN NOT NULL DEFAULT TRUE,
   last_message_id TEXT,
   last_embed_json TEXT,
@@ -489,6 +494,11 @@ ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_message_id TEXT;
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_embed_json TEXT;
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_ping_content TEXT;
+ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS ping_role2_id TEXT;
+ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS ping_role3_id TEXT;
+ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS embed_color TEXT;
+ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS reaction_emoji TEXT;
+ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS announce_style TEXT DEFAULT 'embed';
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS next_channel_id TEXT;
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS battle_title TEXT;
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS description TEXT;

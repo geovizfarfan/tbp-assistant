@@ -11,11 +11,19 @@ module.exports = {
       .addChannelOption(o => o.setName('channel').setDescription('Channel Rumble Slaughter runs in').setRequired(true))
       .addRoleOption(o => o.setName('winner_role').setDescription('Role to auto-assign to the champion'))
       .addRoleOption(o => o.setName('ping_role').setDescription('Role to ping in the announcement and to host again'))
+      .addRoleOption(o => o.setName('ping_role2').setDescription('Second ping role'))
+      .addRoleOption(o => o.setName('ping_role3').setDescription('Third ping role'))
       .addChannelOption(o => o.setName('next_channel').setDescription('Next game room'))
       .addStringOption(o => o.setName('battle_title').setDescription('Custom title for the champion announcement'))
       .addStringOption(o => o.setName('description').setDescription('Custom description (use \\n for new lines)'))
       .addAttachmentOption(o => o.setName('image').setDescription('Upload image shown on the arena-open and champion announcements'))
       .addStringOption(o => o.setName('image_url').setDescription('Or paste image URL'))
+      .addStringOption(o => o.setName('embed_color').setDescription('Embed color hex, e.g. #d6c2ee'))
+      .addStringOption(o => o.setName('reaction_emoji').setDescription('Emoji to auto-react to chat messages from the winner role (separate from the announcement)'))
+      .addStringOption(o => o.setName('announce_style').setDescription('Announcement format').addChoices(
+        { name: 'Full embed', value: 'embed' },
+        { name: 'Ping only (no embed)', value: 'ping' },
+      ))
       .addBooleanOption(o => o.setName('announce').setDescription('Post a confirmation embed when a role is assigned (default: True)')))
     .addSubcommandGroup(group => group
       .setName('reward')
@@ -57,25 +65,35 @@ module.exports = {
       const channel = interaction.options.getChannel('channel');
       const winnerRole = interaction.options.getRole('winner_role');
       const pingRole = interaction.options.getRole('ping_role');
+      const pingRole2 = interaction.options.getRole('ping_role2');
+      const pingRole3 = interaction.options.getRole('ping_role3');
       const nextChannel = interaction.options.getChannel('next_channel');
       const battleTitle = interaction.options.getString('battle_title');
       const description = interaction.options.getString('description')?.replace(/\\n/g, '\n');
       const imageAttach = interaction.options.getAttachment('image');
       const imageUrl = imageAttach?.url || interaction.options.getString('image_url') || null;
+      const embedColor = interaction.options.getString('embed_color');
+      const reactionEmoji = interaction.options.getString('reaction_emoji');
+      const announceStyle = interaction.options.getString('announce_style');
       const announce = interaction.options.getBoolean('announce');
 
       await query(`
-        INSERT INTO rumble_slaughter_config (channel_id, guild_id, winner_role_id, ping_role_id, next_channel_id, battle_title, description, image_url, announce)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        INSERT INTO rumble_slaughter_config (channel_id, guild_id, winner_role_id, ping_role_id, ping_role2_id, ping_role3_id, next_channel_id, battle_title, description, image_url, embed_color, reaction_emoji, announce_style, announce)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
         ON CONFLICT (channel_id) DO UPDATE SET
           winner_role_id = COALESCE($3, rumble_slaughter_config.winner_role_id),
           ping_role_id = COALESCE($4, rumble_slaughter_config.ping_role_id),
-          next_channel_id = COALESCE($5, rumble_slaughter_config.next_channel_id),
-          battle_title = COALESCE($6, rumble_slaughter_config.battle_title),
-          description = COALESCE($7, rumble_slaughter_config.description),
-          image_url = COALESCE($8, rumble_slaughter_config.image_url),
-          announce = COALESCE($9, rumble_slaughter_config.announce)
-      `, [channel.id, interaction.guildId, winnerRole?.id || null, pingRole?.id || null, nextChannel?.id || null, battleTitle, description, imageUrl, announce]);
+          ping_role2_id = COALESCE($5, rumble_slaughter_config.ping_role2_id),
+          ping_role3_id = COALESCE($6, rumble_slaughter_config.ping_role3_id),
+          next_channel_id = COALESCE($7, rumble_slaughter_config.next_channel_id),
+          battle_title = COALESCE($8, rumble_slaughter_config.battle_title),
+          description = COALESCE($9, rumble_slaughter_config.description),
+          image_url = COALESCE($10, rumble_slaughter_config.image_url),
+          embed_color = COALESCE($11, rumble_slaughter_config.embed_color),
+          reaction_emoji = COALESCE($12, rumble_slaughter_config.reaction_emoji),
+          announce_style = COALESCE($13, rumble_slaughter_config.announce_style),
+          announce = COALESCE($14, rumble_slaughter_config.announce)
+      `, [channel.id, interaction.guildId, winnerRole?.id || null, pingRole?.id || null, pingRole2?.id || null, pingRole3?.id || null, nextChannel?.id || null, battleTitle, description, imageUrl, embedColor, reactionEmoji, announceStyle, announce]);
 
       return interaction.editReply(`✅ <#${channel.id}> configured for Rumble Slaughter.`);
     }
@@ -125,6 +143,10 @@ module.exports = {
           { name: 'Description', value: cfg.description || '*(none)*', inline: false },
           { name: 'Pending One-Time Reward', value: cfg.other_reward || '*(none)*', inline: false },
           { name: 'Image', value: cfg.image_url ? '✅ Set' : '*(none)*', inline: false },
+          { name: 'Ping Roles 2/3', value: `${cfg.ping_role2_id ? `<@&${cfg.ping_role2_id}>` : '—'} / ${cfg.ping_role3_id ? `<@&${cfg.ping_role3_id}>` : '—'}`, inline: true },
+          { name: 'Embed Color', value: cfg.embed_color || '*(default)*', inline: true },
+          { name: 'Reaction Emoji', value: cfg.reaction_emoji || '*(none)*', inline: true },
+          { name: 'Announce Style', value: cfg.announce_style === 'ping' ? 'Ping only' : 'Full embed', inline: true },
         )]});
     }
 
