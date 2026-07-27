@@ -59,22 +59,32 @@ async function handleArenaOpen(message, embed) {
   const eraMatch = embed.description?.match(/Era:\s*\*{0,2}([^\n*]+)/i);
   const era = eraMatch ? eraMatch[1].trim() : null;
 
-  const descLines = [`<@${hostId}> just opened a Rumble Slaughter arena — jump in!`];
+  const hostMember = await message.guild.members.fetch(hostId).catch(() => null);
+  const hostName = hostMember?.user?.username || 'Unknown';
+
+  const descLines = [];
+  if (!cfg.battle_title) descLines.push('⚔️ Rumble Slaughter — Arena Open!');
+  if (cfg.description) {
+    descLines.push('', cfg.description, '');
+  } else {
+    descLines.push('');
+  }
+  if (cfg.host_description) descLines.push('', cfg.host_description, '');
+  descLines.push(`<@${hostId}> just opened the arena — jump in!`);
   if (entryFee) descLines.push(`🪙 **Entry Fee:** ${entryFee} Sins`);
-  if (era) descLines.push(`✨ **Era:** ${era}`);
   if (cfg.other_reward) descLines.push(`🎁 **Bonus Reward:** ${cfg.other_reward}`);
-  if (cfg.host_description) descLines.push(cfg.host_description);
-  if (cfg.description) descLines.push(cfg.description);
+  if (cfg.next_channel_id) descLines.push(`➡️ **Next Room:** <#${cfg.next_channel_id}>`);
 
   const startEmbed = new EmbedBuilder()
     .setColor('#d6c2ee')
-    .setTitle('⚔️ Rumble Slaughter — Arena Open!')
-    .setDescription(descLines.join('\n'))
-    .setTimestamp();
+    .setAuthor({ name: (message.channel.name || '').slice(0, 256) })
+    .setTitle((cfg.battle_title || '⚔️ Rumble Slaughter — Arena Open!').slice(0, 256))
+    .setDescription(descLines.join('\n').slice(0, 4096))
+    .setFooter({ text: `${message.guild.name} • Hosted by: ${hostName}${era ? ` • Era: ${era}` : ''}` });
   if (cfg.image_url) startEmbed.setImage(cfg.image_url);
 
-  const content = cfg.ping_role_id ? `<@&${cfg.ping_role_id}>` : undefined;
-  await message.channel.send({ content, embeds: [startEmbed] }).catch(() => {});
+  const pingContent = cfg.ping_role_id ? `<@&${cfg.ping_role_id}>` : undefined;
+  await message.channel.send({ content: pingContent, embeds: [startEmbed] }).catch(() => {});
 }
 
 async function handleChampion(message, embed) {
@@ -125,9 +135,11 @@ async function handleChampion(message, embed) {
 
   const roleEmbed = new EmbedBuilder()
     .setColor('#d6c2ee')
+    .setAuthor({ name: (message.channel.name || '').slice(0, 256) })
     .setTitle(cfg.battle_title || '💀 Rumble Slaughter — Champion!')
     .setDescription(descLines.join('\n'))
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+    .setFooter({ text: `${message.guild.name} • Rumble Slaughter Champion` })
     .setTimestamp();
   if (cfg.image_url) roleEmbed.setImage(cfg.image_url);
 
