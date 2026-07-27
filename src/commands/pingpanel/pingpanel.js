@@ -23,6 +23,7 @@ function buildPanel(title, description, roleId, color) {
 }
 
 module.exports = {
+  buildPanel,
   data: new SlashCommandBuilder()
     .setName('pingpanel')
     .setDescription('Post a sticky role ping toggle panel')

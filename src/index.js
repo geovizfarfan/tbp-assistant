@@ -317,6 +317,18 @@ client.on('interactionCreate', async (interaction) => {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleFulfillSkip(interaction);
   }
+  if (interaction.isButton() && interaction.customId.startsWith('serversetup_panels:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handlePanelsButton(interaction);
+  }
+  if (interaction.isRoleSelectMenu() && interaction.customId === 'serversetup_pingrole') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handlePingRolePicked(interaction);
+  }
+  if (interaction.isChannelSelectMenu() && interaction.customId === 'serversetup_pingremovechan') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handlePingRemoveChannelPicked(interaction);
+  }
   if (interaction.isStringSelectMenu() && interaction.customId === 'help_category') {
     return helpModule.handleSelect(interaction, client);
   }
@@ -353,6 +365,14 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isModalSubmit() && interaction.customId.startsWith('serversetup_gwbonusmodal:')) {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleBonusRoleModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId === 'serversetup_stickymodal') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleStickyModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('serversetup_pingmodal:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handlePingPanelModal(interaction);
   }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('verify_modal:')) {
     const { handleCaptchaModal } = require('./events/verification');

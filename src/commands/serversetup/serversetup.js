@@ -101,13 +101,10 @@ const CATEGORIES = {
     items: [],
   },
   panels: {
-    label: 'Panels',
+    label: 'Panels & Sticky Content',
     emoji: '🧩',
-    description: 'Role panels and ticket panels.',
-    items: [
-      'Role panel create/edit/delete/remove/repost — `/rolepanel` commands',
-      'Ticket panels — `/ticket panel` commands',
-    ],
+    description: 'Sticky notes and ping panels — buttons below. Role panels and ticket panels involve adding items one at a time (roles, ticket types), which is an ongoing management flow rather than a single setup step — use `/rolepanel` and `/ticket panel` directly for those.',
+    items: [],
   },
 };
 
@@ -331,6 +328,15 @@ function buildFulfillChannelPicker(shopChannelId) {
   return [new ActionRowBuilder().addComponents(menu), new ActionRowBuilder().addComponents(skipButton)];
 }
 
+function buildPanelsButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_panels:stickyset').setLabel('Set Sticky').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('serversetup_panels:stickyremove').setLabel('Remove Sticky').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('serversetup_panels:pingpost').setLabel('Post Ping Panel').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('serversetup_panels:pingremove').setLabel('Remove Ping Panel').setStyle(ButtonStyle.Danger),
+  );
+}
+
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -424,6 +430,13 @@ module.exports = {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
         components: [buildSellerButtons(), buildBackButton()],
+      });
+    }
+
+    if (key === 'panels') {
+      return interaction.update({
+        embeds: [buildCategoryEmbed(key, interaction.guild)],
+        components: [buildPanelsButtons(), buildBackButton()],
       });
     }
 
@@ -928,7 +941,139 @@ module.exports = {
     const [, shopChannelId] = interaction.customId.split(':');
     return finishShopSetup(interaction, shopChannelId, null);
   },
+
+  async handlePanelsButton(interaction) {
+    const [, action] = interaction.customId.split(':');
+
+    if (action === 'stickyset') {
+      const modal = new ModalBuilder()
+        .setCustomId('serversetup_stickymodal')
+        .setTitle('Set Sticky Message');
+      const messageInput = new TextInputBuilder().setCustomId('message').setLabel('Message (stays at bottom of this channel)').setStyle(TextInputStyle.Paragraph).setRequired(true);
+      const titleInput = new TextInputBuilder().setCustomId('title').setLabel('Title (optional)').setStyle(TextInputStyle.Short).setRequired(false);
+      const colorInput = new TextInputBuilder().setCustomId('color').setLabel('Color hex (optional, default #d6c2ee)').setStyle(TextInputStyle.Short).setRequired(false);
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(messageInput),
+        new ActionRowBuilder().addComponents(titleInput),
+        new ActionRowBuilder().addComponents(colorInput),
+      );
+      return interaction.showModal(modal);
+    }
+
+    if (action === 'stickyremove') {
+      await interaction.deferUpdate();
+      const res = await query('DELETE FROM sticky_messages WHERE guild_id=$1 AND channel_id=$2 RETURNING message_id', [interaction.guildId, interaction.channelId]);
+      const msg = res.rows.length ? `✅ Sticky message removed from this channel.` : `❌ No sticky message found in this channel.`;
+      return interaction.editReply({
+        embeds: [new EmbedBuilder().setColor(res.rows.length ? '#2ecc71' : '#ff4444').setDescription(msg)],
+        components: [buildPanelsButtons(), buildBackButton()],
+      });
+    }
+
+    if (action === 'pingpost') {
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the role this panel gives/removes:')],
+        components: [buildPingRolePicker(), buildBackButton()],
+      });
+    }
+
+    if (action === 'pingremove') {
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the channel to remove the ping panel from:')],
+        components: [buildPingRemoveChannelPicker(), buildBackButton()],
+      });
+    }
+  },
+
+  async handleStickyModal(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const text = interaction.fields.getTextInputValue('message').replace(/\\n/g, '\n');
+    const title = interaction.fields.getTextInputValue('title') || null;
+    const color = interaction.fields.getTextInputValue('color') || '#d6c2ee';
+
+    const embed = new EmbedBuilder().setColor(color).setDescription(text);
+    if (title) embed.setTitle(title);
+
+    const msg = await interaction.channel.send({ embeds: [embed] });
+
+    await query(`
+      INSERT INTO sticky_messages (guild_id, channel_id, message_id, content, title, color)
+      VALUES ($1,$2,$3,$4,$5,$6)
+      ON CONFLICT (guild_id, channel_id) DO UPDATE SET
+        message_id = EXCLUDED.message_id, content = EXCLUDED.content, title = EXCLUDED.title, color = EXCLUDED.color
+    `, [interaction.guildId, interaction.channelId, msg.id, text, title, color]);
+
+    return interaction.editReply(`✅ Sticky message set in <#${interaction.channelId}>. It will stay at the bottom.`);
+  },
+
+  async handlePingRolePicked(interaction) {
+    const role = interaction.roles.first();
+
+    const modal = new ModalBuilder()
+      .setCustomId(`serversetup_pingmodal:${role.id}`)
+      .setTitle('Ping Panel Details');
+    const titleInput = new TextInputBuilder().setCustomId('title').setLabel('Panel title').setStyle(TextInputStyle.Short).setRequired(true);
+    const descInput = new TextInputBuilder().setCustomId('description').setLabel('Description (optional)').setStyle(TextInputStyle.Paragraph).setRequired(false);
+    const colorInput = new TextInputBuilder().setCustomId('color').setLabel('Color hex (optional, default #d6c2ee)').setStyle(TextInputStyle.Short).setRequired(false);
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(titleInput),
+      new ActionRowBuilder().addComponents(descInput),
+      new ActionRowBuilder().addComponents(colorInput),
+    );
+    return interaction.showModal(modal);
+  },
+
+  async handlePingPanelModal(interaction) {
+    const [, roleId] = interaction.customId.split(':');
+    await interaction.deferReply({ ephemeral: true });
+
+    const title = interaction.fields.getTextInputValue('title');
+    const description = interaction.fields.getTextInputValue('description') ||
+      `Want to get notified <a:notify:1522746425639960636> ?\nClick Below <a:whitesparkle:1512912831761092740>`;
+    const color = interaction.fields.getTextInputValue('color') || '#d6c2ee';
+
+    const { buildPanel } = require('../pingpanel/pingpanel');
+    const { embed, row } = buildPanel(title, description, roleId, color);
+    const msg = await interaction.channel.send({ embeds: [embed], components: [row] });
+
+    await query(`
+      INSERT INTO pingpanel_sticky (guild_id, channel_id, role_id, message_id, title, description, color)
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
+      ON CONFLICT (guild_id, channel_id) DO UPDATE SET
+        role_id = EXCLUDED.role_id, message_id = EXCLUDED.message_id,
+        title = EXCLUDED.title, description = EXCLUDED.description, color = EXCLUDED.color
+    `, [interaction.guildId, interaction.channelId, roleId, msg.id, title, description, color]);
+
+    return interaction.editReply(`✅ Ping panel posted in <#${interaction.channelId}> for <@&${roleId}>.`);
+  },
+
+  async handlePingRemoveChannelPicked(interaction) {
+    const channel = interaction.channels.first();
+    await interaction.deferUpdate();
+
+    await query('DELETE FROM pingpanel_sticky WHERE guild_id=$1 AND channel_id=$2', [interaction.guildId, channel.id]);
+
+    return interaction.editReply({
+      embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Ping panel removed from <#${channel.id}>.`)],
+      components: [buildPanelsButtons(), buildBackButton()],
+    });
+  },
 };
+
+function buildPingRolePicker() {
+  const menu = new RoleSelectMenuBuilder()
+    .setCustomId('serversetup_pingrole')
+    .setPlaceholder('Pick the role for this panel');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildPingRemoveChannelPicker() {
+  const menu = new ChannelSelectMenuBuilder()
+    .setCustomId('serversetup_pingremovechan')
+    .setPlaceholder('Pick the channel to remove the panel from');
+  return new ActionRowBuilder().addComponents(menu);
+}
 
 async function finishShopSetup(interaction, shopChannelId, fulfillChannelId) {
   await interaction.deferUpdate();
