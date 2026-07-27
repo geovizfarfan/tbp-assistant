@@ -95,15 +95,10 @@ const CATEGORIES = {
     items: [],
   },
   sellers: {
-    label: 'Seller Settings',
+    label: 'Payments, Sellers & Shop',
     emoji: '💳',
-    description: 'Payment methods and seller roster.',
-    items: [
-      'Set a member\'s pay method — `/pay method`',
-      'Add a seller — `/pay seller add`',
-      'List sellers — `/pay seller list`',
-      'Anything else payment-related — `/pay` commands',
-    ],
+    description: 'Seller roster and shop channels — buttons below. Payment methods are self-service (a seller sets their own via `/pay methods set`, not something set for them here). Shop item management (`additem`/`edititem`/`removeitem`) has too many fields to fit here cleanly — use those commands directly.',
+    items: [],
   },
   panels: {
     label: 'Panels',
@@ -302,6 +297,40 @@ function buildRequiredRemovePicker() {
   return new ActionRowBuilder().addComponents(menu);
 }
 
+function buildSellerButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_seller:add').setLabel('Add Seller').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('serversetup_seller:remove').setLabel('Remove Seller').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('serversetup_seller:list').setLabel('List Sellers').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_seller:shopsetup').setLabel('Shop Setup').setStyle(ButtonStyle.Primary),
+  );
+}
+
+function buildSellerUserPicker(action) {
+  const menu = new UserSelectMenuBuilder()
+    .setCustomId(`serversetup_selleruser:${action}`)
+    .setPlaceholder(`Pick who to ${action}`);
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildShopChannelPicker() {
+  const menu = new ChannelSelectMenuBuilder()
+    .setCustomId('serversetup_shopchan')
+    .setPlaceholder('Pick the shop channel');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildFulfillChannelPicker(shopChannelId) {
+  const menu = new ChannelSelectMenuBuilder()
+    .setCustomId(`serversetup_fulfillchan:${shopChannelId}`)
+    .setPlaceholder('Pick the fulfillment channel (optional)');
+  const skipButton = new ButtonBuilder()
+    .setCustomId(`serversetup_fulfillskip:${shopChannelId}`)
+    .setLabel('Skip')
+    .setStyle(ButtonStyle.Secondary);
+  return [new ActionRowBuilder().addComponents(menu), new ActionRowBuilder().addComponents(skipButton)];
+}
+
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -388,6 +417,13 @@ module.exports = {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
         components: [buildGiveawayButtons(), buildGiveawayButtons2(), buildBackButton()],
+      });
+    }
+
+    if (key === 'sellers') {
+      return interaction.update({
+        embeds: [buildCategoryEmbed(key, interaction.guild)],
+        components: [buildSellerButtons(), buildBackButton()],
       });
     }
 
@@ -827,4 +863,91 @@ module.exports = {
       components: [buildGiveawayButtons(), buildGiveawayButtons2(), buildBackButton()],
     });
   },
+
+  async handleSellerButton(interaction) {
+    const [, action] = interaction.customId.split(':');
+
+    if (action === 'list') {
+      const res = await query('SELECT user_id FROM pay_sellers WHERE guild_id=$1', [interaction.guildId]);
+      const embed = new EmbedBuilder().setColor('#d6c2ee').setTitle('💳 Approved Sellers')
+        .setDescription(res.rows.length ? res.rows.map(r => `<@${r.user_id}>`).join('\n') : 'No approved sellers yet.');
+      return interaction.update({ embeds: [embed], components: [buildSellerButtons(), buildBackButton()] });
+    }
+
+    if (action === 'shopsetup') {
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the shop channel:')],
+        components: [buildShopChannelPicker(), buildBackButton()],
+      });
+    }
+
+    return interaction.update({
+      embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription(`Pick who to ${action}:`)],
+      components: [buildSellerUserPicker(action), buildBackButton()],
+    });
+  },
+
+  async handleSellerUserPicked(interaction) {
+    const [, action] = interaction.customId.split(':');
+    const user = interaction.users.first();
+    await interaction.deferUpdate();
+
+    if (action === 'add') {
+      await query('INSERT INTO pay_sellers (guild_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [interaction.guildId, user.id]);
+      return interaction.editReply({
+        embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ <@${user.id}> is now an approved seller.`)],
+        components: [buildSellerButtons(), buildBackButton()],
+      });
+    }
+
+    if (action === 'remove') {
+      await query('DELETE FROM pay_sellers WHERE guild_id=$1 AND user_id=$2', [interaction.guildId, user.id]);
+      return interaction.editReply({
+        embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ <@${user.id}> removed from sellers.`)],
+        components: [buildSellerButtons(), buildBackButton()],
+      });
+    }
+  },
+
+  async handleShopChannelPicked(interaction) {
+    const channel = interaction.channels.first();
+    const [row1, row2] = buildFulfillChannelPicker(channel.id);
+    return interaction.update({
+      embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription(`Shop channel: <#${channel.id}>. Now pick the fulfillment channel, or skip:`)],
+      components: [row1, row2, buildBackButton()],
+    });
+  },
+
+  async handleFulfillChannelPicked(interaction) {
+    const [, shopChannelId] = interaction.customId.split(':');
+    const fulfillChannel = interaction.channels.first();
+    return finishShopSetup(interaction, shopChannelId, fulfillChannel.id);
+  },
+
+  async handleFulfillSkip(interaction) {
+    const [, shopChannelId] = interaction.customId.split(':');
+    return finishShopSetup(interaction, shopChannelId, null);
+  },
 };
+
+async function finishShopSetup(interaction, shopChannelId, fulfillChannelId) {
+  await interaction.deferUpdate();
+
+  await query(`
+    INSERT INTO shop_config (guild_id, shop_channel_id, fulfillment_channel_id)
+    VALUES ($1,$2,$3)
+    ON CONFLICT (guild_id) DO UPDATE SET
+      shop_channel_id = EXCLUDED.shop_channel_id,
+      fulfillment_channel_id = COALESCE(EXCLUDED.fulfillment_channel_id, shop_config.fulfillment_channel_id)
+  `, [interaction.guildId, shopChannelId, fulfillChannelId]);
+
+  const { renderAndPost } = require('../shop/shop');
+  await renderAndPost(interaction.client, interaction.guildId);
+
+  return interaction.editReply({
+    embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(
+      `✅ Shop configured in <#${shopChannelId}>${fulfillChannelId ? ` (used/custom items → <#${fulfillChannelId}>)` : ''}.`
+    )],
+    components: [buildSellerButtons(), buildBackButton()],
+  });
+}

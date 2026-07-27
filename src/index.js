@@ -297,6 +297,26 @@ client.on('interactionCreate', async (interaction) => {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleRequiredRoleRemovePicked(interaction);
   }
+  if (interaction.isButton() && interaction.customId.startsWith('serversetup_seller:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleSellerButton(interaction);
+  }
+  if (interaction.isUserSelectMenu() && interaction.customId.startsWith('serversetup_selleruser:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleSellerUserPicked(interaction);
+  }
+  if (interaction.isChannelSelectMenu() && interaction.customId === 'serversetup_shopchan') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleShopChannelPicked(interaction);
+  }
+  if (interaction.isChannelSelectMenu() && interaction.customId.startsWith('serversetup_fulfillchan:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleFulfillChannelPicked(interaction);
+  }
+  if (interaction.isButton() && interaction.customId.startsWith('serversetup_fulfillskip:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleFulfillSkip(interaction);
+  }
   if (interaction.isStringSelectMenu() && interaction.customId === 'help_category') {
     return helpModule.handleSelect(interaction, client);
   }
