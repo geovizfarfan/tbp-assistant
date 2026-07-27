@@ -329,6 +329,26 @@ client.on('interactionCreate', async (interaction) => {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handlePingRemoveChannelPicked(interaction);
   }
+  if (interaction.isButton() && interaction.customId.startsWith('serversetup_gset:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleSettingsButton(interaction);
+  }
+  if (interaction.isStringSelectMenu() && interaction.customId === 'serversetup_timezone') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleTimezonePicked(interaction);
+  }
+  if (interaction.isChannelSelectMenu() && interaction.customId === 'serversetup_banlogchan') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleBanlogChannelPicked(interaction);
+  }
+  if (interaction.isChannelSelectMenu() && interaction.customId === 'serversetup_levelchan') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleLevelChannelPicked(interaction);
+  }
+  if (interaction.isChannelSelectMenu() && interaction.customId === 'serversetup_welcomechan') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleWelcomeChannelPicked(interaction);
+  }
   if (interaction.isStringSelectMenu() && interaction.customId === 'help_category') {
     return helpModule.handleSelect(interaction, client);
   }
@@ -373,6 +393,18 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isModalSubmit() && interaction.customId.startsWith('serversetup_pingmodal:')) {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handlePingPanelModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId === 'serversetup_claimtimemodal') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleClaimTimeModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('serversetup_welcomemodal:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleWelcomeModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId === 'serversetup_rrcurrencymodal') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleRRCurrencyModal(interaction);
   }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('verify_modal:')) {
     const { handleCaptchaModal } = require('./events/verification');

@@ -35,19 +35,8 @@ const CATEGORIES = {
   settings: {
     label: 'Server Settings',
     emoji: '⚙️',
-    description: 'General server-wide behavior and integrations.',
-    items: [
-      'Claim time — `/settings claim-time`',
-      'Set timezone — `/settings timezone`',
-      'Level config / excluded channels — `/level config`, `/level exclude add`',
-      'Verify setup — `/verify setup`',
-      'Ban log setup — `/banlog setup`',
-      'RR currency — `/rr currency` *(rename to /rr wallet-config coming in a later phase)*',
-      'RR wallet — `/rr wallet` *(rename coming in a later phase)*',
-      'Shop setup — `/shop setup`',
-      'Staff setup — `/staff add`',
-      'Welcome message — `/verify welcome`',
-    ],
+    description: 'General server-wide behavior — buttons below. Verify setup stays standalone (`/verify setup`) since it involves 2 channels, a role, and long rules text — too much for one form. Shop and Staff setup live under their own categories.',
+    items: [],
   },
   roles: {
     label: 'Server Role Set',
@@ -388,6 +377,13 @@ module.exports = {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
         components: [buildChannelSettingSelect(), buildBackButton()],
+      });
+    }
+
+    if (key === 'settings') {
+      return interaction.update({
+        embeds: [buildCategoryEmbed(key, interaction.guild)],
+        components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
       });
     }
 
@@ -1059,6 +1055,206 @@ module.exports = {
       components: [buildPanelsButtons(), buildBackButton()],
     });
   },
+
+  async handleSettingsButton(interaction) {
+    const [, action] = interaction.customId.split(':');
+
+    if (action === 'timezone') {
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick your server timezone:')],
+        components: [buildTimezoneSelect(), buildBackButton()],
+      });
+    }
+
+    if (action === 'claimtime') {
+      const modal = new ModalBuilder().setCustomId('serversetup_claimtimemodal').setTitle('Claim Time');
+      const defaultInput = new TextInputBuilder().setCustomId('default').setLabel('Hours for regular winners (default: 6)').setStyle(TextInputStyle.Short).setRequired(false);
+      const boosterInput = new TextInputBuilder().setCustomId('booster').setLabel('Hours for boosters (default: 12)').setStyle(TextInputStyle.Short).setRequired(false);
+      modal.addComponents(new ActionRowBuilder().addComponents(defaultInput), new ActionRowBuilder().addComponents(boosterInput));
+      return interaction.showModal(modal);
+    }
+
+    if (action === 'banlog') {
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the ban log channel:')],
+        components: [buildBanlogChannelPicker(), buildBackButton()],
+      });
+    }
+
+    if (action === 'welcome') {
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the channel for welcome messages:')],
+        components: [buildWelcomeChannelPicker(), buildBackButton()],
+      });
+    }
+
+    if (action === 'levelchan') {
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the level-up announcement channel:')],
+        components: [buildLevelChannelPicker(), buildBackButton()],
+      });
+    }
+
+    if (action === 'levelon' || action === 'leveloff') {
+      await interaction.deferUpdate();
+      const enabled = action === 'levelon';
+      await query(`
+        INSERT INTO level_config (guild_id, enabled) VALUES ($1,$2)
+        ON CONFLICT (guild_id) DO UPDATE SET enabled = $2
+      `, [interaction.guildId, enabled]);
+      return interaction.editReply({
+        embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Level system is now **${enabled ? 'ON' : 'OFF'}**.`)],
+        components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+      });
+    }
+
+    if (action === 'rrsins') {
+      await interaction.deferUpdate();
+      const { isGuildAllowedSins } = require('../../utils/sinsRequests');
+      if (!isGuildAllowedSins(interaction.guildId)) {
+        return interaction.editReply({
+          embeds: [new EmbedBuilder().setColor('#ff4444').setDescription('❌ Real Sins are only available in specific approved servers. Use "RR: Custom Currency" instead.')],
+          components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+        });
+      }
+      await query(`
+        INSERT INTO rr_guild_config (guild_id, use_sins) VALUES ($1,true)
+        ON CONFLICT (guild_id) DO UPDATE SET use_sins = true
+      `, [interaction.guildId]);
+      return interaction.editReply({
+        embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription('✅ Rumble Royale now uses real Sins.')],
+        components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+      });
+    }
+
+    if (action === 'rrcustom') {
+      const modal = new ModalBuilder().setCustomId('serversetup_rrcurrencymodal').setTitle('Custom RR Currency');
+      const nameInput = new TextInputBuilder().setCustomId('name').setLabel('Currency name, e.g. Coins').setStyle(TextInputStyle.Short).setRequired(true);
+      const emojiInput = new TextInputBuilder().setCustomId('emoji').setLabel('Currency emoji, e.g. 🪙').setStyle(TextInputStyle.Short).setRequired(false);
+      modal.addComponents(new ActionRowBuilder().addComponents(nameInput), new ActionRowBuilder().addComponents(emojiInput));
+      return interaction.showModal(modal);
+    }
+  },
+
+  async handleTimezonePicked(interaction) {
+    const timezone = interaction.values[0];
+    await interaction.deferUpdate();
+
+    await query(`
+      INSERT INTO guild_config (guild_id, timezone) VALUES ($1,$2)
+      ON CONFLICT (guild_id) DO UPDATE SET timezone = $2
+    `, [interaction.guildId, timezone]);
+
+    return interaction.editReply({
+      embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Timezone set to **${timezone}**.`)],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+    });
+  },
+
+  async handleClaimTimeModal(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const defaultRaw = interaction.fields.getTextInputValue('default');
+    const boosterRaw = interaction.fields.getTextInputValue('booster');
+    const defaultHrs = defaultRaw ? parseInt(defaultRaw, 10) : null;
+    const boosterHrs = boosterRaw ? parseInt(boosterRaw, 10) : null;
+
+    if (defaultRaw && isNaN(defaultHrs)) return interaction.editReply('❌ Default hours must be a number.');
+    if (boosterRaw && isNaN(boosterHrs)) return interaction.editReply('❌ Booster hours must be a number.');
+
+    await query(`
+      INSERT INTO guild_config (guild_id, claim_hours_default, claim_hours_booster)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (guild_id) DO UPDATE SET
+        claim_hours_default = COALESCE($2, guild_config.claim_hours_default),
+        claim_hours_booster  = COALESCE($3, guild_config.claim_hours_booster)
+    `, [interaction.guildId, defaultHrs, boosterHrs]);
+
+    return interaction.editReply('✅ Claim time updated.');
+  },
+
+  async handleBanlogChannelPicked(interaction) {
+    const channel = interaction.channels.first();
+    await interaction.deferUpdate();
+
+    await query(`
+      INSERT INTO guild_config (guild_id, ban_log_channel_id) VALUES ($1,$2)
+      ON CONFLICT (guild_id) DO UPDATE SET ban_log_channel_id = $2
+    `, [interaction.guildId, channel.id]);
+
+    return interaction.editReply({
+      embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Ban log channel set to <#${channel.id}>.`)],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+    });
+  },
+
+  async handleLevelChannelPicked(interaction) {
+    const channel = interaction.channels.first();
+    await interaction.deferUpdate();
+
+    await query(`
+      INSERT INTO level_config (guild_id, levelup_channel_id) VALUES ($1,$2)
+      ON CONFLICT (guild_id) DO UPDATE SET levelup_channel_id = $2
+    `, [interaction.guildId, channel.id]);
+
+    return interaction.editReply({
+      embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Level-up announcements will post in <#${channel.id}>.`)],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+    });
+  },
+
+  async handleWelcomeChannelPicked(interaction) {
+    const channel = interaction.channels.first();
+
+    const modal = new ModalBuilder().setCustomId(`serversetup_welcomemodal:${channel.id}`).setTitle('Welcome Message');
+    const textInput = new TextInputBuilder().setCustomId('text').setLabel('Text — use {user} to mention them').setStyle(TextInputStyle.Paragraph).setRequired(true);
+    const titleInput = new TextInputBuilder().setCustomId('title').setLabel('Title (optional)').setStyle(TextInputStyle.Short).setRequired(false);
+    const imageInput = new TextInputBuilder().setCustomId('image').setLabel('Image/icon URL (optional)').setStyle(TextInputStyle.Short).setRequired(false);
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(textInput),
+      new ActionRowBuilder().addComponents(titleInput),
+      new ActionRowBuilder().addComponents(imageInput),
+    );
+    return interaction.showModal(modal);
+  },
+
+  async handleWelcomeModal(interaction) {
+    const [, channelId] = interaction.customId.split(':');
+    await interaction.deferReply({ ephemeral: true });
+
+    const text = interaction.fields.getTextInputValue('text').replace(/\\n/g, '\n');
+    const title = interaction.fields.getTextInputValue('title') || null;
+    const image = interaction.fields.getTextInputValue('image') || null;
+
+    const cfgRes = await query('SELECT 1 FROM verify_config WHERE guild_id = $1', [interaction.guildId]);
+    if (!cfgRes.rows.length) return interaction.editReply('❌ Run Verify Setup first (`/verify setup`) before configuring the welcome message.');
+
+    await query(`
+      UPDATE verify_config SET
+        welcome_channel_id = $1,
+        welcome_text = $2,
+        welcome_title = COALESCE($3, welcome_title),
+        welcome_image = COALESCE($4, welcome_image)
+      WHERE guild_id = $5
+    `, [channelId, text, title, image, interaction.guildId]);
+
+    return interaction.editReply(`✅ Welcome messages will post in <#${channelId}>.`);
+  },
+
+  async handleRRCurrencyModal(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const name = interaction.fields.getTextInputValue('name');
+    const emoji = interaction.fields.getTextInputValue('emoji') || null;
+
+    await query(`
+      INSERT INTO rr_guild_config (guild_id, use_sins, currency_name, currency_emoji)
+      VALUES ($1,false,$2,$3)
+      ON CONFLICT (guild_id) DO UPDATE SET use_sins=false, currency_name=$2, currency_emoji=$3
+    `, [interaction.guildId, name, emoji]);
+
+    return interaction.editReply(`✅ Rumble Royale now uses custom currency: **${name}** ${emoji || ''}`);
+  },
 };
 
 function buildPingRolePicker() {
@@ -1072,6 +1268,61 @@ function buildPingRemoveChannelPicker() {
   const menu = new ChannelSelectMenuBuilder()
     .setCustomId('serversetup_pingremovechan')
     .setPlaceholder('Pick the channel to remove the panel from');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildSettingsButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_gset:timezone').setLabel('Timezone').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('serversetup_gset:claimtime').setLabel('Claim Time').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('serversetup_gset:banlog').setLabel('Ban Log Channel').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('serversetup_gset:welcome').setLabel('Welcome Message').setStyle(ButtonStyle.Primary),
+  );
+}
+
+function buildSettingsButtons2() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_gset:levelon').setLabel('Level Up ON').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('serversetup_gset:leveloff').setLabel('Level Up OFF').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('serversetup_gset:levelchan').setLabel('Level-Up Channel').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_gset:rrsins').setLabel('RR: Use Sins').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_gset:rrcustom').setLabel('RR: Custom Currency').setStyle(ButtonStyle.Secondary),
+  );
+}
+
+function buildTimezoneSelect() {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId('serversetup_timezone')
+    .setPlaceholder('Pick your server timezone')
+    .addOptions(
+      { label: 'ET — Eastern', value: 'America/New_York' },
+      { label: 'CT — Central', value: 'America/Chicago' },
+      { label: 'MT — Mountain', value: 'America/Denver' },
+      { label: 'PT — Pacific', value: 'America/Los_Angeles' },
+      { label: 'GMT', value: 'Europe/London' },
+      { label: 'CET — Central European', value: 'Europe/Paris' },
+    );
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildBanlogChannelPicker() {
+  const menu = new ChannelSelectMenuBuilder()
+    .setCustomId('serversetup_banlogchan')
+    .setPlaceholder('Pick the ban log channel');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildLevelChannelPicker() {
+  const menu = new ChannelSelectMenuBuilder()
+    .setCustomId('serversetup_levelchan')
+    .setPlaceholder('Pick the level-up announcement channel');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildWelcomeChannelPicker() {
+  const menu = new ChannelSelectMenuBuilder()
+    .setCustomId('serversetup_welcomechan')
+    .setPlaceholder('Pick the welcome-message channel');
   return new ActionRowBuilder().addComponents(menu);
 }
 
