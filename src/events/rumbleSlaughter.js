@@ -83,6 +83,7 @@ async function handleArenaOpen(message, embed) {
     descLines.push('');
   }
   if (cfg.host_description) descLines.push('', cfg.host_description, '');
+  if (cfg.winner_role_id) descLines.push(`<a:trophies:1512912823062364281> **Winner Role:** <@&${cfg.winner_role_id}>`);
   if (entryFee) descLines.push(`<a:moneybag:1522373120147849226> **Entry Fee:** ${entryFee} <a:SINS:1522338148380704910> (sins)`);
   if (cfg.other_reward) descLines.push(`<a:gift:1512915751458050268> **Bonus Reward:** ${cfg.other_reward}`);
   if (cfg.next_channel_id) descLines.push(`<a:rumblesword:1522372420894330921> **Next Room:** <#${cfg.next_channel_id}>`);
