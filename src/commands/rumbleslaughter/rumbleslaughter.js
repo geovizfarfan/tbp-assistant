@@ -37,7 +37,11 @@ module.exports = {
     .addSubcommand(sub => sub
       .setName('remove')
       .setDescription('Remove Rumble Slaughter config from a channel')
-      .addChannelOption(o => o.setName('channel').setDescription('Channel').setRequired(true))),
+      .addChannelOption(o => o.setName('channel').setDescription('Channel').setRequired(true)))
+    .addSubcommand(sub => sub
+      .setName('repost')
+      .setDescription('Repost the last arena-open or champion announcement if it was deleted')
+      .addChannelOption(o => o.setName('channel').setDescription('RS channel').setRequired(true))),
 
   async execute(interaction) {
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
@@ -129,6 +133,33 @@ module.exports = {
       const del = await query('DELETE FROM rumble_slaughter_config WHERE channel_id = $1 RETURNING channel_id', [channel.id]);
       if (!del.rows.length) return interaction.editReply(`❌ <#${channel.id}> wasn't configured.`);
       return interaction.editReply(`✅ Removed Rumble Slaughter config from <#${channel.id}>.`);
+    }
+
+    if (sub === 'repost') {
+      const channel = interaction.options.getChannel('channel');
+      const res = await query('SELECT * FROM rumble_slaughter_config WHERE channel_id = $1', [channel.id]);
+      if (!res.rows.length) return interaction.editReply(`❌ <#${channel.id}> isn't configured for Rumble Slaughter.`);
+      const cfg = res.rows[0];
+
+      if (!cfg.last_embed_json) return interaction.editReply(`❌ No announcement has been posted in <#${channel.id}> yet — nothing to repost.`);
+
+      if (cfg.last_message_id) {
+        const existing = await channel.messages.fetch(cfg.last_message_id).catch(() => null);
+        if (existing) return interaction.editReply(`✅ That announcement still exists — no repost needed. ${existing.url}`);
+      }
+
+      const { EmbedBuilder } = require('discord.js');
+      const embedData = JSON.parse(cfg.last_embed_json);
+      const rebuiltEmbed = EmbedBuilder.from(embedData);
+
+      const msg = await channel.send({
+        content: cfg.last_ping_content || undefined,
+        embeds: [rebuiltEmbed],
+      }).catch(() => null);
+      if (!msg) return interaction.editReply(`❌ Couldn't repost — check Veloura's permissions in <#${channel.id}>.`);
+
+      await query('UPDATE rumble_slaughter_config SET last_message_id = $1 WHERE channel_id = $2', [msg.id, channel.id]);
+      return interaction.editReply(`✅ Reposted in <#${channel.id}>. ${msg.url}`);
     }
   },
 };

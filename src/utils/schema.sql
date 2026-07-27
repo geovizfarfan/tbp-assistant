@@ -480,9 +480,15 @@ CREATE TABLE IF NOT EXISTS rumble_slaughter_config (
   other_reward TEXT,
   host_description TEXT,
   image_url TEXT,
-  announce BOOLEAN NOT NULL DEFAULT TRUE
+  announce BOOLEAN NOT NULL DEFAULT TRUE,
+  last_message_id TEXT,
+  last_embed_json TEXT,
+  last_ping_content TEXT
 );
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_message_id TEXT;
+ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_embed_json TEXT;
+ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_ping_content TEXT;
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS next_channel_id TEXT;
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS battle_title TEXT;
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS description TEXT;

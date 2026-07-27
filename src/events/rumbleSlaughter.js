@@ -84,7 +84,14 @@ async function handleArenaOpen(message, embed) {
   if (cfg.image_url) startEmbed.setImage(cfg.image_url);
 
   const pingContent = cfg.ping_role_id ? `<@&${cfg.ping_role_id}>` : undefined;
-  await message.channel.send({ content: pingContent, embeds: [startEmbed] }).catch(() => {});
+  const sentMsg = await message.channel.send({ content: pingContent, embeds: [startEmbed] }).catch(() => null);
+
+  if (sentMsg) {
+    await query(`
+      UPDATE rumble_slaughter_config SET last_message_id = $1, last_embed_json = $2, last_ping_content = $3
+      WHERE channel_id = $4
+    `, [sentMsg.id, JSON.stringify(startEmbed.toJSON()), pingContent || null, message.channel.id]).catch(() => {});
+  }
 }
 
 async function handleChampion(message, embed) {
@@ -143,7 +150,14 @@ async function handleChampion(message, embed) {
     .setTimestamp();
   if (cfg.image_url) roleEmbed.setImage(cfg.image_url);
 
-  await message.channel.send({ embeds: [roleEmbed] }).catch(() => {});
+  const sentMsg = await message.channel.send({ embeds: [roleEmbed] }).catch(() => null);
+
+  if (sentMsg) {
+    await query(`
+      UPDATE rumble_slaughter_config SET last_message_id = $1, last_embed_json = $2, last_ping_content = NULL
+      WHERE channel_id = $3
+    `, [sentMsg.id, JSON.stringify(roleEmbed.toJSON()), message.channel.id]).catch(() => {});
+  }
 
   // Ping to get a new game going
   if (cfg.ping_role_id) {
