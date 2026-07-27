@@ -71,6 +71,7 @@ async function handleArenaOpen(message, embed) {
     .setTitle('⚔️ Rumble Slaughter — Arena Open!')
     .setDescription(descLines.join('\n'))
     .setTimestamp();
+  if (cfg.image_url) startEmbed.setImage(cfg.image_url);
 
   const content = cfg.ping_role_id ? `<@&${cfg.ping_role_id}>` : undefined;
   await message.channel.send({ content, embeds: [startEmbed] }).catch(() => {});
@@ -128,6 +129,7 @@ async function handleChampion(message, embed) {
     .setDescription(descLines.join('\n'))
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
     .setTimestamp();
+  if (cfg.image_url) roleEmbed.setImage(cfg.image_url);
 
   await message.channel.send({ embeds: [roleEmbed] }).catch(() => {});
 

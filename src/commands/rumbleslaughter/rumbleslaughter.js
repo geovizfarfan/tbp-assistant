@@ -14,6 +14,7 @@ module.exports = {
       .addChannelOption(o => o.setName('next_channel').setDescription('Next game room'))
       .addStringOption(o => o.setName('battle_title').setDescription('Custom title for the champion announcement'))
       .addStringOption(o => o.setName('description').setDescription('Custom description (use \\n for new lines)'))
+      .addAttachmentOption(o => o.setName('image').setDescription('Upload image shown on the arena-open and champion announcements'))
       .addBooleanOption(o => o.setName('announce').setDescription('Post a confirmation embed when a role is assigned (default: True)')))
     .addSubcommandGroup(group => group
       .setName('reward')
@@ -54,19 +55,22 @@ module.exports = {
       const nextChannel = interaction.options.getChannel('next_channel');
       const battleTitle = interaction.options.getString('battle_title');
       const description = interaction.options.getString('description')?.replace(/\\n/g, '\n');
+      const imageAttach = interaction.options.getAttachment('image');
+      const imageUrl = imageAttach?.url || null;
       const announce = interaction.options.getBoolean('announce');
 
       await query(`
-        INSERT INTO rumble_slaughter_config (channel_id, guild_id, winner_role_id, ping_role_id, next_channel_id, battle_title, description, announce)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        INSERT INTO rumble_slaughter_config (channel_id, guild_id, winner_role_id, ping_role_id, next_channel_id, battle_title, description, image_url, announce)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
         ON CONFLICT (channel_id) DO UPDATE SET
           winner_role_id = COALESCE($3, rumble_slaughter_config.winner_role_id),
           ping_role_id = COALESCE($4, rumble_slaughter_config.ping_role_id),
           next_channel_id = COALESCE($5, rumble_slaughter_config.next_channel_id),
           battle_title = COALESCE($6, rumble_slaughter_config.battle_title),
           description = COALESCE($7, rumble_slaughter_config.description),
-          announce = COALESCE($8, rumble_slaughter_config.announce)
-      `, [channel.id, interaction.guildId, winnerRole?.id || null, pingRole?.id || null, nextChannel?.id || null, battleTitle, description, announce]);
+          image_url = COALESCE($8, rumble_slaughter_config.image_url),
+          announce = COALESCE($9, rumble_slaughter_config.announce)
+      `, [channel.id, interaction.guildId, winnerRole?.id || null, pingRole?.id || null, nextChannel?.id || null, battleTitle, description, imageUrl, announce]);
 
       return interaction.editReply(`✅ <#${channel.id}> configured for Rumble Slaughter.`);
     }
@@ -115,6 +119,7 @@ module.exports = {
           { name: 'Battle Title', value: cfg.battle_title || '*(default)*', inline: false },
           { name: 'Description', value: cfg.description || '*(none)*', inline: false },
           { name: 'Pending One-Time Reward', value: cfg.other_reward || '*(none)*', inline: false },
+          { name: 'Image', value: cfg.image_url ? '✅ Set' : '*(none)*', inline: false },
         )]});
     }
 
