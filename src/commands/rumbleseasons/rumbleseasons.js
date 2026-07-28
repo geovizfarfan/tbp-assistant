@@ -127,17 +127,27 @@ module.exports = {
       const season = seasonRes.rows[0];
       if (!season) return interaction.editReply(`❌ No active season named **${seasonName}**.`);
 
-      const cfg = await query(
-        'SELECT winner_role_id, reaction_emoji FROM rr_channel_config WHERE channel_id = $1 AND winner_role_id IS NOT NULL',
+      // Check RR first, then fall back to RS — a season can mix channels from both
+      const rrCfg = await query(
+        'SELECT winner_role_id FROM rr_channel_config WHERE channel_id = $1 AND winner_role_id IS NOT NULL',
         [channel.id]
       );
-      if (!cfg.rows.length) return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#ff4444')
-        .setDescription(`❌ <#${channel.id}> needs a winner role configured. Run \`/rr setup\` first.`)]});
+      const rsCfg = rrCfg.rows.length ? null : await query(
+        'SELECT winner_role_id FROM rumble_slaughter_config WHERE channel_id = $1 AND winner_role_id IS NOT NULL',
+        [channel.id]
+      );
 
-      await query('INSERT INTO rr_season_channels (season_id, channel_id, guild_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
-        [season.id, channel.id, interaction.guild.id]);
+      if (!rrCfg.rows.length && !rsCfg?.rows.length) {
+        return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#ff4444')
+          .setDescription(`❌ <#${channel.id}> needs a winner role configured. Run \`/rr setup\` or \`/rs setup\` first.`)]});
+      }
+
+      const source = rrCfg.rows.length ? 'rr' : 'rs';
+
+      await query('INSERT INTO rr_season_channels (season_id, channel_id, guild_id, source) VALUES ($1, $2, $3, $4) ON CONFLICT (season_id, channel_id) DO UPDATE SET source = $4',
+        [season.id, channel.id, interaction.guild.id, source]);
       return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
-        .setDescription(`<a:trophies:1512912823062364281> <#${channel.id}> added to season **${season.name}**!`)]});
+        .setDescription(`<a:trophies:1512912823062364281> <#${channel.id}> (${source === 'rr' ? 'Rumble Royale' : 'Rumble Slaughter'}) added to season **${season.name}**!`)]});
     }
 
     if (sub === 'remove') {
@@ -234,9 +244,13 @@ module.exports = {
       if (!season) return interaction.editReply(`❌ No active season named **${seasonName}**.`);
 
       const chRes = await query(
-        `SELECT sc.channel_id, rc.winner_role_id, rc.reaction_emoji
+        `SELECT sc.channel_id, rc.winner_role_id, 'Rumble Royale' AS source_label
          FROM rr_season_channels sc JOIN rr_channel_config rc ON rc.channel_id = sc.channel_id
-         WHERE sc.season_id = $1`, [season.id]
+         WHERE sc.season_id = $1 AND sc.source = 'rr'
+         UNION ALL
+         SELECT sc.channel_id, rs.winner_role_id, 'Rumble Slaughter' AS source_label
+         FROM rr_season_channels sc JOIN rumble_slaughter_config rs ON rs.channel_id = sc.channel_id
+         WHERE sc.season_id = $1 AND sc.source = 'rs'`, [season.id]
       );
       const achRes = await query(
         'SELECT user_id, completions FROM rr_achievements WHERE season_id = $1 ORDER BY completions DESC LIMIT 10',
@@ -244,7 +258,7 @@ module.exports = {
       );
 
       const channelLines = chRes.rows.length
-        ? chRes.rows.map(r => `<#${r.channel_id}> — <@&${r.winner_role_id}> ${r.reaction_emoji || ''}`).join('\n')
+        ? chRes.rows.map(r => `<#${r.channel_id}> — <@&${r.winner_role_id}> *(${r.source_label})*`).join('\n')
         : 'No channels added yet.';
       const achieveLines = achRes.rows.length
         ? achRes.rows.map((r, i) => `**${i+1}.** <@${r.user_id}> — ${r.completions} completion(s)`).join('\n')

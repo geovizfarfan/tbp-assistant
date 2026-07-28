@@ -584,8 +584,10 @@ CREATE TABLE IF NOT EXISTS rr_season_channels (
   season_id INT NOT NULL,
   channel_id TEXT NOT NULL,
   guild_id TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'rr',
   UNIQUE(season_id, channel_id)
 );
+ALTER TABLE rr_season_channels ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'rr';
 
 -- Rumble Grind temp channels
 CREATE TABLE IF NOT EXISTS grind_config (
@@ -706,6 +708,8 @@ ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS other_reward TEXT DEFAULT
 ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS host_description TEXT DEFAULT NULL;
 ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS announce_style TEXT DEFAULT 'embed';
 ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS last_battle_message_id TEXT;
+ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS announce BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE rr_channel_config ADD COLUMN IF NOT EXISTS reaction_emoji TEXT;
 
 CREATE TABLE IF NOT EXISTS shop_config (
   guild_id TEXT PRIMARY KEY,

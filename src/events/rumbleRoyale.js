@@ -93,12 +93,19 @@ async function checkAllRolesAchievement(guild, member, client, guildConfig) {
 }
 
 async function checkSeasonCompletion(guild, member, client, guildConfig, season) {
-  // Get channels defined in this season that have both role+reaction
+  // Get channels defined in this season — can mix Rumble Royale and Rumble
+  // Slaughter channels together, pulling the winner role from whichever
+  // config table each channel's source points to.
   const res = await query(
-    `SELECT rc.winner_role_id, rc.reaction_emoji
+    `SELECT rc.winner_role_id
      FROM rr_season_channels sc
      JOIN rr_channel_config rc ON rc.channel_id = sc.channel_id
-     WHERE sc.season_id = $1 AND rc.winner_role_id IS NOT NULL`,
+     WHERE sc.season_id = $1 AND sc.source = 'rr' AND rc.winner_role_id IS NOT NULL
+     UNION ALL
+     SELECT rs.winner_role_id
+     FROM rr_season_channels sc
+     JOIN rumble_slaughter_config rs ON rs.channel_id = sc.channel_id
+     WHERE sc.season_id = $1 AND sc.source = 'rs' AND rs.winner_role_id IS NOT NULL`,
     [season.id]
   );
   if (!res.rows.length) return; // No channels in this season
@@ -283,6 +290,8 @@ async function handleMessage(message, client) {
     }
 
     // ── Battle announcement (embed or ping-only) ────────────────────────────
+    if (config.announce === false) return; // Role assignment (winner side) is separate and unaffected by this
+
     const announcement = await buildBattleAnnouncement(config, message.channel, parsed.host, parsed.era);
 
     if (config.announce_style === 'ping') {
@@ -411,20 +420,23 @@ async function handleMessage(message, client) {
     descLines.push(`<a:rumblesword:1522372420894330921> **Server Rumble Wins:** ${serverWins}`);
     if (config.next_channel_id) descLines.push(`\n**Next Channel:** <#${config.next_channel_id}>`);
 
-    const winEmbed = new EmbedBuilder()
-      .setColor('#d6c2ee')
-      .setTitle('<:rumble:1522372419338375299> <a:trophies:1512912823062364281> WINNER!')
-      .setDescription(descLines.join('\n'))
-      .setFooter({ text: `VELOURA has tracked ${Number(totalServerWins)} Rumble Royale wins globally.` });
+    if (config.announce !== false) {
+      const winEmbed = new EmbedBuilder()
+        .setColor('#d6c2ee')
+        .setTitle('<:rumble:1522372419338375299> <a:trophies:1512912823062364281> WINNER!')
+        .setDescription(descLines.join('\n'))
+        .setFooter({ text: `VELOURA has tracked ${Number(totalServerWins)} Rumble Royale wins globally.` });
 
-    if (member?.user) winEmbed.setThumbnail(member.user.displayAvatarURL({ dynamic: true }));
+      if (member?.user) winEmbed.setThumbnail(member.user.displayAvatarURL({ dynamic: true }));
 
-    await message.channel.send({ embeds: [winEmbed] });
+      await message.channel.send({ embeds: [winEmbed] });
 
-    const hostPing = config.last_host ? `<@${config.last_host}>` : winnerMention;
-    await message.channel.send(`${hostPing} Battle Finished! You can start a new \`/battle\` now!`);
+      const hostPing = config.last_host ? `<@${config.last_host}>` : winnerMention;
+      await message.channel.send(`${hostPing} Battle Finished! You can start a new \`/battle\` now!`);
+    }
 
-    // Check all-roles achievement after role assignment
+    // Check all-roles achievement after role assignment — runs regardless of
+    // the announce setting, since that's a separate system from posting.
     if (member) {
       // Re-fetch member to get updated roles
       await member.fetch().catch(() => {});
