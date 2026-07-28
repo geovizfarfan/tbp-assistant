@@ -36,7 +36,8 @@ module.exports = {
       .addStringOption(o => o.setName('embed_color').setDescription('Embed color hex'))
       .addStringOption(o => o.setName('reaction_emoji').setDescription('Emoji to auto-react to winner messages'))
       .addStringOption(o => o.setName('battle_title').setDescription('Custom title for battle announcement'))
-      .addStringOption(o => o.setName('description').setDescription('Custom description (use \\n for new lines)')))
+      .addStringOption(o => o.setName('description').setDescription('Custom description (use \\n for new lines)'))
+      .addBooleanOption(o => o.setName('announce').setDescription('Post announcements at all for this channel (default: True)')))
 
     // ── clear ──────────────────────────────────────────────────────────────
     .addSubcommand(sub => sub
@@ -48,10 +49,6 @@ module.exports = {
     .addSubcommandGroup(group => group
       .setName('log')
       .setDescription('Manage RR log channels')
-      .addSubcommand(sub => sub
-        .setName('achievement')
-        .setDescription('Set or clear the achievement log channel')
-        .addChannelOption(o => o.setName('channel').setDescription('Channel for achievement logs (leave empty to clear)')))
       .addSubcommand(sub => sub
         .setName('admin')
         .setDescription('Set or clear the admin/config log channel')
@@ -121,6 +118,7 @@ module.exports = {
       const reactionEmoji = interaction.options.getString('reaction_emoji');
       const battleTitle  = interaction.options.getString('battle_title');
       const description  = interaction.options.getString('description')?.replace(/\\n/g, '\n');
+      const announce     = interaction.options.getBoolean('announce');
 
       // Get existing config to merge
       const existing = await query('SELECT * FROM rr_channel_config WHERE channel_id = $1', [channel.id]);
@@ -143,13 +141,14 @@ module.exports = {
       const newReaction    = reactionEmoji ?? ex?.reaction_emoji;
       const newTitle       = battleTitle ?? ex?.battle_title;
       const newDesc        = description ?? ex?.battle_description;
+      const newAnnounce    = announce ?? ex?.announce ?? true;
 
       await query(`
         INSERT INTO rr_channel_config
           (channel_id, guild_id, winner_role_id, ping_role1_id, ping_role2_id, ping_role3_id,
            next_channel_id, reward_amount, battle_image, embed_color, reaction_emoji,
-           battle_title, battle_description, announce_style, total_games, total_players)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,0,0)
+           battle_title, battle_description, announce_style, announce, total_games, total_players)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,0,0)
         ON CONFLICT (channel_id) DO UPDATE SET
           winner_role_id     = EXCLUDED.winner_role_id,
           ping_role1_id      = EXCLUDED.ping_role1_id,
@@ -162,12 +161,13 @@ module.exports = {
           reaction_emoji     = EXCLUDED.reaction_emoji,
           battle_title       = EXCLUDED.battle_title,
           battle_description = EXCLUDED.battle_description,
-          announce_style     = EXCLUDED.announce_style
+          announce_style     = EXCLUDED.announce_style,
+          announce           = EXCLUDED.announce
       `, [
         channel.id, interaction.guild.id,
         newWinnerRole || null, newPingRole1 || null, newPingRole2 || null, newPingRole3 || null,
         newNextChannel || null, newReward || null, newImage || null,
-        newColor, newReaction || null, newTitle || null, newDesc || null, newAnnounceStyle,
+        newColor, newReaction || null, newTitle || null, newDesc || null, newAnnounceStyle, newAnnounce,
       ]);
 
       const pingList = [newPingRole1, newPingRole2, newPingRole3].filter(Boolean)
@@ -275,19 +275,17 @@ module.exports = {
     // ── /rr log ────────────────────────────────────────────────────────────
     if (group === 'log') {
       const channel = interaction.options.getChannel('channel');
-      const col = sub === 'achievement' ? 'achievement_log_channel_id' : 'log_channel_id';
 
       await query(`
-        INSERT INTO rr_guild_config (guild_id, ${col})
+        INSERT INTO rr_guild_config (guild_id, log_channel_id)
         VALUES ($1, $2)
-        ON CONFLICT (guild_id) DO UPDATE SET ${col} = EXCLUDED.${col}
+        ON CONFLICT (guild_id) DO UPDATE SET log_channel_id = EXCLUDED.log_channel_id
       `, [interaction.guild.id, channel?.id || null]);
 
-      const label = sub === 'achievement' ? 'Achievement' : 'Admin';
       return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
         .setDescription(channel
-          ? `<:rumble:1522372419338375299> **${label}** logs will be posted in <#${channel.id}>.`
-          : `**${label}** log channel cleared.`)]});
+          ? `<:rumble:1522372419338375299> **Admin** logs will be posted in <#${channel.id}>.`
+          : `**Admin** log channel cleared.`)]});
     }
 
     // ── /rr add ───────────────────────────────────────────────────────────
