@@ -234,7 +234,23 @@ module.exports = {
         }
       }
 
-      return interaction.editReply({ embeds: [embed] });
+      // Live-update the currently-posted battle announcement, if there is
+      // one, so edits don't have to wait for the next battle to show up.
+      let liveUpdateNote = '';
+      if (ex?.last_battle_message_id && newAnnounceStyle !== 'ping') {
+        const liveMsg = await channel.messages.fetch(ex.last_battle_message_id).catch(() => null);
+        if (liveMsg) {
+          const { buildBattleAnnouncement } = require('../../events/rumbleRoyale');
+          const freshCfgRes = await query('SELECT * FROM rr_channel_config WHERE channel_id = $1', [channel.id]);
+          const hostName = liveMsg.embeds[0]?.footer?.text?.match(/Hosted by: ([^•]+)/)?.[1]?.trim() || 'Unknown';
+          const era = liveMsg.embeds[0]?.footer?.text?.match(/Era: ([^•]+)/)?.[1]?.trim() || null;
+          const rebuilt = await buildBattleAnnouncement(freshCfgRes.rows[0], channel, hostName, era);
+          await liveMsg.edit({ embeds: rebuilt.embeds }).catch(() => {});
+          liveUpdateNote = ' The currently-posted battle announcement was also updated live.';
+        }
+      }
+
+      return interaction.editReply({ embeds: [embed], content: liveUpdateNote || undefined });
     }
 
     // ── /rr clear ──────────────────────────────────────────────────────────

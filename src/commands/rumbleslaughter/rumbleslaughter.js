@@ -95,7 +95,47 @@ module.exports = {
           announce = COALESCE($14, rumble_slaughter_config.announce)
       `, [channel.id, interaction.guildId, winnerRole?.id || null, pingRole?.id || null, pingRole2?.id || null, pingRole3?.id || null, nextChannel?.id || null, battleTitle, description, imageUrl, embedColor, reactionEmoji, announceStyle, announce]);
 
-      return interaction.editReply(`✅ <#${channel.id}> configured for Rumble Slaughter.`);
+      // Live-update the currently-posted announcement, if there is one, so
+      // edits don't have to wait for the next game to show up.
+      let liveUpdateNote = '';
+      const freshRes = await query('SELECT * FROM rumble_slaughter_config WHERE channel_id = $1', [channel.id]);
+      const freshCfg = freshRes.rows[0];
+
+      if (freshCfg.last_message_id && freshCfg.announce_style !== 'ping') {
+        const liveMsg = await channel.messages.fetch(freshCfg.last_message_id).catch(() => null);
+        if (liveMsg) {
+          const { buildArenaEmbed, buildChampionEmbed } = require('../../events/rumbleSlaughter');
+          let rebuiltEmbed = null;
+
+          if (freshCfg.last_type === 'arena') {
+            const hostMember = freshCfg.last_host_id ? await interaction.guild.members.fetch(freshCfg.last_host_id).catch(() => null) : null;
+            rebuiltEmbed = buildArenaEmbed(freshCfg, {
+              hostId: freshCfg.last_host_id,
+              hostName: hostMember?.user?.username || 'Unknown',
+              entryFee: freshCfg.last_entry_fee,
+              era: freshCfg.last_era,
+              guildName: interaction.guild.name,
+              channelName: channel.name,
+            });
+          } else if (freshCfg.last_type === 'champion') {
+            const winnerMember = freshCfg.last_winner_id ? await interaction.guild.members.fetch(freshCfg.last_winner_id).catch(() => null) : null;
+            if (winnerMember) {
+              rebuiltEmbed = buildChampionEmbed(freshCfg, winnerMember, {
+                pot: freshCfg.last_pot,
+                guildName: interaction.guild.name,
+                channelName: channel.name,
+              });
+            }
+          }
+
+          if (rebuiltEmbed) {
+            await liveMsg.edit({ embeds: [rebuiltEmbed] }).catch(() => {});
+            liveUpdateNote = ' The currently-posted announcement was also updated live.';
+          }
+        }
+      }
+
+      return interaction.editReply(`✅ <#${channel.id}> configured for Rumble Slaughter.${liveUpdateNote}`);
     }
 
     if (group === 'reward' && sub === 'add') {
