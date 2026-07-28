@@ -1,10 +1,74 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { query } = require('../../utils/database');
+
+const MAX_PAGE_LENGTH = 3800; // leaves room for a "Page X/Y" footer note
+
+// Splits long text into pages, preferring to break at a blank line or line
+// break near the limit rather than mid-sentence, falling back to a hard cut
+// if there's no natural break point.
+function splitIntoPages(text, maxLen = MAX_PAGE_LENGTH) {
+  if (text.length <= maxLen) return [text];
+
+  const pages = [];
+  let remaining = text;
+  while (remaining.length > maxLen) {
+    let cut = remaining.lastIndexOf('\n\n', maxLen);
+    if (cut < maxLen * 0.5) cut = remaining.lastIndexOf('\n', maxLen);
+    if (cut < maxLen * 0.5) cut = maxLen;
+    pages.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trim();
+  }
+  if (remaining) pages.push(remaining);
+  return pages;
+}
+
+function buildPageRow(dbId, pageIndex, totalPages) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`embedpage:${dbId}:${pageIndex - 1}`).setLabel('◀ Previous').setStyle(ButtonStyle.Secondary).setDisabled(pageIndex <= 1),
+    new ButtonBuilder().setCustomId(`embedpage:${dbId}:${pageIndex + 1}`).setLabel('Next ▶').setStyle(ButtonStyle.Secondary).setDisabled(pageIndex >= totalPages),
+  );
+}
+
+function buildPageEmbed(stored, pages, pageIndex) {
+  const hexColor = stored.color || '#d6c2ee';
+  const embed = new EmbedBuilder().setColor(hexColor).setDescription(pages[pageIndex - 1]);
+  if (stored.title) embed.setTitle(stored.title);
+  if (stored.image) embed.setImage(stored.image);
+  if (stored.thumbnail) embed.setThumbnail(stored.thumbnail);
+  if (stored.author) embed.setAuthor({ name: stored.author });
+  const footerBase = stored.footer ? `${stored.footer} • ` : '';
+  embed.setFooter({ text: `${footerBase}Page ${pageIndex}/${pages.length}` });
+  return embed;
+}
+
+// In-progress guided-creation sessions, one per user at a time. Not
+// persisted to the database — these are short-lived (a few minutes at
+// most while someone's actively building an embed) and lost on restart,
+// which is an acceptable tradeoff for a wizard flow like this.
+const guidedSessions = new Map();
+
+function buildGuidedButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('embedguided_addpage').setLabel('➕ Add Another Page').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('embedguided_post').setLabel('✅ Post Now').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('embedguided_cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger),
+  );
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('embed')
     .setDescription('Post a custom embed')
+    .addSubcommand(sub => sub
+      .setName('create-guided')
+      .setDescription('Build a multi-page embed step by step with real line breaks, no \\n needed')
+      .addChannelOption(o => o.setName('channel').setDescription('Channel to post in (default: current channel)'))
+      .addStringOption(o => o.setName('color').setDescription('Hex color, e.g. #d6c2ee'))
+      .addStringOption(o => o.setName('image').setDescription('Image URL (large, shown at the bottom)'))
+      .addStringOption(o => o.setName('thumbnail').setDescription('Thumbnail URL (small, shown top-right)'))
+      .addStringOption(o => o.setName('footer').setDescription('Footer text'))
+      .addStringOption(o => o.setName('author').setDescription('Author name shown above the title')))
+
     .addSubcommand(sub => sub
       .setName('create')
       .setDescription('Create and post a custom embed')
@@ -46,6 +110,32 @@ module.exports = {
     if (sub === 'list')   return listEmbeds(interaction);
     if (sub === 'repost') return repostEmbed(interaction);
 
+    if (sub === 'create-guided') {
+      const channel   = interaction.options.getChannel('channel') || interaction.channel;
+      const color     = interaction.options.getString('color');
+      const image     = interaction.options.getString('image');
+      const thumbnail = interaction.options.getString('thumbnail');
+      const footer    = interaction.options.getString('footer');
+      const author    = interaction.options.getString('author');
+
+      guidedSessions.set(interaction.user.id, {
+        channelId: channel.id,
+        color: /^#[0-9A-Fa-f]{6}$/.test(color || '') ? color : '#d6c2ee',
+        image, thumbnail, footer, author,
+        title: null,
+        pages: [],
+      });
+
+      const modal = new ModalBuilder().setCustomId('embedguided_modal_first').setTitle('Page 1');
+      const titleInput = new TextInputBuilder().setCustomId('title').setLabel('Title (optional)').setStyle(TextInputStyle.Short).setRequired(false);
+      const textInput = new TextInputBuilder().setCustomId('text').setLabel('Page 1 text').setStyle(TextInputStyle.Paragraph).setRequired(true);
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(titleInput),
+        new ActionRowBuilder().addComponents(textInput),
+      );
+      return interaction.showModal(modal);
+    }
+
     const channel     = interaction.options.getChannel('channel') || interaction.channel;
     const title       = interaction.options.getString('title');
     const description = interaction.options.getString('description').replace(/\\n/g, '\n');
@@ -58,12 +148,10 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
 
     const hexColor = /^#[0-9A-Fa-f]{6}$/.test(color) ? color : '#d6c2ee';
-    const embed = new EmbedBuilder().setColor(hexColor).setDescription(description);
-    if (title) embed.setTitle(title);
-    if (image) embed.setImage(image);
-    if (thumbnail) embed.setThumbnail(thumbnail);
-    if (footer) embed.setFooter({ text: footer });
-    if (author) embed.setAuthor({ name: author });
+    const pages = splitIntoPages(description);
+
+    const stored = { title, color: hexColor, image, thumbnail, footer, author };
+    const embed = buildPageEmbed(stored, pages, 1);
 
     const msg = await channel.send({ embeds: [embed] }).catch((err) => {
       console.error('[Embed] Failed to send:', err.message);
@@ -72,10 +160,16 @@ module.exports = {
 
     if (!msg) return interaction.editReply('❌ Failed to post — check the image/thumbnail URLs are valid, and that Veloura can post in that channel.');
 
-    await query(`
+    const insertRes = await query(`
       INSERT INTO custom_embeds (guild_id, channel_id, message_id, title, description, color, image, thumbnail, footer, author, created_by)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id
     `, [interaction.guildId, channel.id, msg.id, title, description, hexColor, image, thumbnail, footer, author, interaction.user.id]);
+
+    if (pages.length > 1) {
+      const dbId = insertRes.rows[0].id;
+      await msg.edit({ components: [buildPageRow(dbId, 1, pages.length)] }).catch(() => {});
+      return interaction.editReply(`✅ Embed posted in <#${channel.id}> across **${pages.length} pages** — Next/Previous buttons added.`);
+    }
 
     return interaction.editReply(`✅ Embed posted in <#${channel.id}>.`);
   },
@@ -115,6 +209,37 @@ async function editEmbed(interaction) {
         color = COALESCE($1, color), image = COALESCE($2, image), thumbnail = COALESCE($3, thumbnail)
       WHERE message_id = $4
     `, [color, image, thumbnail, messageId]);
+  }
+
+  // Check the TRUE stored text, not the live message — a multi-page embed's
+  // live message only ever shows whichever page is currently up, so editing
+  // via that would silently overwrite (and destroy) every other page.
+  const storedRes = await query('SELECT description FROM custom_embeds WHERE message_id = $1', [messageId]);
+  const storedDescription = storedRes.rows[0]?.description || oldEmbed.description || '';
+  const isMultiPage = splitIntoPages(storedDescription).length > 1;
+
+  if (isMultiPage) {
+    const modal = new ModalBuilder()
+      .setCustomId(`embededitmeta_modal:${channel.id}:${messageId}`)
+      .setTitle('Edit Title / Footer / Author');
+
+    const titleInput = new TextInputBuilder()
+      .setCustomId('title').setLabel('Title').setStyle(TextInputStyle.Short).setRequired(false)
+      .setValue((oldEmbed.title || '').slice(0, 4000));
+    const footerInput = new TextInputBuilder()
+      .setCustomId('footer').setLabel('Footer (page number gets appended automatically)').setStyle(TextInputStyle.Short).setRequired(false)
+      .setValue((storedRes.rows[0]?.footer || '').slice(0, 4000));
+    const authorInput = new TextInputBuilder()
+      .setCustomId('author').setLabel('Author').setStyle(TextInputStyle.Short).setRequired(false)
+      .setValue((oldEmbed.author?.name || '').slice(0, 4000));
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(titleInput),
+      new ActionRowBuilder().addComponents(footerInput),
+      new ActionRowBuilder().addComponents(authorInput),
+    );
+
+    return interaction.showModal(modal);
   }
 
   // Show a modal pre-filled with the current text so it can be edited in place
@@ -244,3 +369,136 @@ async function repostEmbed(interaction) {
 }
 
 module.exports.handleEditModal = handleEditModal;
+
+async function handlePageButton(interaction) {
+  const [, dbId, pageIndexStr] = interaction.customId.split(':');
+  const pageIndex = parseInt(pageIndexStr, 10);
+
+  const res = await query('SELECT * FROM custom_embeds WHERE id = $1', [dbId]);
+  if (!res.rows.length) return interaction.reply({ content: '❌ Couldn\'t find this embed\'s stored data anymore.', ephemeral: true });
+  const stored = res.rows[0];
+
+  // Recompute pages fresh each time, so an /embed edit to the text is reflected
+  const pages = splitIntoPages(stored.description || '');
+  const clampedIndex = Math.min(Math.max(pageIndex, 1), pages.length);
+
+  const embed = buildPageEmbed(stored, pages, clampedIndex);
+  const row = buildPageRow(dbId, clampedIndex, pages.length);
+
+  await interaction.update({ embeds: [embed], components: [row] });
+}
+
+module.exports.handlePageButton = handlePageButton;
+
+async function handleEditMetaModal(interaction) {
+  const [, channelId, messageId] = interaction.customId.split(':');
+  await interaction.deferReply({ ephemeral: true });
+
+  const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
+  const msg = channel ? await channel.messages.fetch(messageId).catch(() => null) : null;
+  if (!msg || !msg.embeds.length) return interaction.editReply(`❌ Couldn't find that embed anymore — it may have been deleted.`);
+
+  const title  = interaction.fields.getTextInputValue('title');
+  const footer = interaction.fields.getTextInputValue('footer');
+  const author = interaction.fields.getTextInputValue('author');
+
+  await query(`
+    UPDATE custom_embeds SET title=$1, footer=$2, author=$3 WHERE message_id = $4
+  `, [title || null, footer || null, author || null, messageId]);
+
+  const res = await query('SELECT * FROM custom_embeds WHERE message_id = $1', [messageId]);
+  const stored = res.rows[0];
+  const pages = splitIntoPages(stored.description || '');
+
+  // Figure out which page is currently showing from the live embed's footer,
+  // so we rebuild that same page rather than resetting to page 1.
+  const currentFooter = msg.embeds[0].footer?.text || '';
+  const pageMatch = currentFooter.match(/Page (\d+)\/(\d+)/);
+  const currentPage = pageMatch ? Math.min(parseInt(pageMatch[1], 10), pages.length) : 1;
+
+  const embed = buildPageEmbed(stored, pages, currentPage);
+  const row = buildPageRow(stored.id, currentPage, pages.length);
+  await msg.edit({ embeds: [embed], components: [row] }).catch(() => {});
+
+  return interaction.editReply(`✅ Title/footer/author updated on <#${channelId}>.`);
+}
+
+module.exports.handleEditMetaModal = handleEditMetaModal;
+
+async function handleGuidedFirstModal(interaction) {
+  const session = guidedSessions.get(interaction.user.id);
+  if (!session) return interaction.reply({ content: '❌ Session expired — run `/embed create-guided` again.', ephemeral: true });
+
+  session.title = interaction.fields.getTextInputValue('title') || null;
+  session.pages.push(interaction.fields.getTextInputValue('text'));
+
+  await interaction.reply({
+    content: `📝 Page 1 saved (${session.pages[0].length} characters). Add more pages, or post now.`,
+    components: [buildGuidedButtons()],
+    ephemeral: true,
+  });
+}
+module.exports.handleGuidedFirstModal = handleGuidedFirstModal;
+
+async function handleGuidedButton(interaction) {
+  const session = guidedSessions.get(interaction.user.id);
+  if (!session) return interaction.reply({ content: '❌ Session expired — run `/embed create-guided` again.', ephemeral: true });
+
+  if (interaction.customId === 'embedguided_cancel') {
+    guidedSessions.delete(interaction.user.id);
+    return interaction.update({ content: '❌ Cancelled — nothing was posted.', components: [] });
+  }
+
+  if (interaction.customId === 'embedguided_addpage') {
+    const modal = new ModalBuilder().setCustomId('embedguided_modal_next').setTitle(`Page ${session.pages.length + 1}`);
+    const textInput = new TextInputBuilder().setCustomId('text').setLabel(`Page ${session.pages.length + 1} text`).setStyle(TextInputStyle.Paragraph).setRequired(true);
+    modal.addComponents(new ActionRowBuilder().addComponents(textInput));
+    return interaction.showModal(modal);
+  }
+
+  if (interaction.customId === 'embedguided_post') {
+    await interaction.update({ content: '⏳ Posting...', components: [] });
+
+    const channel = await interaction.client.channels.fetch(session.channelId).catch(() => null);
+    if (!channel) return interaction.editReply({ content: '❌ Couldn\'t find that channel anymore.' });
+
+    const fullDescription = session.pages.join('\n\n');
+    const pages = session.pages; // one modal submission = one page, exactly as the user wrote it
+    const stored = { title: session.title, color: session.color, image: session.image, thumbnail: session.thumbnail, footer: session.footer, author: session.author };
+    const embed = buildPageEmbed(stored, pages, 1);
+
+    const msg = await channel.send({ embeds: [embed] }).catch((err) => {
+      console.error('[Embed] Guided post failed:', err.message);
+      return null;
+    });
+    if (!msg) return interaction.editReply({ content: '❌ Failed to post — check Veloura\'s permissions in that channel.' });
+
+    const insertRes = await query(`
+      INSERT INTO custom_embeds (guild_id, channel_id, message_id, title, description, color, image, thumbnail, footer, author, created_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id
+    `, [interaction.guildId, channel.id, msg.id, session.title, fullDescription, session.color, session.image, session.thumbnail, session.footer, session.author, interaction.user.id]);
+
+    if (pages.length > 1) {
+      const dbId = insertRes.rows[0].id;
+      await msg.edit({ components: [buildPageRow(dbId, 1, pages.length)] }).catch(() => {});
+    }
+
+    guidedSessions.delete(interaction.user.id);
+    return interaction.editReply({ content: `✅ Posted in <#${channel.id}>${pages.length > 1 ? ` across **${pages.length} pages**` : ''}.` });
+  }
+}
+module.exports.handleGuidedButton = handleGuidedButton;
+
+async function handleGuidedNextModal(interaction) {
+  const session = guidedSessions.get(interaction.user.id);
+  if (!session) return interaction.reply({ content: '❌ Session expired — run `/embed create-guided` again.', ephemeral: true });
+
+  session.pages.push(interaction.fields.getTextInputValue('text'));
+
+  await interaction.reply({
+    content: `📝 Page ${session.pages.length} saved. Add more pages, or post now.`,
+    components: [buildGuidedButtons()],
+    ephemeral: true,
+  });
+}
+module.exports.handleGuidedNextModal = handleGuidedNextModal;

@@ -208,6 +208,14 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isButton() && interaction.customId.startsWith('grind_')) {
     return grindModule.handleButton(interaction, client);
   }
+  if (interaction.isButton() && interaction.customId.startsWith('embedpage:')) {
+    const { handlePageButton } = require('./commands/embed/embed');
+    return handlePageButton(interaction);
+  }
+  if (interaction.isButton() && interaction.customId.startsWith('embedguided_')) {
+    const { handleGuidedButton } = require('./commands/embed/embed');
+    return handleGuidedButton(interaction);
+  }
   if (interaction.isButton() && interaction.customId.startsWith('pingpanel_')) {
     return pingPanelModule.handleButton(interaction);
   }
@@ -373,6 +381,18 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isModalSubmit() && interaction.customId.startsWith('embededit_modal:')) {
     const { handleEditModal } = require('./commands/embed/embed');
     return handleEditModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('embededitmeta_modal:')) {
+    const { handleEditMetaModal } = require('./commands/embed/embed');
+    return handleEditMetaModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId === 'embedguided_modal_first') {
+    const { handleGuidedFirstModal } = require('./commands/embed/embed');
+    return handleGuidedFirstModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId === 'embedguided_modal_next') {
+    const { handleGuidedNextModal } = require('./commands/embed/embed');
+    return handleGuidedNextModal(interaction);
   }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('serversetup_boostermodal:')) {
     const serverSetupModule = require('./commands/serversetup/serversetup');
