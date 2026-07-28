@@ -397,9 +397,14 @@ CREATE TABLE IF NOT EXISTS private_rooms (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   last_activity_at TIMESTAMPTZ DEFAULT NOW(),
   archived_at TIMESTAMPTZ,
-  status TEXT DEFAULT 'active' CHECK (status IN ('active','archived','deleted')),
-  UNIQUE(guild_id, user_id, status)
+  status TEXT DEFAULT 'active' CHECK (status IN ('active','archived','deleted'))
 );
+-- Only one ACTIVE room per user should ever exist — but archived/deleted rooms
+-- accumulate legitimately over time as rooms get created and closed repeatedly,
+-- so a plain table-wide UNIQUE(guild_id, user_id, status) was wrong; it blocked
+-- a second archived or deleted row from ever being written for the same user.
+ALTER TABLE private_rooms DROP CONSTRAINT IF EXISTS private_rooms_guild_id_user_id_status_key;
+CREATE UNIQUE INDEX IF NOT EXISTS private_rooms_active_unique ON private_rooms (guild_id, user_id) WHERE status = 'active';
 
 -- Goos Date reminder config
 CREATE TABLE IF NOT EXISTS goosdate_config (
