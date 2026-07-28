@@ -493,12 +493,24 @@ CREATE TABLE IF NOT EXISTS rumble_slaughter_config (
   announce BOOLEAN NOT NULL DEFAULT TRUE,
   last_message_id TEXT,
   last_embed_json TEXT,
-  last_ping_content TEXT
+  last_ping_content TEXT,
+  last_type TEXT,
+  last_host_id TEXT,
+  last_winner_id TEXT,
+  last_entry_fee TEXT,
+  last_era TEXT,
+  last_pot TEXT
 );
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_message_id TEXT;
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_embed_json TEXT;
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_ping_content TEXT;
+ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_type TEXT;
+ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_host_id TEXT;
+ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_winner_id TEXT;
+ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_entry_fee TEXT;
+ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_era TEXT;
+ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_pot TEXT;
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS ping_role2_id TEXT;
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS ping_role3_id TEXT;
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS embed_color TEXT;

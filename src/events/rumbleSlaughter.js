@@ -24,6 +24,56 @@ function buildPings(cfg) {
     .filter(Boolean).map(id => `<@&${id}>`).join(' ');
 }
 
+// Rebuilds the arena-open embed fresh from CURRENT config every time it's
+// called — used both when the event first happens and by /rs repost, so a
+// repost always reflects whatever settings are live right now, not a frozen
+// snapshot from whenever it was originally posted.
+function buildArenaEmbed(cfg, { hostId, hostName, entryFee, era, guildName, channelName }) {
+  const descLines = [];
+  if (!cfg.battle_title) descLines.push('⚔️ Rumble Slaughter — Arena Open!');
+  if (cfg.description) {
+    descLines.push('', cfg.description, '');
+  } else {
+    descLines.push('');
+  }
+  if (cfg.host_description) descLines.push('', cfg.host_description, '');
+  if (cfg.winner_role_id) descLines.push(`<a:trophies:1512912823062364281> **Winner Role:** <@&${cfg.winner_role_id}>`);
+  if (entryFee) descLines.push(`<a:moneybag:1522373120147849226> **Entry Fee:** ${entryFee} <a:SINS:1522338148380704910> (sins)`);
+  if (cfg.other_reward) descLines.push(`<a:gift:1512915751458050268> **Bonus Reward:** ${cfg.other_reward}`);
+  if (cfg.next_channel_id) descLines.push(`<a:rumblesword:1522372420894330921> **Next Room:** <#${cfg.next_channel_id}>`);
+
+  const embed = new EmbedBuilder()
+    .setColor(cfg.embed_color || '#d6c2ee')
+    .setAuthor({ name: (channelName || '').slice(0, 256) })
+    .setTitle((cfg.battle_title || '⚔️ Rumble Slaughter — Arena Open!').slice(0, 256))
+    .setDescription(descLines.join('\n').slice(0, 4096))
+    .setFooter({ text: `${guildName} • Hosted by: ${hostName}${era ? ` • Era: ${era}` : ''}` });
+  if (cfg.image_url) embed.setImage(cfg.image_url);
+  return embed;
+}
+
+// Same idea for the champion embed — always rebuilt fresh from current config.
+function buildChampionEmbed(cfg, member, { pot, guildName, channelName }) {
+  const descLines = [];
+  descLines.push(`<@${member.id}> has been crowned champion and awarded <@&${cfg.winner_role_id}>!`);
+  if (pot) descLines.push(`<a:moneybag:1522373120147849226> **Pot Won:** ${pot} <a:SINS:1522338148380704910> (sins)`);
+  if (cfg.other_reward) descLines.push(`<a:gift:1512915751458050268> **Bonus Reward:** ${cfg.other_reward}`);
+  if (cfg.host_description) descLines.push(cfg.host_description);
+  if (cfg.description) descLines.push(cfg.description);
+  if (cfg.next_channel_id) descLines.push(`<a:rumblesword:1522372420894330921> **Next Game:** <#${cfg.next_channel_id}>`);
+
+  const embed = new EmbedBuilder()
+    .setColor(cfg.embed_color || '#d6c2ee')
+    .setAuthor({ name: (channelName || '').slice(0, 256) })
+    .setTitle(cfg.battle_title || '💀 Rumble Slaughter — Champion!')
+    .setDescription(descLines.join('\n'))
+    .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+    .setFooter({ text: `${guildName} • Rumble Slaughter Champion` })
+    .setTimestamp();
+  if (cfg.image_url) embed.setImage(cfg.image_url);
+  return embed;
+}
+
 async function handleMessage(message, client) {
   if (message.author.id !== PLAY_AND_REGRET_BOT_ID) return;
   if (!message.embeds?.length) return;
@@ -75,34 +125,22 @@ async function handleArenaOpen(message, embed) {
   const hostMember = await message.guild.members.fetch(hostId).catch(() => null);
   const hostName = hostMember?.user?.username || 'Unknown';
 
-  const descLines = [];
-  if (!cfg.battle_title) descLines.push('⚔️ Rumble Slaughter — Arena Open!');
-  if (cfg.description) {
-    descLines.push('', cfg.description, '');
-  } else {
-    descLines.push('');
-  }
-  if (cfg.host_description) descLines.push('', cfg.host_description, '');
-  if (cfg.winner_role_id) descLines.push(`<a:trophies:1512912823062364281> **Winner Role:** <@&${cfg.winner_role_id}>`);
-  if (entryFee) descLines.push(`<a:moneybag:1522373120147849226> **Entry Fee:** ${entryFee} <a:SINS:1522338148380704910> (sins)`);
-  if (cfg.other_reward) descLines.push(`<a:gift:1512915751458050268> **Bonus Reward:** ${cfg.other_reward}`);
-  if (cfg.next_channel_id) descLines.push(`<a:rumblesword:1522372420894330921> **Next Room:** <#${cfg.next_channel_id}>`);
-
-  const startEmbed = new EmbedBuilder()
-    .setColor(cfg.embed_color || '#d6c2ee')
-    .setAuthor({ name: (message.channel.name || '').slice(0, 256) })
-    .setTitle((cfg.battle_title || '⚔️ Rumble Slaughter — Arena Open!').slice(0, 256))
-    .setDescription(descLines.join('\n').slice(0, 4096))
-    .setFooter({ text: `${message.guild.name} • Hosted by: ${hostName}${era ? ` • Era: ${era}` : ''}` });
-  if (cfg.image_url) startEmbed.setImage(cfg.image_url);
+  const startEmbed = buildArenaEmbed(cfg, {
+    hostId, hostName, entryFee, era,
+    guildName: message.guild.name, channelName: message.channel.name,
+  });
 
   const sentMsg = await message.channel.send({ content: pings || undefined, embeds: [startEmbed] }).catch(() => null);
 
   if (sentMsg) {
+    // Store the raw facts, not a frozen embed — /rs repost rebuilds fresh from
+    // current config using these, so config edits actually show up on repost.
     await query(`
-      UPDATE rumble_slaughter_config SET last_message_id = $1, last_embed_json = $2, last_ping_content = $3
-      WHERE channel_id = $4
-    `, [sentMsg.id, JSON.stringify(startEmbed.toJSON()), pings || null, message.channel.id]).catch(() => {});
+      UPDATE rumble_slaughter_config SET
+        last_message_id = $1, last_ping_content = $2,
+        last_type = 'arena', last_host_id = $3, last_entry_fee = $4, last_era = $5, last_pot = NULL
+      WHERE channel_id = $6
+    `, [sentMsg.id, pings || null, hostId, entryFee, era, message.channel.id]).catch(() => {});
   }
 }
 
@@ -153,31 +191,19 @@ async function handleChampion(message, embed) {
     return;
   }
 
-  const descLines = [];
-  descLines.push(`<@${member.id}> has been crowned champion and awarded <@&${cfg.winner_role_id}>!`);
-  if (pot) descLines.push(`<a:moneybag:1522373120147849226> **Pot Won:** ${pot} <a:SINS:1522338148380704910> (sins)`);
-  if (cfg.other_reward) descLines.push(`<a:gift:1512915751458050268> **Bonus Reward:** ${cfg.other_reward}`);
-  if (cfg.host_description) descLines.push(cfg.host_description);
-  if (cfg.description) descLines.push(cfg.description);
-  if (cfg.next_channel_id) descLines.push(`<a:rumblesword:1522372420894330921> **Next Game:** <#${cfg.next_channel_id}>`);
-
-  const roleEmbed = new EmbedBuilder()
-    .setColor(cfg.embed_color || '#d6c2ee')
-    .setAuthor({ name: (message.channel.name || '').slice(0, 256) })
-    .setTitle(cfg.battle_title || '💀 Rumble Slaughter — Champion!')
-    .setDescription(descLines.join('\n'))
-    .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-    .setFooter({ text: `${message.guild.name} • Rumble Slaughter Champion` })
-    .setTimestamp();
-  if (cfg.image_url) roleEmbed.setImage(cfg.image_url);
+  const roleEmbed = buildChampionEmbed(cfg, member, {
+    pot, guildName: message.guild.name, channelName: message.channel.name,
+  });
 
   const sentMsg = await message.channel.send({ embeds: [roleEmbed] }).catch(() => null);
 
   if (sentMsg) {
     await query(`
-      UPDATE rumble_slaughter_config SET last_message_id = $1, last_embed_json = $2, last_ping_content = NULL
-      WHERE channel_id = $3
-    `, [sentMsg.id, JSON.stringify(roleEmbed.toJSON()), message.channel.id]).catch(() => {});
+      UPDATE rumble_slaughter_config SET
+        last_message_id = $1, last_ping_content = NULL,
+        last_type = 'champion', last_winner_id = $2, last_pot = $3
+      WHERE channel_id = $4
+    `, [sentMsg.id, member.id, pot, message.channel.id]).catch(() => {});
   }
 
   // Ping to get a new game going
@@ -221,4 +247,4 @@ async function handleReaction(message) {
   } catch (e) { console.error('[RumbleSlaughter] handleReaction error:', e.message); }
 }
 
-module.exports = { handleMessage, handleReaction };
+module.exports = { handleMessage, handleReaction, buildArenaEmbed, buildChampionEmbed, buildPings };

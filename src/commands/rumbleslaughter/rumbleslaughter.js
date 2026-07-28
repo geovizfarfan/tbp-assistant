@@ -163,25 +163,48 @@ module.exports = {
       if (!res.rows.length) return interaction.editReply(`❌ <#${channel.id}> isn't configured for Rumble Slaughter.`);
       const cfg = res.rows[0];
 
-      if (!cfg.last_embed_json) return interaction.editReply(`❌ No announcement has been posted in <#${channel.id}> yet — nothing to repost.`);
+      if (!cfg.last_type) return interaction.editReply(`❌ No announcement has been posted in <#${channel.id}> yet — nothing to repost.`);
 
       if (cfg.last_message_id) {
         const existing = await channel.messages.fetch(cfg.last_message_id).catch(() => null);
         if (existing) return interaction.editReply(`✅ That announcement still exists — no repost needed. ${existing.url}`);
       }
 
-      const { EmbedBuilder } = require('discord.js');
-      const embedData = JSON.parse(cfg.last_embed_json);
-      const rebuiltEmbed = EmbedBuilder.from(embedData);
+      const { buildArenaEmbed, buildChampionEmbed, buildPings } = require('../../events/rumbleSlaughter');
+      const pings = buildPings(cfg);
+      let rebuiltEmbed, content;
+
+      if (cfg.last_type === 'arena') {
+        const hostMember = cfg.last_host_id ? await interaction.guild.members.fetch(cfg.last_host_id).catch(() => null) : null;
+        rebuiltEmbed = buildArenaEmbed(cfg, {
+          hostId: cfg.last_host_id,
+          hostName: hostMember?.user?.username || 'Unknown',
+          entryFee: cfg.last_entry_fee,
+          era: cfg.last_era,
+          guildName: interaction.guild.name,
+          channelName: channel.name,
+        });
+        content = pings || undefined;
+      } else if (cfg.last_type === 'champion') {
+        const winnerMember = cfg.last_winner_id ? await interaction.guild.members.fetch(cfg.last_winner_id).catch(() => null) : null;
+        if (!winnerMember) return interaction.editReply(`❌ Couldn't find the champion's member record — can't rebuild that announcement.`);
+        rebuiltEmbed = buildChampionEmbed(cfg, winnerMember, {
+          pot: cfg.last_pot,
+          guildName: interaction.guild.name,
+          channelName: channel.name,
+        });
+      } else {
+        return interaction.editReply(`❌ Unknown announcement type — nothing to repost.`);
+      }
 
       const msg = await channel.send({
-        content: cfg.last_ping_content || undefined,
+        content,
         embeds: [rebuiltEmbed],
       }).catch(() => null);
       if (!msg) return interaction.editReply(`❌ Couldn't repost — check Veloura's permissions in <#${channel.id}>.`);
 
       await query('UPDATE rumble_slaughter_config SET last_message_id = $1 WHERE channel_id = $2', [msg.id, channel.id]);
-      return interaction.editReply(`✅ Reposted in <#${channel.id}>. ${msg.url}`);
+      return interaction.editReply(`✅ Reposted in <#${channel.id}> using your current settings. ${msg.url}`);
     }
   },
 };
