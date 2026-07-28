@@ -79,7 +79,7 @@ module.exports = {
 
       await query(`
         INSERT INTO rumble_slaughter_config (channel_id, guild_id, winner_role_id, ping_role_id, ping_role2_id, ping_role3_id, next_channel_id, battle_title, description, image_url, embed_color, reaction_emoji, announce_style, announce)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,COALESCE($14, true))
         ON CONFLICT (channel_id) DO UPDATE SET
           winner_role_id = COALESCE($3, rumble_slaughter_config.winner_role_id),
           ping_role_id = COALESCE($4, rumble_slaughter_config.ping_role_id),
