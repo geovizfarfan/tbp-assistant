@@ -745,8 +745,10 @@ CREATE TABLE IF NOT EXISTS ban_logs (
   banned_by TEXT,
   message_id TEXT,
   channel_id TEXT,
+  avatar_url TEXT,
   banned_at TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE ban_logs ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 
 CREATE TABLE IF NOT EXISTS level_config (
   guild_id TEXT PRIMARY KEY,

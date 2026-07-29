@@ -6,8 +6,8 @@ async function getConfig(guildId) {
   return res.rows[0] || null;
 }
 
-function buildBanEmbed(row) {
-  return new EmbedBuilder()
+function buildBanEmbed(row, avatarUrl) {
+  const embed = new EmbedBuilder()
     .setColor('#e74c3c')
     .setTitle('🔨 Member Banned')
     .addFields(
@@ -17,16 +17,14 @@ function buildBanEmbed(row) {
     )
     .setFooter({ text: `Log ID: ${row.id}` })
     .setTimestamp(new Date(row.banned_at));
+  if (avatarUrl) embed.setThumbnail(avatarUrl);
+  return embed;
 }
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('banlog')
     .setDescription('Ban log — auto-posts when a member is banned')
-    .addSubcommand(sub => sub
-      .setName('setup')
-      .setDescription('Set the channel bans get logged to')
-      .addChannelOption(o => o.setName('channel').setDescription('Channel for ban logs').setRequired(true)))
     .addSubcommand(sub => sub
       .setName('reason')
       .setDescription('Add or update the reason on a logged ban')
@@ -66,7 +64,7 @@ module.exports = {
       if (updated.message_id && updated.channel_id) {
         const ch = await interaction.client.channels.fetch(updated.channel_id).catch(() => null);
         const msg = ch ? await ch.messages.fetch(updated.message_id).catch(() => null) : null;
-        if (msg) await msg.edit({ embeds: [buildBanEmbed(updated)] }).catch(() => {});
+        if (msg) await msg.edit({ embeds: [buildBanEmbed(updated, updated.avatar_url)] }).catch(() => {});
       }
       return interaction.editReply(`✅ Updated reason for ban log #${id}.`);
     }
@@ -100,13 +98,15 @@ module.exports = {
       }
     }
 
+    const avatarUrl = ban.user.displayAvatarURL({ dynamic: true, size: 256 });
+
     const res = await query(
-      `INSERT INTO ban_logs (guild_id, user_id, username, reason, banned_by, channel_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [ban.guild.id, ban.user.id, ban.user.username, reason, bannedBy, channel.id]
+      `INSERT INTO ban_logs (guild_id, user_id, username, reason, banned_by, channel_id, avatar_url) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [ban.guild.id, ban.user.id, ban.user.username, reason, bannedBy, channel.id, avatarUrl]
     );
     const row = res.rows[0];
 
-    const msg = await channel.send({ embeds: [buildBanEmbed(row)] }).catch(() => null);
+    const msg = await channel.send({ embeds: [buildBanEmbed(row, avatarUrl)] }).catch(() => null);
     if (msg) await query('UPDATE ban_logs SET message_id = $1 WHERE id = $2', [msg.id, row.id]).catch(() => {});
   },
 };
