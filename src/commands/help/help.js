@@ -151,7 +151,7 @@ function buildCategoryEmbed(category) {
       .addFields(
         { name: 'How do I log a payment I made?', value: '`/payment log user:@member amount:500 service:"..." method:"..."`', inline: false },
         { name: 'How do I check what I\'m owed?', value: '`/payout` — shows your own unpaid games; admins can check anyone\'s.', inline: false },
-        { name: 'How do I add a seller or payment method?', value: 'Run `/server-setup` → Payments & Sellers to approve a seller. For your own payment info, use `/pay methods set`.', inline: false },
+        { name: 'How do I add a seller or payment method?', value: 'Run `/server-setup` → Payments & Sellers to approve a seller. For your own payment info, use `/payment methods set`.', inline: false },
       ),
 
     sticky: new EmbedBuilder().setColor('#d6c2ee')

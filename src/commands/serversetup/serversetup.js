@@ -76,7 +76,7 @@ const CATEGORIES = {
   sellers: {
     label: 'Payments, Sellers & Shop',
     emoji: '💳',
-    description: 'Seller roster and shop channels — buttons below. Payment methods are self-service (a seller sets their own via `/pay methods set`, not something set for them here). Shop item management (`additem`/`edititem`/`removeitem`) has too many fields to fit here cleanly — use those commands directly.',
+    description: 'Seller roster and shop channels — buttons below. Payment methods are self-service (a seller sets their own via `/payment methods set`, not something set for them here). Shop item management (`additem`/`edititem`/`removeitem`) has too many fields to fit here cleanly — use those commands directly.',
     items: [],
   },
   panels: {
