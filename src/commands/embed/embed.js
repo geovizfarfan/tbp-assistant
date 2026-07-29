@@ -36,8 +36,12 @@ function buildPageEmbed(stored, pages, pageIndex) {
   if (stored.image) embed.setImage(stored.image);
   if (stored.thumbnail) embed.setThumbnail(stored.thumbnail);
   if (stored.author) embed.setAuthor({ name: stored.author });
-  const footerBase = stored.footer ? `${stored.footer} • ` : '';
-  embed.setFooter({ text: `${footerBase}Page ${pageIndex}/${pages.length}` });
+  if (pages.length > 1) {
+    const footerBase = stored.footer ? `${stored.footer} • ` : '';
+    embed.setFooter({ text: `${footerBase}Page ${pageIndex}/${pages.length}` });
+  } else if (stored.footer) {
+    embed.setFooter({ text: stored.footer });
+  }
   return embed;
 }
 
@@ -60,19 +64,9 @@ module.exports = {
     .setName('embed')
     .setDescription('Post a custom embed')
     .addSubcommand(sub => sub
-      .setName('create-guided')
-      .setDescription('Build a multi-page embed step by step with real line breaks, no \\n needed')
-      .addChannelOption(o => o.setName('channel').setDescription('Channel to post in (default: current channel)'))
-      .addStringOption(o => o.setName('color').setDescription('Hex color, e.g. #d6c2ee'))
-      .addStringOption(o => o.setName('image').setDescription('Image URL (large, shown at the bottom)'))
-      .addStringOption(o => o.setName('thumbnail').setDescription('Thumbnail URL (small, shown top-right)'))
-      .addStringOption(o => o.setName('footer').setDescription('Footer text'))
-      .addStringOption(o => o.setName('author').setDescription('Author name shown above the title')))
-
-    .addSubcommand(sub => sub
       .setName('create')
-      .setDescription('Create and post a custom embed')
-      .addStringOption(o => o.setName('description').setDescription('Body text (use \\n for new lines)').setRequired(true))
+      .setDescription('Create and post a custom embed — leave description blank to build it page by page instead')
+      .addStringOption(o => o.setName('description').setDescription('Body text (use \\n for new lines) — leave blank for the step-by-step builder'))
       .addChannelOption(o => o.setName('channel').setDescription('Channel to post in (default: current channel)'))
       .addStringOption(o => o.setName('title').setDescription('Embed title'))
       .addStringOption(o => o.setName('color').setDescription('Hex color, e.g. #d6c2ee'))
@@ -98,7 +92,13 @@ module.exports = {
     .addSubcommand(sub => sub
       .setName('repost')
       .setDescription('Repost an embed if its message was deleted (does nothing if it still exists)')
-      .addIntegerOption(o => o.setName('id').setDescription('Embed ID (see /embed list)').setRequired(true))),
+      .addIntegerOption(o => o.setName('id').setDescription('Embed ID (see /embed list)').setRequired(true)))
+
+    .addSubcommand(sub => sub
+      .setName('delete')
+      .setDescription('Delete a custom embed message and its stored data')
+      .addStringOption(o => o.setName('message_id').setDescription('Message ID of the embed to delete').setRequired(true))
+      .addChannelOption(o => o.setName('channel').setDescription('Channel it\'s posted in (default: current channel)'))),
 
   async execute(interaction) {
     const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
@@ -109,9 +109,11 @@ module.exports = {
     if (sub === 'edit')   return editEmbed(interaction);
     if (sub === 'list')   return listEmbeds(interaction);
     if (sub === 'repost') return repostEmbed(interaction);
+    if (sub === 'delete') return deleteEmbed(interaction);
 
-    if (sub === 'create-guided') {
+    if (sub === 'create' && !interaction.options.getString('description')) {
       const channel   = interaction.options.getChannel('channel') || interaction.channel;
+      const title     = interaction.options.getString('title');
       const color     = interaction.options.getString('color');
       const image     = interaction.options.getString('image');
       const thumbnail = interaction.options.getString('thumbnail');
@@ -122,12 +124,13 @@ module.exports = {
         channelId: channel.id,
         color: /^#[0-9A-Fa-f]{6}$/.test(color || '') ? color : '#d6c2ee',
         image, thumbnail, footer, author,
-        title: null,
+        title: title || null,
         pages: [],
       });
 
       const modal = new ModalBuilder().setCustomId('embedguided_modal_first').setTitle('Page 1');
-      const titleInput = new TextInputBuilder().setCustomId('title').setLabel('Title (optional)').setStyle(TextInputStyle.Short).setRequired(false);
+      const titleInput = new TextInputBuilder().setCustomId('title').setLabel('Title (optional, overrides the one above if set)').setStyle(TextInputStyle.Short).setRequired(false)
+        .setValue((title || '').slice(0, 4000));
       const textInput = new TextInputBuilder().setCustomId('text').setLabel('Page 1 text').setStyle(TextInputStyle.Paragraph).setRequired(true);
       modal.addComponents(
         new ActionRowBuilder().addComponents(titleInput),
@@ -368,6 +371,27 @@ async function repostEmbed(interaction) {
   return interaction.editReply(`✅ Reposted embed #${id} in <#${channel.id}>. ${msg.url}`);
 }
 
+async function deleteEmbed(interaction) {
+  const channel = interaction.options.getChannel('channel') || interaction.channel;
+  const messageId = interaction.options.getString('message_id').trim();
+  await interaction.deferReply({ ephemeral: true });
+
+  const msg = await channel.messages.fetch(messageId).catch(() => null);
+  if (msg && msg.author.id !== interaction.client.user.id) {
+    return interaction.editReply(`❌ That message wasn't posted by Veloura — can't delete it with this command.`);
+  }
+
+  if (msg) await msg.delete().catch(() => {});
+
+  const del = await query('DELETE FROM custom_embeds WHERE message_id = $1 AND guild_id = $2 RETURNING id', [messageId, interaction.guildId]);
+
+  if (!msg && !del.rows.length) {
+    return interaction.editReply(`❌ Couldn't find that message or any stored data for it — it may already be gone.`);
+  }
+
+  return interaction.editReply(`✅ Deleted${msg ? ' the message' : ' the stored data (message was already gone)'} in <#${channel.id}>.`);
+}
+
 module.exports.handleEditModal = handleEditModal;
 
 async function handlePageButton(interaction) {
@@ -427,7 +451,7 @@ module.exports.handleEditMetaModal = handleEditMetaModal;
 
 async function handleGuidedFirstModal(interaction) {
   const session = guidedSessions.get(interaction.user.id);
-  if (!session) return interaction.reply({ content: '❌ Session expired — run `/embed create-guided` again.', ephemeral: true });
+  if (!session) return interaction.reply({ content: '❌ Session expired — run `/embed create` again (leave description blank).', ephemeral: true });
 
   session.title = interaction.fields.getTextInputValue('title') || null;
   session.pages.push(interaction.fields.getTextInputValue('text'));
@@ -442,7 +466,7 @@ module.exports.handleGuidedFirstModal = handleGuidedFirstModal;
 
 async function handleGuidedButton(interaction) {
   const session = guidedSessions.get(interaction.user.id);
-  if (!session) return interaction.reply({ content: '❌ Session expired — run `/embed create-guided` again.', ephemeral: true });
+  if (!session) return interaction.reply({ content: '❌ Session expired — run `/embed create` again (leave description blank).', ephemeral: true });
 
   if (interaction.customId === 'embedguided_cancel') {
     guidedSessions.delete(interaction.user.id);
@@ -491,7 +515,7 @@ module.exports.handleGuidedButton = handleGuidedButton;
 
 async function handleGuidedNextModal(interaction) {
   const session = guidedSessions.get(interaction.user.id);
-  if (!session) return interaction.reply({ content: '❌ Session expired — run `/embed create-guided` again.', ephemeral: true });
+  if (!session) return interaction.reply({ content: '❌ Session expired — run `/embed create` again (leave description blank).', ephemeral: true });
 
   session.pages.push(interaction.fields.getTextInputValue('text'));
 
