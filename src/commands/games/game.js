@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, PermissionFlagsBits } = require('discord.js');
 const { e } = require('../../utils/appEmojis');
 const { query } = require('../../utils/database');
 const { baseEmbed, tsF, tsR, COLORS } = require('../../utils/embeds');
@@ -73,6 +73,11 @@ module.exports = {
 };
 
 async function logGame(interaction) {
+  const staffCheck = await query(`SELECT role FROM staff WHERE user_id=$1 AND active=true`, [interaction.user.id]);
+  if (!staffCheck.rows.length) {
+    return interaction.reply({ content: `${e('wrong')} Staff only.`, ephemeral: true });
+  }
+
   const gameName   = interaction.options.getString('game');
   const link       = interaction.options.getString('link');
   const prize      = interaction.options.getString('prize');
@@ -295,6 +300,11 @@ async function endGame(interaction) {
 
 
 async function listGames(interaction) {
+  const staffCheck = await query(`SELECT role FROM staff WHERE user_id=$1 AND active=true`, [interaction.user.id]);
+  if (!staffCheck.rows.length) {
+    return interaction.reply({ content: `${e('wrong')} Staff only.`, ephemeral: true });
+  }
+
   const targetUser = interaction.options.getUser('user');
   await interaction.deferReply({ ephemeral: true });
 
@@ -368,6 +378,11 @@ async function deleteGame(interaction) {
 }
 
 async function editGame(interaction) {
+  const staffCheck = await query(`SELECT role FROM staff WHERE user_id=$1 AND active=true`, [interaction.user.id]);
+  if (!staffCheck.rows.length) {
+    return interaction.reply({ content: `${e('wrong')} Staff only.`, ephemeral: true });
+  }
+
   const id       = interaction.options.getInteger('id');
   const gameName = interaction.options.getString('game');
   const link     = interaction.options.getString('link');
@@ -450,6 +465,11 @@ async function editGame(interaction) {
 }
 
 async function setBoard(interaction) {
+  if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
+      interaction.user.id !== process.env.OWNER_ID) {
+    return interaction.reply({ content: `${e('wrong')} Admin only.`, ephemeral: true });
+  }
+
   const channel = interaction.options.getChannel('channel');
   await interaction.deferReply({ ephemeral: true });
 

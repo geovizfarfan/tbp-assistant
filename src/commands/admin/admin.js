@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { e } = require('../../utils/appEmojis');
 const { query } = require('../../utils/database');
 const { baseEmbed, tsF, tsR, COLORS } = require('../../utils/embeds');
@@ -240,6 +240,11 @@ module.exports = {
     ),
 
   async execute(interaction) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
+        interaction.user.id !== process.env.OWNER_ID) {
+      return interaction.reply({ content: `${e('wrong')} Admin only.`, ephemeral: true });
+    }
+
     const sub = interaction.options.getSubcommand();
     if (sub === 'pay-summary')     await paySummary(interaction);
     if (sub === 'paycheck-check')  await paycheckCheck(interaction);
