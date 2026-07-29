@@ -76,19 +76,6 @@ module.exports = {
       .addStringOption(o => o.setName('notes').setDescription('Optional notes')))
 
     .addSubcommand(sub => sub
-      .setName('mark')
-      .setDescription('Mark a payment as fully paid (sellers only)')
-      .addIntegerOption(o => o.setName('id').setDescription('Payment ID').setRequired(true))
-      .addStringOption(o => o.setName('notes').setDescription('Optional notes')))
-
-    .addSubcommand(sub => sub
-      .setName('partial')
-      .setDescription('Log a partial payment (sellers only)')
-      .addIntegerOption(o => o.setName('id').setDescription('Payment ID').setRequired(true))
-      .addNumberOption(o => o.setName('amount').setDescription('Amount paid now').setRequired(true).setMinValue(0.01))
-      .addStringOption(o => o.setName('notes').setDescription('Optional notes')))
-
-    .addSubcommand(sub => sub
       .setName('edit')
       .setDescription('Edit a payment entry (sellers only)')
       .addIntegerOption(o => o.setName('id').setDescription('Payment ID').setRequired(true))
@@ -119,11 +106,6 @@ module.exports = {
         { name: 'Paid', value: 'paid' },
       )))
 
-    .addSubcommand(sub => sub
-      .setName('balance')
-      .setDescription('Check your balance with a seller')
-      .addUserOption(o => o.setName('seller').setDescription('Which seller to check').setRequired(true)))
-
     .addSubcommandGroup(group => group
       .setName('methods')
       .setDescription('Manage your payment methods')
@@ -134,25 +116,7 @@ module.exports = {
         .addStringOption(o => o.setName('venmo').setDescription('Venmo URL (e.g. https://venmo.com/you)'))
         .addStringOption(o => o.setName('cashapp').setDescription('CashApp URL (e.g. https://cash.app/$you)'))
         .addStringOption(o => o.setName('applepay').setDescription('Apple Pay phone/email'))
-        .addStringOption(o => o.setName('zelle').setDescription('Zelle phone/email')))
-      .addSubcommand(sub => sub
-        .setName('show')
-        .setDescription('Show your payment methods')))
-
-    .addSubcommandGroup(group => group
-      .setName('seller')
-      .setDescription('Manage approved sellers (owner only)')
-      .addSubcommand(sub => sub
-        .setName('add')
-        .setDescription('Approve a seller')
-        .addUserOption(o => o.setName('user').setDescription('User to approve').setRequired(true)))
-      .addSubcommand(sub => sub
-        .setName('remove')
-        .setDescription('Remove a seller')
-        .addUserOption(o => o.setName('user').setDescription('User to remove').setRequired(true)))
-      .addSubcommand(sub => sub
-        .setName('list')
-        .setDescription('List all approved sellers'))),
+        .addStringOption(o => o.setName('zelle').setDescription('Zelle phone/email')))),
 
   async execute(interaction) {
     const sub   = interaction.options.getSubcommand();
@@ -184,57 +148,30 @@ module.exports = {
       }
     }
 
-    // ── /pay methods ──────────────────────────────────────────────────────
-    if (group === 'methods') {
-      if (sub === 'set') {
-        if (!await isSeller(interaction.guild.id, interaction.user.id) && !isOwner)
-          return interaction.reply({ content: '❌ Approved sellers only.', ephemeral: true });
-        await interaction.deferReply({ ephemeral: true });
+    // ── /pay methods set ─────────────────────────────────────────────────
+    if (group === 'methods' && sub === 'set') {
+      if (!await isSeller(interaction.guild.id, interaction.user.id) && !isOwner)
+        return interaction.reply({ content: '❌ Approved sellers only.', ephemeral: true });
+      await interaction.deferReply({ ephemeral: true });
 
-        const paypal   = interaction.options.getString('paypal');
-        const venmo    = interaction.options.getString('venmo');
-        const cashapp  = interaction.options.getString('cashapp');
-        const applepay = interaction.options.getString('applepay');
-        const zelle    = interaction.options.getString('zelle');
+      const paypal   = interaction.options.getString('paypal');
+      const venmo    = interaction.options.getString('venmo');
+      const cashapp  = interaction.options.getString('cashapp');
+      const applepay = interaction.options.getString('applepay');
+      const zelle    = interaction.options.getString('zelle');
 
-        await query(`
-          INSERT INTO payment_methods (guild_id, seller_id, paypal, venmo, cashapp, applepay, zelle)
-          VALUES ($1,$2,$3,$4,$5,$6,$7)
-          ON CONFLICT (guild_id, seller_id) DO UPDATE SET
-            paypal   = COALESCE($3, payment_methods.paypal),
-            venmo    = COALESCE($4, payment_methods.venmo),
-            cashapp  = COALESCE($5, payment_methods.cashapp),
-            applepay = COALESCE($6, payment_methods.applepay),
-            zelle    = COALESCE($7, payment_methods.zelle)
-        `, [interaction.guild.id, interaction.user.id, paypal||null, venmo||null, cashapp||null, applepay||null, zelle||null]);
+      await query(`
+        INSERT INTO payment_methods (guild_id, seller_id, paypal, venmo, cashapp, applepay, zelle)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)
+        ON CONFLICT (guild_id, seller_id) DO UPDATE SET
+          paypal   = COALESCE($3, payment_methods.paypal),
+          venmo    = COALESCE($4, payment_methods.venmo),
+          cashapp  = COALESCE($5, payment_methods.cashapp),
+          applepay = COALESCE($6, payment_methods.applepay),
+          zelle    = COALESCE($7, payment_methods.zelle)
+      `, [interaction.guild.id, interaction.user.id, paypal||null, venmo||null, cashapp||null, applepay||null, zelle||null]);
 
-        return interaction.editReply(`${E.check} Payment methods updated!`);
-      }
-
-      if (sub === 'show') {
-        await interaction.deferReply();
-        const seller = interaction.options.getUser('seller') || interaction.user;
-        const method = interaction.options.getString('method');
-        const m = await getMethods(interaction.guild.id, seller.id);
-
-        if (!m) return interaction.editReply(`No payment methods set for ${seller.username}.`);
-
-        let description;
-        if (method) {
-          const methodEmojis = { paypal: E.paypal, venmo: E.venmo, cashapp: E.cashapp, applepay: E.applepay, zelle: E.zelle };
-          const methodNames  = { paypal: 'PayPal', venmo: 'Venmo', cashapp: 'CashApp', applepay: 'Apple Pay', zelle: 'Zelle' };
-          const val = m[method];
-          if (!val) return interaction.editReply(`No ${methodNames[method]} set for ${seller.username}.`);
-          const isLink = val.startsWith('http');
-          description = `${methodEmojis[method]} **${methodNames[method]}:** ${isLink ? `[Pay Here](${val})` : val}`;
-        } else {
-          description = formatMethods(m);
-        }
-
-        return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
-          .setTitle(`${E.payout} ${seller.username}'s Payment Methods`)
-          .setDescription(description)]});
-      }
+      return interaction.editReply(`${E.check} Payment methods updated!`);
     }
 
     // ── Seller check for remaining commands ───────────────────────────────
@@ -288,78 +225,6 @@ module.exports = {
 
       return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
         .setDescription(`${E.check} Payment logged for <@${user.id}>\n${E.receipt} **Service:** ${service}\n${E.money} **Amount:** $${amount.toFixed(2)}\n**Status:** ${paid ? '<:checkmark:1512916161493205165> Paid' : '<:wrong:1512916350375301160> Unpaid'}\n**ID:** #${payId}`)]});
-    }
-
-    // ── /pay mark ─────────────────────────────────────────────────────────
-    if (sub === 'mark') {
-      if (!sellerAllowed) return interaction.reply({ content: '❌ Approved sellers only.', ephemeral: true });
-      await interaction.deferReply({ ephemeral: true });
-
-      const id    = interaction.options.getInteger('id');
-      const notes = interaction.options.getString('notes') || null;
-
-      const res = await query(
-        'UPDATE payments SET status=$1, amount_paid=amount, paid_at=NOW(), paid_notes=$2 WHERE id=$3 AND seller_id=$4 AND status != $1 RETURNING *',
-        ['paid', notes, id, interaction.user.id]
-      );
-      if (!res.rows.length) return interaction.editReply('❌ Payment not found or already paid.');
-      const p = res.rows[0];
-
-      // DM member
-      const member = await interaction.guild.members.fetch(p.user_id).catch(() => null);
-      if (member) {
-        await member.send({ embeds: [new EmbedBuilder().setColor('#248046')
-          .setTitle(`${E.check} Payment Received — Receipt`)
-          .setDescription(`Your payment to **${interaction.user.username}** in **${interaction.guild.name}** has been received. Thank you!`)
-          .addFields(
-            { name: `${E.receipt} Service`,  value: p.service,                    inline: true },
-            { name: `${E.money} Amount`,     value: `$${Number(p.amount).toFixed(2)}`, inline: true },
-            { name: `<a:status:1523726617850024006> Status`,     value: 'Paid in full',                inline: true },
-            { name: '📝 Notes',             value: notes || '—',                  inline: true },
-          ).setFooter({ text: `${interaction.guild.name} • ID: #${id}` }).setTimestamp()
-        ]}).catch(() => {});
-      }
-
-      return interaction.editReply(`${E.check} Payment #${id} marked as paid for <@${p.user_id}>.`);
-    }
-
-    // ── /pay partial ──────────────────────────────────────────────────────
-    if (sub === 'partial') {
-      if (!sellerAllowed) return interaction.reply({ content: '❌ Approved sellers only.', ephemeral: true });
-      await interaction.deferReply({ ephemeral: true });
-
-      const id         = interaction.options.getInteger('id');
-      const amountPaid = interaction.options.getNumber('amount');
-      const notes      = interaction.options.getString('notes') || null;
-
-      const existing = await query('SELECT * FROM payments WHERE id=$1 AND seller_id=$2', [id, interaction.user.id]);
-      if (!existing.rows.length) return interaction.editReply('❌ Payment not found.');
-      const p = existing.rows[0];
-
-      const newPaid      = Number(p.amount_paid) + amountPaid;
-      const remaining    = Number(p.amount) - newPaid;
-      const newStatus    = remaining <= 0 ? 'paid' : 'partial';
-
-      await query('UPDATE payments SET amount_paid=$1, status=$2, paid_notes=$3, paid_at=NOW() WHERE id=$4',
-        [newPaid, newStatus, notes, id]);
-
-      // DM member
-      const member = await interaction.guild.members.fetch(p.user_id).catch(() => null);
-      if (member) {
-        const m = await getMethods(interaction.guild.id, interaction.user.id);
-        await member.send({ embeds: [new EmbedBuilder().setColor(remaining <= 0 ? '#248046' : '#faa61a')
-          .setTitle(remaining <= 0 ? `${E.check} Payment Complete!` : `${E.warn} Partial Payment Received`)
-          .setDescription(`A payment to **${interaction.user.username}** in **${interaction.guild.name}** has been logged.`)
-          .addFields(
-            { name: `${E.receipt} Service`,   value: p.service,                       inline: true },
-            { name: `${E.money} Paid Now`,    value: `$${amountPaid.toFixed(2)}`,     inline: true },
-            { name: `${E.loading} Remaining`, value: remaining > 0 ? `$${remaining.toFixed(2)}` : 'None — paid in full!', inline: true },
-            ...(remaining > 0 ? [{ name: `${E.sparkle} How to Pay Remaining`, value: formatSingleMethod(m, p.method), inline: false }] : []),
-          ).setFooter({ text: `${interaction.guild.name} • ID: #${id}` }).setTimestamp()
-        ]}).catch(() => {});
-      }
-
-      return interaction.editReply(`${E.check} Partial payment of $${amountPaid.toFixed(2)} logged for #${id}. Remaining: $${Math.max(0, remaining).toFixed(2)}`);
     }
 
     // ── /pay edit ─────────────────────────────────────────────────────────
@@ -455,50 +320,10 @@ module.exports = {
       embed.setTimestamp();
       return interaction.editReply({ embeds: [embed] });
     }
-
-    // ── /pay balance ──────────────────────────────────────────────────────
-    if (sub === 'balance') {
-      await interaction.deferReply({ ephemeral: true });
-
-      const seller = interaction.options.getUser('seller');
-      if (!await isSeller(interaction.guild.id, seller.id))
-        return interaction.editReply('❌ That user is not an approved seller.');
-
-      const res = await query(
-        'SELECT * FROM payments WHERE seller_id=$1 AND user_id=$2 AND guild_id=$3 ORDER BY created_at DESC',
-        [seller.id, interaction.user.id, interaction.guild.id]
-      );
-
-      const m = await getMethods(interaction.guild.id, seller.id);
-      const unpaid  = res.rows.filter(r => r.status === 'unpaid');
-      const partial = res.rows.filter(r => r.status === 'partial');
-      const paid    = res.rows.filter(r => r.status === 'paid');
-      const totalOwed = [...unpaid, ...partial].reduce((s, r) => s + (Number(r.amount) - Number(r.amount_paid)), 0);
-      const totalPaid = res.rows.reduce((s, r) => s + Number(r.amount_paid), 0);
-
-      const embed = new EmbedBuilder().setColor('#d6c2ee')
-        .setTitle(`${E.payout} Your Balance with ${seller.username}`)
-        .addFields(
-          { name: `${E.wrong} You Owe`,   value: `**$${totalOwed.toFixed(2)}**`, inline: true },
-          { name: `${E.check} You've Paid`, value: `**$${totalPaid.toFixed(2)}**`, inline: true },
-        );
-
-      if (unpaid.length || partial.length) {
-        const outstanding = [...unpaid, ...partial].map(r =>
-          `${E.receipt} **${r.service}** — $${(Number(r.amount) - Number(r.amount_paid)).toFixed(2)} remaining — ${r.method}`
-        ).join('\n');
-        embed.addFields({ name: `${E.loading} Outstanding`, value: outstanding, inline: false });
-        embed.addFields({ name: `${E.sparkle} How to Pay`, value: formatMethods(m), inline: false });
-      }
-
-      if (paid.length) {
-        const paidList = paid.map(r => `${E.check} **${r.service}** — $${Number(r.amount).toFixed(2)} — <t:${Math.floor(new Date(r.paid_at).getTime()/1000)}:d>`).join('\n');
-        embed.addFields({ name: `${E.check} Payment History`, value: paidList.slice(0,1024), inline: false });
-      }
-
-      if (!res.rows.length) embed.setDescription('No payment records found with this seller.');
-      embed.setTimestamp();
-      return interaction.editReply({ embeds: [embed] });
-    }
   },
+  E,
+  formatMethods,
+  formatSingleMethod,
+  getMethods,
+  isSeller,
 };
