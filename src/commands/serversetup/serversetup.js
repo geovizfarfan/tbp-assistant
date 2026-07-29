@@ -85,12 +85,18 @@ const CATEGORIES = {
     description: 'Sticky notes and ping panels — buttons below. Role panels and ticket panels involve adding items one at a time (roles, ticket types), which is an ongoing management flow rather than a single setup step — use `/rolepanel` and `/ticket panel` directly for those.',
     items: [],
   },
+  rumble: {
+    label: 'Rumble Setup',
+    emoji: '⚔️',
+    description: 'Currency for Rumble Royale rewards — buttons below. Full battle setup (channels, roles, rewards) is more involved than fits here — use `/rr setup` and `/rs setup` directly for that.',
+    items: [],
+  },
 };
 
 function buildHomeEmbed(guild) {
   const summaries = [
-    '📺 **Server Channel Set** — schedule board, winners, tickets, staff notifications, boosts, transcripts',
-    '⚙️ **Server Settings** — timezone, claim time, welcome message, leveling, RR currency, wheel bonuses',
+    '📺 **Server Channel Set** — schedule board, winners, tickets, staff notifications, boosts, transcripts, game board',
+    '⚙️ **Server Settings** — timezone, claim time, welcome message, leveling',
     '🎭 **Server Role Set** — mod, admin, and game-ping roles',
     '✨ **Extras & Utilities** — GoosDate reminders, private rooms, Rumble Grind panel',
     '🚀 **Server Booster Set** — manage boosters and payments',
@@ -99,6 +105,7 @@ function buildHomeEmbed(guild) {
     '🎁 **Giveaway & Raffle Settings** — bonus/required role libraries, wheel role bonuses',
     '💳 **Payments, Sellers & Shop** — approve sellers, shop channel setup',
     '🧩 **Panels & Sticky Content** — sticky messages, ping panels',
+    '⚔️ **Rumble Setup** — RR currency (Sins or custom)',
   ];
   return new EmbedBuilder()
     .setColor('#d6c2ee')
@@ -157,6 +164,12 @@ function buildChannelSettingSelect() {
       value: key,
     })));
   return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildChannelExtraButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_gset:gameboard').setLabel('Game Board Channel').setStyle(ButtonStyle.Secondary),
+  );
 }
 
 function buildChannelPicker(settingKey) {
@@ -417,14 +430,21 @@ module.exports = {
     if (key === 'channels') {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
-        components: [buildChannelSettingSelect(), buildBackButton()],
+        components: [buildChannelSettingSelect(), buildChannelExtraButtons(), buildBackButton()],
       });
     }
 
     if (key === 'settings') {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
-        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+        components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+      });
+    }
+
+    if (key === 'rumble') {
+      return interaction.update({
+        embeds: [buildCategoryEmbed(key, interaction.guild)],
+        components: [buildRumbleButtons(), buildBackButton()],
       });
     }
 
@@ -1321,7 +1341,7 @@ module.exports = {
       `, [interaction.guildId, enabled]);
       return interaction.editReply({
         embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Level system is now **${enabled ? 'ON' : 'OFF'}**.`)],
-        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+        components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
       });
     }
 
@@ -1331,7 +1351,7 @@ module.exports = {
       if (!isGuildAllowedSins(interaction.guildId)) {
         return interaction.editReply({
           embeds: [new EmbedBuilder().setColor('#ff4444').setDescription('❌ Real Sins are only available in specific approved servers. Use "RR: Custom Currency" instead.')],
-          components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+          components: [buildRumbleButtons(), buildBackButton()],
         });
       }
       await query(`
@@ -1340,7 +1360,7 @@ module.exports = {
       `, [interaction.guildId]);
       return interaction.editReply({
         embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription('✅ Rumble Royale now uses real Sins.')],
-        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+        components: [buildRumbleButtons(), buildBackButton()],
       });
     }
 
@@ -1364,7 +1384,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Timezone set to **${timezone}**.`)],
-      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
     });
   },
 
@@ -1401,7 +1421,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Ban log channel set to <#${channel.id}>.`)],
-      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
     });
   },
 
@@ -1416,7 +1436,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Level-up announcements will post in <#${channel.id}>.`)],
-      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
     });
   },
 
@@ -1432,7 +1452,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Game schedule board will post in <#${channel.id}>.`)],
-      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+      components: [buildChannelSettingSelect(), buildChannelExtraButtons(), buildBackButton()],
     });
   },
 
@@ -1544,15 +1564,14 @@ function buildSettingsButtons2() {
     new ButtonBuilder().setCustomId('serversetup_gset:levelon').setLabel('Level Up ON').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('serversetup_gset:leveloff').setLabel('Level Up OFF').setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId('serversetup_gset:levelchan').setLabel('Level-Up Channel').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('serversetup_gset:rrsins').setLabel('RR: Use Sins').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('serversetup_gset:rrcustom').setLabel('RR: Custom Currency').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_gset:leveltuning').setLabel('Level Tuning').setStyle(ButtonStyle.Secondary),
   );
 }
 
-function buildSettingsButtons3() {
+function buildRumbleButtons() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('serversetup_gset:leveltuning').setLabel('Level Tuning').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('serversetup_gset:gameboard').setLabel('Game Board Channel').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_gset:rrsins').setLabel('RR: Use Sins').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_gset:rrcustom').setLabel('RR: Custom Currency').setStyle(ButtonStyle.Secondary),
   );
 }
 
