@@ -10,7 +10,32 @@ function isOwnerCaller(interaction) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('payment')
-    .setDescription('Your own payment methods, balance, and marking payments received')
+    .setDescription('Log, view, and manage your own payments')
+    .addSubcommand(sub => sub
+      .setName('log')
+      .setDescription('Log a payment entry (sellers only)')
+      .addUserOption(o => o.setName('user').setDescription('Member who owes or paid').setRequired(true))
+      .addNumberOption(o => o.setName('amount').setDescription('Amount').setRequired(true).setMinValue(0.01))
+      .addStringOption(o => o.setName('service').setDescription('Service description').setRequired(true))
+      .addStringOption(o => o.setName('method').setDescription('Payment method').setRequired(true).addChoices(
+        { name: 'PayPal', value: 'PayPal' },
+        { name: 'Venmo', value: 'Venmo' },
+        { name: 'CashApp', value: 'CashApp' },
+        { name: 'Apple Pay', value: 'Apple Pay' },
+        { name: 'Zelle', value: 'Zelle' },
+        { name: 'Other', value: 'Other' },
+      ))
+      .addBooleanOption(o => o.setName('paid').setDescription('Already paid?').setRequired(true))
+      .addStringOption(o => o.setName('notes').setDescription('Optional notes')))
+    .addSubcommand(sub => sub
+      .setName('list')
+      .setDescription('View your payment records (sellers only)')
+      .addStringOption(o => o.setName('status').setDescription('Filter by status').addChoices(
+        { name: 'All', value: 'all' },
+        { name: 'Unpaid', value: 'unpaid' },
+        { name: 'Partial', value: 'partial' },
+        { name: 'Paid', value: 'paid' },
+      )))
     .addSubcommand(sub => sub
       .setName('methods')
       .setDescription('Show payment methods — yours by default')
@@ -40,6 +65,119 @@ module.exports = {
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const isOwner = isOwnerCaller(interaction);
+    const sellerAllowed = isOwner || await isSeller(interaction.guildId, interaction.user.id);
+
+    if (sub === 'log') {
+      if (!sellerAllowed) return interaction.reply({ content: `${E.wrong} Approved sellers only.`, ephemeral: true });
+      await interaction.deferReply({ ephemeral: true });
+
+      const user    = interaction.options.getUser('user');
+      const amount  = interaction.options.getNumber('amount');
+      const service = interaction.options.getString('service');
+      const method  = interaction.options.getString('method');
+      const paid    = interaction.options.getBoolean('paid');
+      const notes   = interaction.options.getString('notes') || null;
+      const status  = paid ? 'paid' : 'unpaid';
+
+      const res = await query(
+        'INSERT INTO payments (guild_id, seller_id, user_id, amount, amount_paid, service, method, notes, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
+        [interaction.guild.id, interaction.user.id, user.id, amount, paid ? amount : 0, service, method, notes, status]
+      );
+      const payId = res.rows[0].id;
+      const m = await getMethods(interaction.guild.id, interaction.user.id);
+
+      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+      if (member) {
+        let dmEmbed;
+        if (paid) {
+          dmEmbed = new EmbedBuilder().setColor('#248046')
+            .setTitle(`${E.check} Payment Receipt`)
+            .setDescription(`Your payment to **${interaction.user.username}** in **${interaction.guild.name}** has been logged as paid. Thank you!`)
+            .addFields(
+              { name: `${E.receipt} Service`, value: service, inline: true },
+              { name: `${E.money} Amount`,    value: `$${amount.toFixed(2)}`, inline: true },
+              { name: `${E.sparkle} Method`,  value: method, inline: true },
+              { name: `<a:status:1523726617850024006> Status`, value: 'Paid in full', inline: true },
+            ).setFooter({ text: `${interaction.guild.name} • ID: #${payId}` }).setTimestamp();
+        } else {
+          // Show every outstanding payment to this same seller, not just
+          // this one in isolation, plus a running total across all of them.
+          const outstandingRes = await query(
+            `SELECT * FROM payments WHERE seller_id=$1 AND user_id=$2 AND guild_id=$3 AND status IN ('unpaid','partial') ORDER BY created_at ASC`,
+            [interaction.user.id, user.id, interaction.guild.id]
+          );
+          const outstanding = outstandingRes.rows;
+          const total = outstanding.reduce((s, r) => s + (Number(r.amount) - Number(r.amount_paid)), 0);
+
+          const lines = outstanding.map(r => {
+            const remaining = Number(r.amount) - Number(r.amount_paid);
+            const tag = r.id === payId ? ' *(new)*' : '';
+            return `${E.receipt} **${r.service}** — $${remaining.toFixed(2)}${tag}`;
+          });
+
+          dmEmbed = new EmbedBuilder().setColor('#ff4444')
+            .setTitle(`${E.payout} Payment Due`)
+            .setDescription(`You have a pending payment to **${interaction.user.username}** in **${interaction.guild.name}**.`)
+            .addFields(
+              { name: `${E.receipt} This Payment`, value: service, inline: true },
+              { name: `${E.money} Amount Due`,     value: `$${amount.toFixed(2)}`, inline: true },
+              { name: `${E.sparkle} Method`,       value: method, inline: true },
+            );
+
+          if (outstanding.length > 1) {
+            dmEmbed.addFields(
+              { name: `${E.loading} All Outstanding (${outstanding.length})`, value: lines.join('\n'), inline: false },
+              { name: `${E.money} Total Owed`, value: `**$${total.toFixed(2)}**`, inline: false },
+            );
+          }
+
+          dmEmbed.addFields({ name: `${E.sparkle} How to Pay`, value: formatSingleMethod(m, method), inline: false })
+            .setFooter({ text: `${interaction.guild.name} • ID: #${payId}` }).setTimestamp();
+        }
+
+        await member.send({ embeds: [dmEmbed] }).catch(() => {});
+      }
+
+      return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
+        .setDescription(`${E.check} Payment logged for <@${user.id}>\n${E.receipt} **Service:** ${service}\n${E.money} **Amount:** $${amount.toFixed(2)}\n**Status:** ${paid ? '<:checkmark:1512916161493205165> Paid' : '<:wrong:1512916350375301160> Unpaid'}\n**ID:** #${payId}`)]});
+    }
+
+    if (sub === 'list') {
+      if (!sellerAllowed) return interaction.reply({ content: `${E.wrong} Approved sellers only.`, ephemeral: true });
+      await interaction.deferReply({ ephemeral: true });
+
+      const statusFilter = interaction.options.getString('status') || 'all';
+      let q = 'SELECT * FROM payments WHERE seller_id=$1 AND guild_id=$2';
+      const params = [interaction.user.id, interaction.guild.id];
+      if (statusFilter !== 'all') { q += ` AND status=$${params.length+1}`; params.push(statusFilter); }
+      q += ' ORDER BY created_at DESC';
+
+      const res = await query(q, params);
+      if (!res.rows.length) return interaction.editReply('No payment records found.');
+
+      const unpaid  = res.rows.filter(r => r.status === 'unpaid');
+      const partial = res.rows.filter(r => r.status === 'partial');
+      const paid    = res.rows.filter(r => r.status === 'paid');
+
+      const totalOwed = [...unpaid, ...partial].reduce((s, r) => s + (Number(r.amount) - Number(r.amount_paid)), 0);
+      const totalPaid = res.rows.reduce((s, r) => s + Number(r.amount_paid), 0);
+
+      const fmt = r => `\`#${r.id}\` <@${r.user_id}> — **${r.service}** — $${Number(r.amount).toFixed(2)}${Number(r.amount_paid) > 0 && r.status !== 'paid' ? ` (paid $${Number(r.amount_paid).toFixed(2)})` : ''} — ${r.method} • <t:${Math.floor(new Date(r.created_at).getTime()/1000)}:d>`;
+
+      const embed = new EmbedBuilder().setColor('#d6c2ee')
+        .setTitle(`${E.payout} Your Payment Records`)
+        .addFields(
+          { name: `${E.wrong} Total Owed`, value: `**$${totalOwed.toFixed(2)}**`, inline: true },
+          { name: `${E.check} Total Paid`, value: `**$${totalPaid.toFixed(2)}**`, inline: true },
+        );
+
+      if (unpaid.length)  embed.addFields({ name: `${E.wrong} Unpaid (${unpaid.length})`,   value: unpaid.map(fmt).join('\n').slice(0,1024),   inline: false });
+      if (partial.length) embed.addFields({ name: `${E.loading} Partial (${partial.length})`, value: partial.map(fmt).join('\n').slice(0,1024), inline: false });
+      if (paid.length)    embed.addFields({ name: `${E.check} Paid (${paid.length})`,        value: paid.map(fmt).join('\n').slice(0,1024),     inline: false });
+
+      embed.setTimestamp();
+      return interaction.editReply({ embeds: [embed] });
+    }
 
     if (sub === 'methods') {
       const targetUser = interaction.options.getUser('user');
@@ -193,11 +331,17 @@ module.exports = {
         );
 
       if (unpaid.length || partial.length) {
-        const outstanding = [...unpaid, ...partial].map(r =>
+        const outstandingItems = [...unpaid, ...partial];
+        const outstanding = outstandingItems.map(r =>
           `${E.receipt} **${r.service}** — $${(Number(r.amount) - Number(r.amount_paid)).toFixed(2)} remaining — ${r.method}`
         ).join('\n');
         embed.addFields({ name: `${E.loading} Outstanding`, value: outstanding, inline: false });
-        embed.addFields({ name: `${E.sparkle} How to Pay`, value: formatMethods(m), inline: false });
+
+        // Only show payment info for the method(s) actually used by these
+        // outstanding items, not every method the seller has configured.
+        const usedMethods = [...new Set(outstandingItems.map(r => r.method))];
+        const howToPay = usedMethods.map(mName => formatSingleMethod(m, mName)).join('\n');
+        embed.addFields({ name: `${E.sparkle} How to Pay`, value: howToPay, inline: false });
       }
 
       if (paid.length) {
