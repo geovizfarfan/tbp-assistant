@@ -307,11 +307,13 @@ CREATE TABLE IF NOT EXISTS guild_config (
   currency_use_sins BOOLEAN DEFAULT FALSE,
   currency_name TEXT DEFAULT 'Crowns',
   currency_emoji TEXT,
+  auto_pay_enabled BOOLEAN DEFAULT FALSE,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS currency_use_sins BOOLEAN DEFAULT FALSE;
 ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS currency_name TEXT DEFAULT 'Crowns';
 ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS currency_emoji TEXT;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS auto_pay_enabled BOOLEAN DEFAULT FALSE;
 
 -- Wheel role-based bonus entries
 -- Custom embeds posted via /embed create — stored so they can be reposted

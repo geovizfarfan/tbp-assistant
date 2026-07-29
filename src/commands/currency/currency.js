@@ -13,7 +13,8 @@ module.exports = {
       .setDescription('Use real Sins, or set a custom currency name and emoji')
       .addBooleanOption(o => o.setName('use_sins').setDescription('Use real Sins (Play & Regret)? False = custom currency').setRequired(true))
       .addStringOption(o => o.setName('name').setDescription('Custom currency name, e.g. "Coins" (required if use_sins is False)'))
-      .addStringOption(o => o.setName('emoji').setDescription('Custom currency emoji, e.g. 🪙')))
+      .addStringOption(o => o.setName('emoji').setDescription('Custom currency emoji, e.g. 🪙'))
+      .addBooleanOption(o => o.setName('auto_pay').setDescription('Automatically pay staff/boosters when due, no admin action needed (default: off)')))
     .addSubcommand(sub => sub
       .setName('status')
       .setDescription('See this server\'s current currency setting'))
@@ -37,9 +38,12 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setColor('#d6c2ee')
         .setTitle(`${e('payday')} Server Currency`)
-        .setDescription(cfg.useSins
-          ? `Using real **Sins** (synced with Play & Regret).`
-          : `Using custom currency: **${cfg.currencyName}** ${cfg.currencyEmoji || ''}`);
+        .setDescription(
+          (cfg.useSins
+            ? `Using real **Sins** (synced with Play & Regret).`
+            : `Using custom currency: **${cfg.currencyName}** ${cfg.currencyEmoji || ''}`) +
+          `\n\nAuto-pay: ${cfg.autoPayEnabled ? '**ON** ⏰' : '**OFF**'}`
+        );
       return interaction.editReply({ embeds: [embed] });
     }
 
@@ -97,6 +101,7 @@ module.exports = {
     const useSins = interaction.options.getBoolean('use_sins');
     const name    = interaction.options.getString('name');
     const emoji   = interaction.options.getString('emoji');
+    const autoPay = interaction.options.getBoolean('auto_pay');
 
     await interaction.deferReply({ ephemeral: true });
 
@@ -120,13 +125,14 @@ module.exports = {
     }
 
     await query(`
-      INSERT INTO guild_config (guild_id, currency_use_sins, currency_name, currency_emoji)
-      VALUES ($1,$2,$3,$4)
+      INSERT INTO guild_config (guild_id, currency_use_sins, currency_name, currency_emoji, auto_pay_enabled)
+      VALUES ($1,$2,$3,$4,$5)
       ON CONFLICT (guild_id) DO UPDATE SET
         currency_use_sins = $2,
         currency_name = $3,
-        currency_emoji = $4
-    `, [interaction.guildId, useSins, useSins ? 'Sins' : name, emoji]);
+        currency_emoji = $4,
+        auto_pay_enabled = COALESCE($5, guild_config.auto_pay_enabled)
+    `, [interaction.guildId, useSins, useSins ? 'Sins' : name, emoji, autoPay]);
 
     // Also keep RR's own currency config in sync, since its battle
     // announcements read from here directly.
@@ -139,8 +145,13 @@ module.exports = {
         currency_emoji = $4
     `, [interaction.guildId, useSins, useSins ? 'Sins' : name, emoji || '<a:SINS:1522338148380704910>']);
 
-    return interaction.editReply(useSins
+    const cfg = await getGuildCurrencyConfig(interaction.guildId);
+    const autoPayNote = cfg.autoPayEnabled
+      ? '\n\n⏰ Auto-pay is **ON** — staff and boosters get paid automatically the moment they\'re due, no admin action needed.'
+      : '\n\nAuto-pay is currently off — payments still require `/mark-paid pay`. Run `/currency setup` again with `auto_pay:True` to turn it on.';
+
+    return interaction.editReply((useSins
       ? `${e('checkmark')} This server now uses real **Sins** everywhere — staff pay, boosters, Rumble Royale, and more.`
-      : `${e('checkmark')} This server now uses **${name}** ${emoji || ''} everywhere — staff pay, boosters, Rumble Royale, and more.`);
+      : `${e('checkmark')} This server now uses **${name}** ${emoji || ''} everywhere — staff pay, boosters, Rumble Royale, and more.`) + autoPayNote);
   },
 };

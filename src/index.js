@@ -13,6 +13,7 @@ process.on('uncaughtException', (error) => {
 });
 const { initDB } = require('./utils/database');
 const { startReminderLoop } = require('./utils/reminders');
+const { startAutoPayrollLoop } = require('./utils/autoPayroll');
 const { handleTicketMessage, handleThreadCreate, handleChannelDelete } = require('./events/ticketTracker');
 const { loadAppEmojis } = require('./utils/appEmojis');
 
@@ -189,6 +190,7 @@ client.once('ready', async () => {
   } catch(e) { console.error('[Giveaway] restore error:', e.message); }
 
   startReminderLoop(client);
+  startAutoPayrollLoop(client);
   const { startPrivateRoomCleanupLoop } = require('./utils/privateRooms');
   startPrivateRoomCleanupLoop(client);
   const { startGoosDateLoop } = require('./utils/goosDate');
