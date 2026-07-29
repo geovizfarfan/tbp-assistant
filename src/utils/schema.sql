@@ -26,6 +26,17 @@ CREATE TABLE IF NOT EXISTS staff_payments (
   notes TEXT
 );
 
+CREATE TABLE IF NOT EXISTS booster_payments (
+  id SERIAL PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  guild_id TEXT NOT NULL,
+  amount INTEGER,
+  currency TEXT,
+  paid_at TIMESTAMPTZ DEFAULT NOW(),
+  approved_by TEXT,
+  notes TEXT
+);
+
 -- Pay periods
 CREATE TABLE IF NOT EXISTS pay_periods (
   id SERIAL PRIMARY KEY,
