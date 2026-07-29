@@ -38,15 +38,33 @@ module.exports = {
       const s = staffRes.rows[0];
       const currency = s.pay_currency || 'MEE6';
 
+      // If no amount was given, compute what they're actually owed —
+      // same formula /admin pay-summary uses: base pay + games this period × bonus.
+      let staffAmount = amount;
+      if (staffAmount === null) {
+        const reqRes = await query(`SELECT * FROM pay_requirements WHERE guild_id=$1`, [interaction.guildId]);
+        const req = reqRes.rows[0] || { bonus_per_game: 400, pay_period_days: 30 };
+        const bonusPerGame = req.bonus_per_game || 400;
+        const periodDays   = req.pay_period_days || 30;
+        const periodStart  = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
+
+        const gamesRes = await query(
+          `SELECT COUNT(*) FROM game_logs WHERE guild_id=$1 AND host_id=$2 AND started_at > $3`,
+          [interaction.guildId, user.id, periodStart]
+        );
+        const gamesHosted = parseInt(gamesRes.rows[0].count);
+        staffAmount = (s.pay_amount || 0) + gamesHosted * bonusPerGame;
+      }
+
       await query(`UPDATE staff SET last_paid_at=$1, next_pay_due_at=$2 WHERE user_id=$3`, [now, nextDue, user.id]);
       await query(
         `INSERT INTO staff_payments (user_id, guild_id, amount, currency, paid_at, approved_by) VALUES ($1,$2,$3,$4,$5,$6)`,
-        [user.id, interaction.guildId, amount, currency, now, interaction.user.id]
+        [user.id, interaction.guildId, staffAmount, currency, now, interaction.user.id]
       );
 
       embed.addFields({
         name: `${e('payday')} Staff Pay`,
-        value: `Amount: **${amount ? `${amount} ${currency}` : `Logged (${currency})`}**\nNext Due: ${tsF(nextDue)}`,
+        value: `Amount: **${staffAmount} ${currency}**\nNext Due: ${tsF(nextDue)}`,
         inline: true,
       });
 
@@ -56,7 +74,7 @@ module.exports = {
         await dmMember.send({
           embeds: [baseEmbed(`${e('payday')} Payment Receipt`, COLORS.softgreen, interaction.guild?.name)
             .addFields(
-              { name: `${e('payday')} Amount`,     value: amount ? `${amount} ${currency}` : `Logged (${currency})`, inline: true },
+              { name: `${e('payday')} Amount`,     value: `${staffAmount} ${currency}`, inline: true },
               { name: `${e('RojasClock')} Paid At`, value: tsF(now), inline: true },
               { name: `${e('calender')} Next Due`,  value: tsF(nextDue), inline: true },
               { name: '✍️ Approved by',             value: `<@${interaction.user.id}>`, inline: true },
