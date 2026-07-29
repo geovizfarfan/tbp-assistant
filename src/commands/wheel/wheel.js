@@ -477,7 +477,9 @@ async function roleBonusList(interaction) {
 
   const embed = baseEmbed(e('diamond') + ' Wheel Role Bonuses', COLORS.tbppurple, interaction.guild ? interaction.guild.name : null);
   for (const row of res.rows) {
-    embed.addFields({ name: '<@&' + row.role_id + '>', value: '+' + row.bonus_entries + ' entries', inline: true });
+    const liveRole = await interaction.guild.roles.fetch(row.role_id).catch(() => null);
+    const displayName = liveRole ? liveRole.name : `${row.role_name} (deleted role)`;
+    embed.addFields({ name: displayName, value: '+' + row.bonus_entries + ' entries', inline: true });
   }
 
   await interaction.editReply({ embeds: [embed] });

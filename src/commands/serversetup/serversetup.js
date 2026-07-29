@@ -1275,13 +1275,17 @@ module.exports = {
 
     if (action === 'wheellist') {
       await interaction.deferUpdate();
-      const res = await query('SELECT role_id, bonus_entries FROM wheel_role_bonuses WHERE guild_id=$1 ORDER BY bonus_entries DESC', [interaction.guildId]);
+      const res = await query('SELECT role_id, role_name, bonus_entries FROM wheel_role_bonuses WHERE guild_id=$1 ORDER BY bonus_entries DESC', [interaction.guildId]);
       const embed = new EmbedBuilder().setColor('#d6c2ee').setTitle('🎡 Wheel Role Bonuses');
       if (!res.rows.length) {
         embed.setDescription('No role bonuses configured yet.');
       } else {
         for (const row of res.rows) {
-          embed.addFields({ name: `<@&${row.role_id}>`, value: `+${row.bonus_entries} entries`, inline: true });
+          // Prefer the live role name (in case it was renamed since being
+          // configured); fall back to what was stored if the role is gone.
+          const liveRole = await interaction.guild.roles.fetch(row.role_id).catch(() => null);
+          const displayName = liveRole ? liveRole.name : `${row.role_name} (deleted role)`;
+          embed.addFields({ name: displayName, value: `+${row.bonus_entries} entries`, inline: true });
         }
       }
       return interaction.editReply({
