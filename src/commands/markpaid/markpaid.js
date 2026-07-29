@@ -11,8 +11,9 @@ module.exports = {
     .addIntegerOption(o => o.setName('amount').setDescription('Amount paid (leave blank to use their default)').setRequired(false)),
 
   async execute(interaction) {
-    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
-        interaction.user.id !== process.env.OWNER_ID) {
+    const member = interaction.member || await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+    if (!member || (!member.permissions.has(PermissionFlagsBits.Administrator) &&
+        interaction.user.id !== process.env.OWNER_ID)) {
       return interaction.reply({ content: `${e('wrong')} Admin only.`, ephemeral: true });
     }
 
