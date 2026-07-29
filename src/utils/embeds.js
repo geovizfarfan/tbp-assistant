@@ -42,20 +42,17 @@ function baseEmbed(title, color = COLORS.crown, guildName = null) {
     .setTimestamp();
 }
 
-function eligibilityEmbed(staffUser, result, e) {
+function eligibilityEmbed(staffUser, result, e, guildName = null) {
   const emoji  = result.eligible === 'full' ? e('checkmark') : result.eligible === 'partial' ? e('moneyfly') : result.eligible === 'review' ? e('search') : e('wrong');
   const color  = result.eligible === 'full' ? COLORS.green : result.eligible === 'partial' ? COLORS.orange : result.eligible === 'review' ? COLORS.lightpurple : COLORS.softred;
   const label  = result.eligible === 'full' ? 'Eligible for Full Pay' : result.eligible === 'partial' ? 'Partial Pay' : result.eligible === 'review' ? 'Admin Review Needed' : 'Not Eligible';
 
-  const embed = baseEmbed(`${emoji} Paycheck Check — ${staffUser.username}`, color);
+  const embed = baseEmbed(`${emoji} Paycheck Check — ${staffUser.username}`, color, guildName);
   embed.addFields(
     { name: 'Status',                       value: `${emoji} **${label}**`, inline: false },
     { name: `${e('controller')} Games`,     value: `${result.gamesHosted} / ${result.req.min_games_hosted} required`, inline: true },
     { name: `${e('gift')} Giveaways`,       value: `${result.giveawaysHosted} / ${result.req.min_giveaways_hosted} required`, inline: true },
     { name: `${e('raffle')} Raffles`,       value: `${result.rafflesHosted} / ${result.req.min_raffles_hosted} required`, inline: true },
-    { name: `${e('RojasClock')} Late Pay`,  value: `${result.latePayouts} / ${result.req.max_late_payouts} max`, inline: true },
-    { name: `${e('calender')} Missed`,      value: `${result.missedShifts} / ${result.req.max_missed_shifts} max`, inline: true },
-    { name: `${e('rules')} Late Tickets`,   value: `${result.lateTickets}`, inline: true },
   );
   if (result.notes.length) {
     embed.addFields({ name: `${e('receipt')} Notes`, value: result.notes.join('\n') });

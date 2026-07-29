@@ -12,6 +12,7 @@ const ROLE_LABELS = {
 };
 
 module.exports = {
+  hidden: true, // reachable via /server-setup - not a standalone slash command
   data: new SlashCommandBuilder()
     .setName('staff')
     .setDescription('Staff management')
@@ -148,9 +149,6 @@ async function staffReport(interaction, userOverride) {
       { name: `${e('controller')} Games Hosted`, value: `${eligibility.gamesHosted}`, inline: true },
       { name: `${e('gift')} Giveaways`,          value: `${eligibility.giveawaysHosted}`, inline: true },
       { name: `${e('raffle')} Raffles`,          value: `${eligibility.rafflesHosted}`, inline: true },
-      { name: `${e('atention')} Late Payouts`,   value: `${eligibility.latePayouts}`, inline: true },
-      { name: `${e('calender')} Missed Shifts`,  value: `${eligibility.missedShifts}`, inline: true },
-      { name: `${e('rules')} Late Tickets`,      value: `${eligibility.lateTickets}`, inline: true },
       {
         name: `${e('payout')} Pay Eligibility`,
         value: eligibility.eligible === 'full'    ? `${e('checkmark')} Full Pay`

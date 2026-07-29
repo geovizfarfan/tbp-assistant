@@ -8,35 +8,12 @@ module.exports = {
     .setName('settings')
     .setDescription('Configure bot settings for this server')
     .addSubcommand(sub => sub
-      .setName('channels')
-      .setDescription('Set key channels for this server')
-      .addChannelOption(o => o.setName('schedule').setDescription('Game schedule board channel').setRequired(false))
-      .addChannelOption(o => o.setName('winners').setDescription('Winner announcements channel').setRequired(false))
-      .addChannelOption(o => o.setName('ticket').setDescription('Ticket channel').setRequired(false))
-      .addChannelOption(o => o.setName('staff_notif').setDescription('Staff notifications channel').setRequired(false))
-      .addChannelOption(o => o.setName('boost').setDescription('Server boost announcement channel').setRequired(false))
-      .addChannelOption(o => o.setName('transcript').setDescription('Game transcripts channel').setRequired(false))
-    )
-    .addSubcommand(sub => sub
-      .setName('roles')
-      .setDescription('Set key roles for this server')
-      .addRoleOption(o => o.setName('mod').setDescription('Mod role (ticket 1hr/3hr pings)').setRequired(false))
-      .addRoleOption(o => o.setName('admin').setDescription('Admin role (ticket 6hr/12hr pings)').setRequired(false))
-      .addRoleOption(o => o.setName('game_ping').setDescription('Game ping role (new game/raffle alerts)').setRequired(false))
-    )
-    .addSubcommand(sub => sub
-      .setName('timezone')
-      .setDescription('Set the server timezone for daily goal resets')
-      .addStringOption(o => o.setName('timezone').setDescription('e.g. America/New_York, Europe/London').setRequired(true))
-    )
-    .addSubcommand(sub => sub
       .setName('requirements')
       .setDescription('Set staff pay requirements for this server')
       .addIntegerOption(o => o.setName('min_games').setDescription('Min games per period').setRequired(false))
       .addIntegerOption(o => o.setName('min_auto_games').setDescription('Min auto-games per period').setRequired(false))
       .addIntegerOption(o => o.setName('min_raffles').setDescription('Min raffles per period').setRequired(false))
       .addIntegerOption(o => o.setName('min_giveaways').setDescription('Min giveaways per period').setRequired(false))
-      .addIntegerOption(o => o.setName('max_late_payouts').setDescription('Max late payouts allowed').setRequired(false))
       .addIntegerOption(o => o.setName('bonus_per_game').setDescription('Bonus currency per game hosted').setRequired(false))
     )
     .addSubcommand(sub => sub
@@ -53,35 +30,12 @@ module.exports = {
       .addIntegerOption(o => o.setName('games').setDescription('Daily games goal').setRequired(false))
       .addIntegerOption(o => o.setName('autogames').setDescription('Daily auto-games goal').setRequired(false))
       .addIntegerOption(o => o.setName('payouts').setDescription('Daily payouts goal').setRequired(false))
-    )
-    .addSubcommand(sub => sub
-      .setName('claim-time')
-      .setDescription('Set how long winners have to claim their prize')
-      .addIntegerOption(o => o.setName('default').setDescription('Hours for regular winners (default: 6)').setRequired(false))
-      .addIntegerOption(o => o.setName('booster').setDescription('Hours for boosters (default: 12)').setRequired(false))
-    )
-    .addSubcommand(sub => sub
-      .setName('goosdate')
-      .setDescription('Configure Goos Date reminder channel and role')
-      .addChannelOption(o => o.setName('channel').setDescription('Channel to post reminders in').setRequired(true))
-      .addRoleOption(o => o.setName('role').setDescription('Role to ping').setRequired(true))
-      .addBooleanOption(o => o.setName('enabled').setDescription('Enable reminders?').setRequired(false))
-    )
-    .addSubcommand(sub => sub
-      .setName('summary')
-      .setDescription('View all current server settings at a glance')
     ),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
-    if (sub === 'channels')    return setChannels(interaction);
-    if (sub === 'roles')       return setRoles(interaction);
-    if (sub === 'timezone')    return setTimezone(interaction);
     if (sub === 'requirements') return setRequirements(interaction);
     if (sub === 'daily-goals') return setDailyGoals(interaction);
-    if (sub === 'claim-time')  return setClaimTime(interaction);
-    if (sub === 'goosdate')    return setGoosdate(interaction);
-    if (sub === 'summary')     return summary(interaction);
   },
 };
 
@@ -162,7 +116,6 @@ async function setRequirements(interaction) {
     min_rumble:     interaction.options.getInteger('min_auto_games'),
     min_raffles:    interaction.options.getInteger('min_raffles'),
     min_giveaways:  interaction.options.getInteger('min_giveaways'),
-    max_late_payouts: interaction.options.getInteger('max_late_payouts'),
     bonus_per_game: interaction.options.getInteger('bonus_per_game'),
   };
   const setClauses = [];
