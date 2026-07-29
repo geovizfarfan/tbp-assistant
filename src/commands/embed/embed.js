@@ -129,7 +129,7 @@ module.exports = {
       });
 
       const modal = new ModalBuilder().setCustomId('embedguided_modal_first').setTitle('Page 1');
-      const titleInput = new TextInputBuilder().setCustomId('title').setLabel('Title (optional, overrides the one above if set)').setStyle(TextInputStyle.Short).setRequired(false)
+      const titleInput = new TextInputBuilder().setCustomId('title').setLabel('Title (optional)').setStyle(TextInputStyle.Short).setRequired(false)
         .setValue((title || '').slice(0, 4000));
       const textInput = new TextInputBuilder().setCustomId('text').setLabel('Page 1 text').setStyle(TextInputStyle.Paragraph).setRequired(true);
       modal.addComponents(
@@ -230,7 +230,7 @@ async function editEmbed(interaction) {
       .setCustomId('title').setLabel('Title').setStyle(TextInputStyle.Short).setRequired(false)
       .setValue((oldEmbed.title || '').slice(0, 4000));
     const footerInput = new TextInputBuilder()
-      .setCustomId('footer').setLabel('Footer (page number gets appended automatically)').setStyle(TextInputStyle.Short).setRequired(false)
+      .setCustomId('footer').setLabel('Footer (page # auto-added)').setStyle(TextInputStyle.Short).setRequired(false)
       .setValue((storedRes.rows[0]?.footer || '').slice(0, 4000));
     const authorInput = new TextInputBuilder()
       .setCustomId('author').setLabel('Author').setStyle(TextInputStyle.Short).setRequired(false)
