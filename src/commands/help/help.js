@@ -124,7 +124,7 @@ function buildCategoryEmbed(category) {
       .setTitle('🌟 Getting Started')
       .addFields(
         { name: 'How do I set up the server for the first time?', value: 'Run `/server-setup` — it\'s the central hub for channels, roles, staff, and everything else fundamental to running Veloura.', inline: false },
-        { name: 'How do I add staff members?', value: '`/staff add user:@member role:staff` — unlocks payroll tracking and staff-only commands like `/rr reward add`.', inline: false },
+        { name: 'How do I add staff members?', value: 'Run `/server-setup` → Staff & Payroll — unlocks payroll tracking and staff-only commands like `/rr reward add`.', inline: false },
         { name: 'Where do I see my current config?', value: '`/help` → Server Config, for a live snapshot of everything configured right now.', inline: false },
       ),
 
@@ -151,27 +151,27 @@ function buildCategoryEmbed(category) {
       .addFields(
         { name: 'How do I log a payment I made?', value: '`/pay log user:@member amount:500 service:"..." method:"..."`', inline: false },
         { name: 'How do I check what I\'m owed?', value: '`/payout` — shows your own unpaid games; admins can check anyone\'s.', inline: false },
-        { name: 'How do I add a seller or payment method?', value: 'Run `/server-setup` → Payments & Sellers. (Direct commands: `/pay seller add`, `/pay methods set`) and `/pay methods set` for someone\'s payout info.', inline: false },
+        { name: 'How do I add a seller or payment method?', value: 'Run `/server-setup` → Payments & Sellers to approve a seller. For your own payment info, use `/pay methods set`.', inline: false },
       ),
 
     sticky: new EmbedBuilder().setColor('#d6c2ee')
       .setTitle('📌 Sticky Notes')
       .addFields(
-        { name: 'How do I make a message stick to the bottom of a channel?', value: 'Run `/server-setup` → Panels & Sticky Content. (Direct command: `/sticky set message:"..."`) — Veloura reposts it automatically as new messages come in.', inline: false },
+        { name: 'How do I make a message stick to the bottom of a channel?', value: 'Run `/server-setup` → Panels & Sticky Content — Veloura reposts it automatically as new messages come in.', inline: false },
         { name: 'How do I edit or remove one?', value: '`/sticky edit` to change it, `/sticky remove` to take it down.', inline: false },
       ),
 
     panels: new EmbedBuilder().setColor('#d6c2ee')
       .setTitle('📋 Ping Panels')
       .addFields(
-        { name: 'How do I post a role-ping panel?', value: 'Run `/server-setup` → Panels & Sticky Content. (Direct command: `/pingpanel post role:@Role title:"..." channel:#ch`) — one click for members to ping that role.', inline: false },
+        { name: 'How do I post a role-ping panel?', value: 'Run `/server-setup` → Panels & Sticky Content — one click for members to ping that role.', inline: false },
       ),
 
     general: new EmbedBuilder().setColor('#d6c2ee')
       .setTitle('🤖 General')
       .addFields(
         { name: 'How do I lock a channel?', value: '`/lock channel:#ch reason:"..."`', inline: false },
-        { name: 'How do I set up ban logging?', value: 'Run `/server-setup` → Server Settings. (Direct command: `/banlog setup channel:#ch`)', inline: false },
+        { name: 'How do I set up ban logging?', value: 'Run `/server-setup` → Server Settings.', inline: false },
         { name: 'How do I post a custom embed?', value: '`/embed create description:"..."` — `/embed edit` to change it later without retyping.', inline: false },
         { name: 'How do I spin a wheel for a winner?', value: '`/wheel members entries:"@a, @b, @c"`', inline: false },
       ),
@@ -186,9 +186,9 @@ function buildCategoryEmbed(category) {
     staffpay: new EmbedBuilder().setColor('#d6c2ee')
       .setTitle('👥 Staff & Payroll')
       .addFields(
-        { name: 'How do I add someone to staff?', value: 'Run `/server-setup` → Staff & Payroll. (Direct command: `/staff add user:@member role:staff`)', inline: false },
-        { name: 'How do I mark someone as paid?', value: '`/admin mark-paid user:@member amount:500`', inline: false },
-        { name: 'How do I see staff activity or pay status?', value: '`/admin staff-report period:` for activity, `/admin payroll` for pay status.', inline: false },
+        { name: 'How do I add someone to staff?', value: 'Run `/server-setup` → Staff & Payroll.', inline: false },
+        { name: 'How do I mark someone as paid?', value: '`/mark-paid user:@member amount:500` — works for staff and boosters, auto-detects which.', inline: false },
+        { name: 'How do I see staff activity or pay status?', value: '`/admin staff-report period:` for activity, `/admin pay-summary` for pay status.', inline: false },
         { name: 'How do I configure pay requirements or goals?', value: 'Run `/server-setup` → Staff & Payroll. That lives in `/settings` — `requirements`, `daily-goals`, `roles`, `channels`, `timezone`.', inline: false },
       ),
 
@@ -209,7 +209,7 @@ function buildCategoryEmbed(category) {
     shop: new EmbedBuilder().setColor('#d6c2ee')
       .setTitle('🛒 Shop')
       .addFields(
-        { name: 'How do I set up the shop?', value: 'Run `/server-setup` → Payments & Sellers. (Direct command: `/shop setup shop_channel:#ch fulfillment_channel:#ch`)', inline: false },
+        { name: 'How do I set up the shop?', value: 'Run `/server-setup` → Payments & Sellers.', inline: false },
         { name: 'How do I add an item?', value: 'Run `/server-setup` → Payments & Sellers. (Direct command: `/shop additem name:"..." price:100 type:"..."`)', inline: false },
         { name: 'How does a member buy or use something?', value: 'They browse the posted panel; `/shop use item_id:` to use it, `/shop gift` to give it to someone else.', inline: false },
       ),
@@ -218,8 +218,8 @@ function buildCategoryEmbed(category) {
       .setTitle('🎁 Giveaways')
       .addFields(
         { name: 'How do I start a giveaway?', value: '`/giveaway start prize:"..." duration_amount:1 duration_unit:Days`', inline: false },
-        { name: 'How do I give certain roles extra entries?', value: 'Run `/server-setup` → Giveaway & Raffle Settings. (Direct command: `/giveaway bonusrole add role:@VIP entries:2`)', inline: false },
-        { name: 'How do I require a role to enter?', value: 'Run `/server-setup` → Giveaway & Raffle Settings. (Direct command: `/giveaway requiredrole add roles:@Role1 @Role2`)', inline: false },
+        { name: 'How do I give certain roles extra entries?', value: 'Run `/server-setup` → Giveaway & Raffle Settings.', inline: false },
+        { name: 'How do I require a role to enter?', value: 'Run `/server-setup` → Giveaway & Raffle Settings.', inline: false },
         { name: 'How can members check their own entries?', value: 'Every giveaway has a "Check My Entries" button — no command needed.', inline: false },
         { name: 'How do I edit, cancel, or end one early?', value: '`/giveaway edit id:`, `/giveaway cancel id:` (host only, no winner picked), `/giveaway end id:` (picks a winner now).', inline: false },
       ),
@@ -229,7 +229,7 @@ function buildCategoryEmbed(category) {
       .addFields(
         { name: 'How do I set up verification?', value: 'Run `/server-setup` → Server Settings. (Direct command: `/verify setup verified_role:@Role rules_channel:#ch captcha_channel:#ch rules_text:"..."`)', inline: false },
         { name: 'How does a member actually verify?', value: 'React to rules → react to start the captcha → solve the code → role assigned automatically.', inline: false },
-        { name: 'How do I add a welcome message?', value: 'Run `/server-setup` → Server Settings. (Direct command: `/verify welcome channel:#ch text:"Hey {user}, welcome!"`) — posts the moment someone joins.', inline: false },
+        { name: 'How do I add a welcome message?', value: 'Run `/server-setup` → Server Settings — posts the moment someone joins.', inline: false },
         { name: 'How do I edit the rules later?', value: '`/verify edit-rules text:"..."` — only fills in what you provide.', inline: false },
       ),
 
@@ -338,7 +338,7 @@ async function buildConfigEmbed(guild, client) {
       const itemCount = await query('SELECT COUNT(*) FROM shop_items WHERE guild_id=$1 AND active=true', [guild.id]);
       lines.push(`Active Items: ${itemCount.rows[0].count}`);
     } else {
-      lines.push('❌ Not configured — run `/shop setup`');
+      lines.push('❌ Not configured — run `/server-setup` → Payments & Sellers');
     }
     lines.push('');
 

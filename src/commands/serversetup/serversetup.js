@@ -20,15 +20,9 @@ const CATEGORIES = {
   channels: {
     label: 'Server Channel Set',
     emoji: '📺',
-    description: 'Every key channel the bot posts to or reads from.',
+    description: 'Every key channel the bot posts to or reads from — buttons below.',
     items: [
-      'Game board channel — `/settings channels schedule:`',
-      'Winners channel — `/settings channels winners:`',
-      'Ticket channel — `/settings channels ticket:`',
       'Ticket transcripts channel — *not yet split from game transcripts, coming in a later phase*',
-      'Staff notifications channel — `/settings channels staff_notif:`',
-      'Game transcripts channel — `/settings channels transcript:`',
-      'Claim time — `/settings claim-time default: booster:`',
       'Grind setup — `/grind setup`',
     ],
   },
@@ -41,12 +35,8 @@ const CATEGORIES = {
   roles: {
     label: 'Server Role Set',
     emoji: '🎭',
-    description: 'Roles the bot pings or manages automatically.',
-    items: [
-      'Game ping role — `/settings roles game_ping:`',
-      'Mod / Admin roles — `/settings roles mod: admin:`',
-      'Other ping roles as needed',
-    ],
+    description: 'Roles the bot pings or manages automatically — buttons below.',
+    items: [],
   },
   goosty: {
     label: 'Extras & Utilities',
@@ -185,7 +175,6 @@ function buildBoosterButtons() {
     new ButtonBuilder().setCustomId('serversetup_booster:remove').setLabel('Remove Booster').setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId('serversetup_booster:paid').setLabel('Mark Paid').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('serversetup_booster:list').setLabel('List').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('serversetup_booster:overdue').setLabel('Overdue').setStyle(ButtonStyle.Secondary),
   );
 }
 
@@ -526,10 +515,6 @@ module.exports = {
     if (action === 'list') {
       const { listBoosters } = require('../admin/booster');
       return listBoosters(interaction);
-    }
-    if (action === 'overdue') {
-      const { overdueBoosters } = require('../admin/booster');
-      return overdueBoosters(interaction);
     }
 
     // add / remove / paid all need a user first

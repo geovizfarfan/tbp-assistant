@@ -196,11 +196,6 @@ module.exports = {
     .setName('admin')
     .setDescription('Admin dashboard')
     .addSubcommand(sub => sub
-      .setName('payroll')
-      .setDescription('Full payroll overview')
-      .addUserOption(o => o.setName('user').setDescription('View a specific staff member or booster').setRequired(false))
-    )
-    .addSubcommand(sub => sub
       .setName('pay-summary')
       .setDescription('See total owed to staff and boosters this period')
     )
@@ -242,23 +237,15 @@ module.exports = {
           { name: 'Not Claimed — winner never claimed', value: 'not_claimed' },
         ))
       .addUserOption(o => o.setName('winner').setDescription('Correct the recorded winner, if it was wrong'))
-    )
-    .addSubcommand(sub => sub
-      .setName('mark-paid')
-      .setDescription('Mark a staff member as paid')
-      .addUserOption(o => o.setName('user').setDescription('Staff member').setRequired(true))
-      .addIntegerOption(o => o.setName('amount').setDescription('Amount paid').setRequired(false))
     ),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
-    if (sub === 'payroll')         await payroll(interaction);
     if (sub === 'pay-summary')     await paySummary(interaction);
     if (sub === 'paycheck-check')  await paycheckCheck(interaction);
     if (sub === 'staff-report')    await staffReport(interaction);
     if (sub === 'ping-games')      await pingGames(interaction);
     if (sub === 'fix-payout')      await fixPayout(interaction);
-    if (sub === 'mark-paid')       await markPaid(interaction);
   },
 };
 
@@ -339,86 +326,6 @@ async function paySummary(interaction) {
   await interaction.editReply({ embeds: [embed] });
 }
 
-async function payroll(interaction) {
-  await interaction.deferReply({ ephemeral: true });
-  const userFilter = interaction.options.getUser('user');
-
-  const reqRes = await query(`SELECT * FROM pay_requirements WHERE guild_id=$1`, [interaction.guildId]);
-  const req = reqRes.rows[0] || { bonus_per_game: 400, pay_period_days: 30 };
-  const bonusPerGame = req.bonus_per_game || 400;
-  const periodDays   = req.pay_period_days || 30;
-  const periodStart  = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
-
-  const staffQuery  = userFilter
-    ? `SELECT * FROM staff WHERE guild_id=$1 AND user_id=$2 AND active=true`
-    : `SELECT * FROM staff WHERE guild_id=$1 AND active=true ORDER BY role`;
-  const staffParams = userFilter ? [interaction.guildId, userFilter.id] : [interaction.guildId];
-  const staffRes    = await query(staffQuery, staffParams);
-
-  const boosterQuery  = userFilter
-    ? `SELECT * FROM boosters WHERE guild_id=$1 AND user_id=$2 AND active=true`
-    : `SELECT * FROM boosters WHERE guild_id=$1 AND active=true ORDER BY username`;
-  const boosterParams = userFilter ? [interaction.guildId, userFilter.id] : [interaction.guildId];
-  const boosterRes    = await query(boosterQuery, boosterParams);
-
-  if (!staffRes.rows.length && !boosterRes.rows.length) {
-    return interaction.editReply({ content: `${e('wrong')} No staff or boosters found.` });
-  }
-
-  const title = userFilter ? `${e('payday')} Payroll — ${userFilter.username}` : `${e('payday')} TBP Payroll`;
-  const embed = baseEmbed(title, COLORS.tbppurple, interaction.guild?.name);
-  let totalCrowns = 0, totalSins = 0, totalGoos = 0;
-
-  for (const s of staffRes.rows) {
-    const gamesRes = await query(
-      `SELECT COUNT(*) FROM game_logs WHERE guild_id=$1 AND host_id=$2 AND started_at > $3`,
-      [interaction.guildId, s.user_id, periodStart]
-    );
-    const gamesHosted = parseInt(gamesRes.rows[0].count);
-    const gameBonus   = gamesHosted * bonusPerGame;
-    const totalPay    = (s.pay_amount || 0) + gameBonus;
-    const overdue     = s.next_pay_due_at && new Date(s.next_pay_due_at) < new Date();
-    const status      = overdue ? `${e('atention')} OVERDUE` : `${e('checkmark')}`;
-    const roleLabel   = { admin:'Admin', staff:'Mod', host:'Host', rumble_host:'Rumble Host', owner:'Owner' }[s.role] || s.role;
-    const due         = s.next_pay_due_at ? tsF(s.next_pay_due_at) : 'N/A';
-    const lastPaid    = s.last_paid_at ? tsF(s.last_paid_at) : 'Never';
-
-    if (s.pay_currency === 'Crowns') totalCrowns += totalPay;
-    if (s.pay_currency === 'Sins')   totalSins   += totalPay;
-    if (s.pay_currency === 'Goos')   totalGoos   += totalPay;
-
-    embed.addFields({
-      name: `${status} ${s.username} [${roleLabel}]`,
-      value: `Base: **${s.pay_amount || 0} ${s.pay_currency}** | Games: ${gamesHosted} × ${bonusPerGame} = ${gameBonus} | Total: **${totalPay} ${s.pay_currency}**\nDue: ${due} | Last Paid: ${lastPaid}`,
-    });
-  }
-
-  for (const b of boosterRes.rows) {
-    const overdue  = b.next_pay_due_at && new Date(b.next_pay_due_at) < new Date();
-    const status   = overdue ? `${e('atention')} OVERDUE` : `${e('checkmark')}`;
-    const due      = b.next_pay_due_at ? tsF(b.next_pay_due_at) : 'N/A';
-    const lastPaid = b.last_paid_at ? tsF(b.last_paid_at) : 'Never';
-
-    if (b.currency === 'Crowns') totalCrowns += b.amount_owed;
-    if (b.currency === 'Sins')   totalSins   += b.amount_owed;
-    if (b.currency === 'Goos')   totalGoos   += b.amount_owed;
-
-    embed.addFields({
-      name: `${status} ${b.username} [Booster]`,
-      value: `Base: **${b.amount_owed} ${b.currency}** | Due: ${due} | Last Paid: ${lastPaid}`,
-    });
-  }
-
-  if (!userFilter) {
-    embed.addFields({
-      name: `${e('payout')} Total Owed`,
-      value: `Crowns: ${totalCrowns} | Sins: ${totalSins} | Goos: ${totalGoos}\n${e('bullet')} Bonus: ${bonusPerGame} per game`
-    });
-  }
-
-  await interaction.editReply({ embeds: [embed] });
-}
-
 async function paycheckCheck(interaction) {
   const user = interaction.options.getUser('user');
   await interaction.deferReply({ ephemeral: true });
@@ -435,49 +342,4 @@ async function paycheckCheck(interaction) {
 
 
 
-async function markPaid(interaction) {
-  const user   = interaction.options.getUser('user');
-  const amount = interaction.options.getInteger('amount');
-  const now    = new Date();
-  const nextDue = new Date();
-  nextDue.setDate(nextDue.getDate() + 30);
 
-  await interaction.deferReply({ ephemeral: true });
-
-  const staffRes = await query('SELECT pay_currency FROM staff WHERE user_id=$1', [user.id]);
-  const currency = staffRes.rows[0]?.pay_currency || 'MEE6';
-
-  await query(
-    `UPDATE staff SET last_paid_at=$1, next_pay_due_at=$2 WHERE user_id=$3`,
-    [now, nextDue, user.id]
-  );
-
-  await query(
-    `INSERT INTO staff_payments (user_id, guild_id, amount, currency, paid_at, approved_by) VALUES ($1,$2,$3,$4,$5,$6)`,
-    [user.id, interaction.guildId, amount, currency, now, interaction.user.id]
-  );
-
-  // DM receipt — best effort, don't block on closed DMs
-  const dmMember = await interaction.guild.members.fetch(user.id).catch(() => null);
-  if (dmMember) {
-    await dmMember.send({
-      embeds: [baseEmbed(`${e('payday')} Payment Receipt`, COLORS.softgreen, interaction.guild?.name)
-        .addFields(
-          { name: `${e('payday')} Amount`,      value: amount ? `${amount} ${currency}` : `Logged (${currency})`, inline: true },
-          { name: `${e('RojasClock')} Paid At`, value: tsF(now), inline: true },
-          { name: `${e('calender')} Next Due`,  value: tsF(nextDue), inline: true },
-          { name: '✍️ Approved by',             value: `<@${interaction.user.id}>`, inline: true },
-        )]
-    }).catch(() => {});
-  }
-
-  const embed = baseEmbed(`${e('checkmark')} Staff Paid`, COLORS.softgreen, interaction.guild?.name)
-    .addFields(
-      { name: `${e('members')} Staff`,      value: `<@${user.id}>`, inline: true },
-      { name: `${e('payday')} Amount`,     value: amount ? `${amount} ${currency}` : 'Logged', inline: true },
-      { name: `${e('RojasClock')} Paid At`,    value: tsF(now), inline: true },
-      { name: `${e('calender')} Next Due`,   value: tsF(nextDue), inline: true },
-      { name: '✍️ Approved by',value: `<@${interaction.user.id}>`, inline: true },
-    );
-  await interaction.editReply({ embeds: [embed] });
-}

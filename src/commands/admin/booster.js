@@ -8,54 +8,17 @@ module.exports = {
     .setName('booster')
     .setDescription('Booster payment tracking')
     .addSubcommand(sub => sub
-      .setName('add')
-      .setDescription('Add a booster to tracking')
-      .addUserOption(o => o.setName('user').setDescription('Booster').setRequired(true))
-      .addIntegerOption(o => o.setName('amount').setDescription('Monthly payment amount').setRequired(true))
-      .addStringOption(o => o.setName('currency').setDescription('Currency').setRequired(false)
-        .addChoices(
-          { name: 'Crowns (MEE6)',        value: 'Crowns' },
-          { name: 'Sins (Play & Regret)', value: 'Sins'   },
-          { name: 'Goos (Ghosty)',        value: 'Goos'   },
-        ))
-      .addStringOption(o => o.setName('tier').setDescription('Boost tier').setRequired(false)
-        .addChoices(
-          { name: 'Basic',    value: 'basic'    },
-          { name: 'Standard', value: 'standard' },
-          { name: 'Premium',  value: 'premium'  },
-        ))
-      .addStringOption(o => o.setName('notes').setDescription('Notes').setRequired(false))
-    )
-    .addSubcommand(sub => sub
-      .setName('remove')
-      .setDescription('Remove a booster from tracking')
-      .addUserOption(o => o.setName('user').setDescription('Booster').setRequired(true))
-    )
-    .addSubcommand(sub => sub
-      .setName('paid')
-      .setDescription('Mark a booster as paid this month')
-      .addUserOption(o => o.setName('user').setDescription('Booster').setRequired(true))
-      .addIntegerOption(o => o.setName('amount').setDescription('Amount paid (leave blank to use default)').setRequired(false))
-    )
-    .addSubcommand(sub => sub
       .setName('list')
       .setDescription('List all boosters and payment status')
-    )
-    .addSubcommand(sub => sub
-      .setName('overdue')
-      .setDescription('Show boosters with overdue payments')
     ),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
-    if (sub === 'add')     await addBooster(interaction);
-    if (sub === 'remove')  await removeBooster(interaction);
-    if (sub === 'paid')    await markPaid(interaction);
     if (sub === 'list')    await listBoosters(interaction);
-    if (sub === 'overdue') await overdueBoosters(interaction);
   },
+  addBooster,
+  removeBooster,
   listBoosters,
-  overdueBoosters,
 };
 
 async function addBooster(interaction) {
@@ -99,34 +62,6 @@ async function removeBooster(interaction) {
   await interaction.editReply({ content: `${e('checkmark')} <@${user.id}> removed from booster tracking.` });
 }
 
-async function markPaid(interaction) {
-  const user   = interaction.options.getUser('user');
-  const amount = interaction.options.getInteger('amount');
-  const now    = new Date();
-  const nextDue = new Date();
-  nextDue.setDate(nextDue.getDate() + 30);
-
-  await interaction.deferReply({ ephemeral: true });
-
-  const res = await query(
-    `UPDATE boosters SET last_paid_at=$1, next_pay_due_at=$2 WHERE guild_id=$3 AND user_id=$4 RETURNING *`,
-    [now, nextDue, interaction.guildId, user.id]
-  );
-
-  if (!res.rows.length) return interaction.editReply({ content: `${e('wrong')} Booster not found. Add them first with /booster add.` });
-  const b = res.rows[0];
-
-  const embed = baseEmbed(`${e('payout')} Booster Paid`, COLORS.softgreen, interaction.guild?.name)
-    .addFields(
-      { name: `${e('members')} Booster`,  value: `<@${user.id}>`, inline: true },
-      { name: `${e('payday')} Amount`,    value: `${amount || b.amount_owed} ${b.currency}`, inline: true },
-      { name: `${e('RojasClock')} Paid`,  value: tsF(now), inline: true },
-      { name: `${e('calender')} Next Due`,value: tsF(nextDue), inline: true },
-    );
-
-  await interaction.editReply({ embeds: [embed] });
-}
-
 async function listBoosters(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
@@ -164,28 +99,6 @@ async function listBoosters(interaction) {
       totalGoos   ? `${totalGoos} Goos`     : '',
     ].filter(Boolean).join(' | ') || 'N/A',
   });
-
-  await interaction.editReply({ embeds: [embed] });
-}
-
-async function overdueBoosters(interaction) {
-  await interaction.deferReply({ ephemeral: true });
-
-  const res = await query(
-    `SELECT * FROM boosters WHERE guild_id=$1 AND active=true AND next_pay_due_at < NOW() ORDER BY next_pay_due_at ASC`,
-    [interaction.guildId]
-  );
-
-  if (!res.rows.length) return interaction.editReply({ content: `${e('checkmark')} No overdue booster payments!` });
-
-  const embed = baseEmbed(`${e('atention')} Overdue Booster Payments`, COLORS.softred, interaction.guild?.name);
-  for (const b of res.rows) {
-    const daysOverdue = Math.floor((new Date() - new Date(b.next_pay_due_at)) / 86400000);
-    embed.addFields({
-      name: `<@${b.user_id}> — ${b.amount_owed} ${b.currency}`,
-      value: `Due: ${tsF(b.next_pay_due_at)} | ${daysOverdue} days overdue | Last paid: ${b.last_paid_at ? tsF(b.last_paid_at) : 'Never'}`,
-    });
-  }
 
   await interaction.editReply({ embeds: [embed] });
 }
