@@ -119,9 +119,9 @@ module.exports = {
 
     .addSubcommand(sub => sub
       .setName('partial')
-      .setDescription('Log a partial payment — only the seller who logged it, or the owner')
-      .addIntegerOption(o => o.setName('id').setDescription('Payment ID').setRequired(true))
-      .addNumberOption(o => o.setName('amount').setDescription('Amount paid now').setRequired(true).setMinValue(0.01))
+      .setDescription('Log a payment that covers one or more outstanding charges, oldest first')
+      .addUserOption(o => o.setName('user').setDescription('Who paid').setRequired(true))
+      .addNumberOption(o => o.setName('amount').setDescription('Amount paid').setRequired(true).setMinValue(0.01))
       .addStringOption(o => o.setName('notes').setDescription('Optional notes')))
 
     .addSubcommand(sub => sub
@@ -460,44 +460,56 @@ module.exports = {
       if (!sellerAllowed) return interaction.reply({ content: `${E.wrong} Approved sellers only.`, ephemeral: true });
       await interaction.deferReply({ ephemeral: true });
 
-      const id         = interaction.options.getInteger('id');
-      const amountPaid = interaction.options.getNumber('amount');
+      const user       = interaction.options.getUser('user');
+      let remainingPay = interaction.options.getNumber('amount');
       const notes      = interaction.options.getString('notes') || null;
 
       const sql = isOwner
-        ? 'SELECT * FROM payments WHERE id=$1'
-        : 'SELECT * FROM payments WHERE id=$1 AND seller_id=$2';
-      const params = isOwner ? [id] : [id, interaction.user.id];
+        ? 'SELECT * FROM payments WHERE user_id=$1 AND guild_id=$2 AND status IN (\'unpaid\',\'partial\') ORDER BY created_at ASC'
+        : 'SELECT * FROM payments WHERE user_id=$1 AND seller_id=$2 AND status IN (\'unpaid\',\'partial\') ORDER BY created_at ASC';
+      const params = isOwner ? [user.id, interaction.guildId] : [user.id, interaction.user.id];
 
-      const existing = await query(sql, params);
-      if (!existing.rows.length) return interaction.editReply(`${E.wrong} Payment not found or not yours.`);
-      const p = existing.rows[0];
+      const outstanding = await query(sql, params);
+      if (!outstanding.rows.length) return interaction.editReply(`${E.wrong} <@${user.id}> has no outstanding charges${isOwner ? '' : ' with you'}.`);
 
-      const newPaid   = Number(p.amount_paid) + amountPaid;
-      const remaining = Number(p.amount) - newPaid;
-      const newStatus = remaining <= 0 ? 'paid' : 'partial';
+      // Apply the payment oldest-first, fully covering each charge before
+      // moving to the next, until either the payment or the charges run out.
+      const affected = [];
+      for (const p of outstanding.rows) {
+        if (remainingPay <= 0) break;
+        const owedOnThis = Number(p.amount) - Number(p.amount_paid);
+        const applied = Math.min(remainingPay, owedOnThis);
+        const newPaid = Number(p.amount_paid) + applied;
+        const newStatus = newPaid >= Number(p.amount) ? 'paid' : 'partial';
 
-      await query('UPDATE payments SET amount_paid=$1, status=$2, paid_notes=$3, paid_at=NOW() WHERE id=$4',
-        [newPaid, newStatus, notes, id]);
+        await query('UPDATE payments SET amount_paid=$1, status=$2, paid_notes=$3, paid_at=NOW() WHERE id=$4',
+          [newPaid, newStatus, notes, p.id]);
 
-      const member = await interaction.guild.members.fetch(p.user_id).catch(() => null);
+        affected.push({ id: p.id, service: p.service, method: p.method, applied, fullyPaid: newStatus === 'paid', stillOwed: Number(p.amount) - newPaid });
+        remainingPay -= applied;
+      }
+
+      const leftoverCredit = remainingPay > 0 ? remainingPay : 0;
+      const totalApplied = affected.reduce((s, a) => s + a.applied, 0);
+
+      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
       if (member) {
-        const m = await getMethods(interaction.guild.id, p.seller_id);
-        await member.send({ embeds: [new EmbedBuilder().setColor(remaining <= 0 ? '#248046' : '#faa61a')
-          .setTitle(remaining <= 0 ? `${E.check} Payment Complete!` : `${E.warn} Partial Payment Received`)
-          .setDescription(`A payment in **${interaction.guild.name}** has been logged.`)
-          .addFields(
-            { name: `${E.receipt} Service`,   value: p.service, inline: true },
-            { name: `${E.money} Paid Now`,    value: `$${amountPaid.toFixed(2)}`, inline: true },
-            { name: `${E.loading} Remaining`, value: remaining > 0 ? `$${remaining.toFixed(2)}` : 'None — paid in full!', inline: true },
-            ...(remaining > 0 ? [{ name: `${E.sparkle} How to Pay Remaining`, value: formatSingleMethod(m, p.method), inline: false }] : []),
-          ).setFooter({ text: `${interaction.guild.name} • ID: #${id}` }).setTimestamp()
+        const lines = affected.map(a =>
+          `${a.fullyPaid ? E.check : E.warn} \`#${a.id}\` **${a.service}** — $${a.applied.toFixed(2)} applied${a.fullyPaid ? ' (paid in full)' : ` — $${a.stillOwed.toFixed(2)} still owed`}`
+        );
+        await member.send({ embeds: [new EmbedBuilder().setColor(leftoverCredit > 0 || affected.every(a => a.fullyPaid) ? '#248046' : '#faa61a')
+          .setTitle(`${E.check} Payment Received`)
+          .setDescription(`A payment of **$${totalApplied.toFixed(2)}** in **${interaction.guild.name}** has been applied to your outstanding charges, oldest first.`)
+          .addFields({ name: `${E.receipt} Applied To`, value: lines.join('\n') })
+          .setTimestamp()
         ]}).catch(() => {});
       }
 
-      return interaction.editReply(remaining <= 0
-        ? `${E.check} Payment #${id} fully paid!`
-        : `${E.check} Partial payment logged for #${id} — $${remaining.toFixed(2)} remaining.`);
+      const summary = affected.map(a => `\`#${a.id}\` ${a.service} — $${a.applied.toFixed(2)}${a.fullyPaid ? ' (paid off)' : ` ($${a.stillOwed.toFixed(2)} left)`}`).join('\n');
+      return interaction.editReply(
+        `${E.check} Applied $${totalApplied.toFixed(2)} across ${affected.length} charge${affected.length === 1 ? '' : 's'} for <@${user.id}>:\n${summary}` +
+        (leftoverCredit > 0 ? `\n\n${E.warn} $${leftoverCredit.toFixed(2)} left over — all outstanding charges are now paid off.` : '')
+      );
     }
 
     if (sub === 'balance') {
