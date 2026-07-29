@@ -219,30 +219,24 @@ async function editEmbed(interaction) {
   // via that would silently overwrite (and destroy) every other page.
   const storedRes = await query('SELECT description FROM custom_embeds WHERE message_id = $1', [messageId]);
   const storedDescription = storedRes.rows[0]?.description || oldEmbed.description || '';
-  const isMultiPage = splitIntoPages(storedDescription).length > 1;
+  const pages = splitIntoPages(storedDescription);
+  const isMultiPage = pages.length > 1;
 
   if (isMultiPage) {
-    const modal = new ModalBuilder()
-      .setCustomId(`embededitmeta_modal:${channel.id}:${messageId}`)
-      .setTitle('Edit Title / Footer / Author');
-
-    const titleInput = new TextInputBuilder()
-      .setCustomId('title').setLabel('Title').setStyle(TextInputStyle.Short).setRequired(false)
-      .setValue((oldEmbed.title || '').slice(0, 4000));
-    const footerInput = new TextInputBuilder()
-      .setCustomId('footer').setLabel('Footer (page # auto-added)').setStyle(TextInputStyle.Short).setRequired(false)
-      .setValue((storedRes.rows[0]?.footer || '').slice(0, 4000));
-    const authorInput = new TextInputBuilder()
-      .setCustomId('author').setLabel('Author').setStyle(TextInputStyle.Short).setRequired(false)
-      .setValue((oldEmbed.author?.name || '').slice(0, 4000));
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(titleInput),
-      new ActionRowBuilder().addComponents(footerInput),
-      new ActionRowBuilder().addComponents(authorInput),
+    const row1 = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`embededitmeta_open:${channel.id}:${messageId}`).setLabel('Edit Title/Footer/Author').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`embededitpage_open:${channel.id}:${messageId}`).setLabel('Edit a Page').setStyle(ButtonStyle.Primary),
+    );
+    const row2 = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`embedaddpage:${channel.id}:${messageId}`).setLabel('➕ Add a Page').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`embedremovepage:${channel.id}:${messageId}`).setLabel('➖ Remove Last Page').setStyle(ButtonStyle.Danger),
     );
 
-    return interaction.showModal(modal);
+    return interaction.reply({
+      content: `This embed has **${pages.length} pages**. What do you want to edit?`,
+      components: [row1, row2],
+      ephemeral: true,
+    });
   }
 
   // Show a modal pre-filled with the current text so it can be edited in place
@@ -448,6 +442,170 @@ async function handleEditMetaModal(interaction) {
 }
 
 module.exports.handleEditMetaModal = handleEditMetaModal;
+
+// Shared by every page-editing action: rejoin pages into one description,
+// save it, and refresh whichever page the live message is currently showing.
+async function saveAndRefreshPages(channel, messageId, pages) {
+  const fullDescription = pages.join('\n\n');
+  await query('UPDATE custom_embeds SET description = $1 WHERE message_id = $2', [fullDescription, messageId]);
+
+  const res = await query('SELECT * FROM custom_embeds WHERE message_id = $1', [messageId]);
+  const stored = res.rows[0];
+
+  const msg = await channel.messages.fetch(messageId).catch(() => null);
+  if (!msg) return { stored, pages };
+
+  const currentFooter = msg.embeds[0]?.footer?.text || '';
+  const pageMatch = currentFooter.match(/Page (\d+)\/(\d+)/);
+  const currentPage = pageMatch ? Math.min(parseInt(pageMatch[1], 10), pages.length) : 1;
+
+  const embed = buildPageEmbed(stored, pages, currentPage);
+  const row = pages.length > 1 ? buildPageRow(stored.id, currentPage, pages.length) : null;
+  await msg.edit({ embeds: [embed], components: row ? [row] : [] }).catch(() => {});
+
+  return { stored, pages, currentPage };
+}
+
+async function handleEditMetaOpen(interaction) {
+  const [, channelId, messageId] = interaction.customId.split(':');
+  const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
+  const msg = channel ? await channel.messages.fetch(messageId).catch(() => null) : null;
+  if (!msg) return interaction.reply({ content: `\u274c Couldn't find that embed anymore.`, ephemeral: true });
+
+  const storedRes = await query('SELECT footer FROM custom_embeds WHERE message_id = $1', [messageId]);
+  const oldEmbed = msg.embeds[0];
+
+  const modal = new ModalBuilder()
+    .setCustomId(`embededitmeta_modal:${channel.id}:${messageId}`)
+    .setTitle('Edit Title / Footer / Author');
+
+  const titleInput = new TextInputBuilder()
+    .setCustomId('title').setLabel('Title').setStyle(TextInputStyle.Short).setRequired(false)
+    .setValue((oldEmbed.title || '').slice(0, 4000));
+  const footerInput = new TextInputBuilder()
+    .setCustomId('footer').setLabel('Footer (page # auto-added)').setStyle(TextInputStyle.Short).setRequired(false)
+    .setValue((storedRes.rows[0]?.footer || '').slice(0, 4000));
+  const authorInput = new TextInputBuilder()
+    .setCustomId('author').setLabel('Author').setStyle(TextInputStyle.Short).setRequired(false)
+    .setValue((oldEmbed.author?.name || '').slice(0, 4000));
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(titleInput),
+    new ActionRowBuilder().addComponents(footerInput),
+    new ActionRowBuilder().addComponents(authorInput),
+  );
+  return interaction.showModal(modal);
+}
+module.exports.handleEditMetaOpen = handleEditMetaOpen;
+
+async function handleEditPageOpen(interaction) {
+  const [, channelId, messageId] = interaction.customId.split(':');
+  const res = await query('SELECT description FROM custom_embeds WHERE message_id = $1', [messageId]);
+  if (!res.rows.length) return interaction.reply({ content: `\u274c Couldn't find that embed's stored data.`, ephemeral: true });
+
+  const pages = splitIntoPages(res.rows[0].description || '');
+  const { StringSelectMenuBuilder } = require('discord.js');
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(`embedpagepick:${channelId}:${messageId}`)
+    .setPlaceholder('Pick a page to edit')
+    .addOptions(pages.map((p, i) => ({
+      label: `Page ${i + 1}`,
+      description: p.slice(0, 90).replace(/\n/g, ' '),
+      value: String(i),
+    })));
+
+  return interaction.reply({ components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
+}
+module.exports.handleEditPageOpen = handleEditPageOpen;
+
+async function handlePagePicked(interaction) {
+  const [, channelId, messageId] = interaction.customId.split(':');
+  const pageIdx = parseInt(interaction.values[0], 10);
+
+  const res = await query('SELECT description FROM custom_embeds WHERE message_id = $1', [messageId]);
+  if (!res.rows.length) return interaction.reply({ content: `\u274c Couldn't find that embed's stored data.`, ephemeral: true });
+  const pages = splitIntoPages(res.rows[0].description || '');
+
+  const modal = new ModalBuilder()
+    .setCustomId(`embedpageedit_modal:${channelId}:${messageId}:${pageIdx}`)
+    .setTitle(`Edit Page ${pageIdx + 1}`);
+  const textInput = new TextInputBuilder()
+    .setCustomId('text').setLabel(`Page ${pageIdx + 1} text`).setStyle(TextInputStyle.Paragraph).setRequired(true)
+    .setValue((pages[pageIdx] || '').slice(0, 4000));
+  modal.addComponents(new ActionRowBuilder().addComponents(textInput));
+  return interaction.showModal(modal);
+}
+module.exports.handlePagePicked = handlePagePicked;
+
+async function handlePageEditModal(interaction) {
+  const [, channelId, messageId, pageIdxStr] = interaction.customId.split(':');
+  const pageIdx = parseInt(pageIdxStr, 10);
+  await interaction.deferReply({ ephemeral: true });
+
+  const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
+  if (!channel) return interaction.editReply(`\u274c Couldn't find that channel anymore.`);
+
+  const res = await query('SELECT description FROM custom_embeds WHERE message_id = $1', [messageId]);
+  if (!res.rows.length) return interaction.editReply(`\u274c Couldn't find that embed's stored data.`);
+  const pages = splitIntoPages(res.rows[0].description || '');
+
+  pages[pageIdx] = interaction.fields.getTextInputValue('text');
+  await saveAndRefreshPages(channel, messageId, pages);
+
+  return interaction.editReply(`\u2705 Page ${pageIdx + 1} updated.`);
+}
+module.exports.handlePageEditModal = handlePageEditModal;
+
+async function handleAddPage(interaction) {
+  const [, channelId, messageId] = interaction.customId.split(':');
+  const modal = new ModalBuilder()
+    .setCustomId(`embedaddpage_modal:${channelId}:${messageId}`)
+    .setTitle('Add a New Page');
+  const textInput = new TextInputBuilder()
+    .setCustomId('text').setLabel('New page text').setStyle(TextInputStyle.Paragraph).setRequired(true);
+  modal.addComponents(new ActionRowBuilder().addComponents(textInput));
+  return interaction.showModal(modal);
+}
+module.exports.handleAddPage = handleAddPage;
+
+async function handleAddPageModal(interaction) {
+  const [, channelId, messageId] = interaction.customId.split(':');
+  await interaction.deferReply({ ephemeral: true });
+
+  const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
+  if (!channel) return interaction.editReply(`\u274c Couldn't find that channel anymore.`);
+
+  const res = await query('SELECT description FROM custom_embeds WHERE message_id = $1', [messageId]);
+  if (!res.rows.length) return interaction.editReply(`\u274c Couldn't find that embed's stored data.`);
+  const pages = splitIntoPages(res.rows[0].description || '');
+
+  pages.push(interaction.fields.getTextInputValue('text'));
+  await saveAndRefreshPages(channel, messageId, pages);
+
+  return interaction.editReply(`\u2705 Page ${pages.length} added \u2014 now **${pages.length} pages** total.`);
+}
+module.exports.handleAddPageModal = handleAddPageModal;
+
+async function handleRemovePage(interaction) {
+  const [, channelId, messageId] = interaction.customId.split(':');
+  await interaction.deferReply({ ephemeral: true });
+
+  const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
+  if (!channel) return interaction.editReply(`\u274c Couldn't find that channel anymore.`);
+
+  const res = await query('SELECT description FROM custom_embeds WHERE message_id = $1', [messageId]);
+  if (!res.rows.length) return interaction.editReply(`\u274c Couldn't find that embed's stored data.`);
+  const pages = splitIntoPages(res.rows[0].description || '');
+
+  if (pages.length <= 1) return interaction.editReply(`\u274c This is already down to one page \u2014 use \`/embed edit\` normally to change its text instead of removing it.`);
+
+  pages.pop();
+  await saveAndRefreshPages(channel, messageId, pages);
+
+  return interaction.editReply(`\u2705 Last page removed \u2014 now **${pages.length} page${pages.length > 1 ? 's' : ''}**.`);
+}
+module.exports.handleRemovePage = handleRemovePage;
+
 
 async function handleGuidedFirstModal(interaction) {
   const session = guidedSessions.get(interaction.user.id);

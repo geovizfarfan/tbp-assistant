@@ -216,6 +216,26 @@ client.on('interactionCreate', async (interaction) => {
     const { handleGuidedButton } = require('./commands/embed/embed');
     return handleGuidedButton(interaction);
   }
+  if (interaction.isButton() && interaction.customId.startsWith('embededitmeta_open:')) {
+    const { handleEditMetaOpen } = require('./commands/embed/embed');
+    return handleEditMetaOpen(interaction);
+  }
+  if (interaction.isButton() && interaction.customId.startsWith('embededitpage_open:')) {
+    const { handleEditPageOpen } = require('./commands/embed/embed');
+    return handleEditPageOpen(interaction);
+  }
+  if (interaction.isButton() && interaction.customId.startsWith('embedaddpage:')) {
+    const { handleAddPage } = require('./commands/embed/embed');
+    return handleAddPage(interaction);
+  }
+  if (interaction.isButton() && interaction.customId.startsWith('embedremovepage:')) {
+    const { handleRemovePage } = require('./commands/embed/embed');
+    return handleRemovePage(interaction);
+  }
+  if (interaction.isStringSelectMenu() && interaction.customId.startsWith('embedpagepick:')) {
+    const { handlePagePicked } = require('./commands/embed/embed');
+    return handlePagePicked(interaction);
+  }
   if (interaction.isButton() && interaction.customId.startsWith('pingpanel_')) {
     return pingPanelModule.handleButton(interaction);
   }
@@ -385,6 +405,14 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isModalSubmit() && interaction.customId.startsWith('embededitmeta_modal:')) {
     const { handleEditMetaModal } = require('./commands/embed/embed');
     return handleEditMetaModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('embedpageedit_modal:')) {
+    const { handlePageEditModal } = require('./commands/embed/embed');
+    return handlePageEditModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('embedaddpage_modal:')) {
+    const { handleAddPageModal } = require('./commands/embed/embed');
+    return handleAddPageModal(interaction);
   }
   if (interaction.isModalSubmit() && interaction.customId === 'embedguided_modal_first') {
     const { handleGuidedFirstModal } = require('./commands/embed/embed');
