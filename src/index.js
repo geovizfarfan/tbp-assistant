@@ -45,8 +45,12 @@ function loadCommands(dir) {
     } else if (entry.name.endsWith('.js')) {
       const cmd = require(fullPath);
       if (cmd.data && cmd.execute) {
-        client.commands.set(cmd.data.name, cmd);
-        console.log(`[Commands] Loaded: ${cmd.data.name}`);
+        if (cmd.hidden) {
+          console.log(`[Commands] Loaded (hidden — not registered as a slash command): ${cmd.data.name}`);
+        } else {
+          client.commands.set(cmd.data.name, cmd);
+          console.log(`[Commands] Loaded: ${cmd.data.name}`);
+        }
       }
     }
   }
@@ -305,6 +309,14 @@ client.on('interactionCreate', async (interaction) => {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleGoosdateRolePicked(interaction);
   }
+  if (interaction.isChannelSelectMenu() && interaction.customId === 'serversetup_grindchan') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleGrindChannelPicked(interaction);
+  }
+  if (interaction.isRoleSelectMenu() && interaction.customId.startsWith('serversetup_grindrole:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleGrindRolePicked(interaction);
+  }
   if (interaction.isButton() && interaction.customId.startsWith('serversetup_gw:')) {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleGiveawayButton(interaction);
@@ -373,6 +385,10 @@ client.on('interactionCreate', async (interaction) => {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleLevelChannelPicked(interaction);
   }
+  if (interaction.isChannelSelectMenu() && interaction.customId === 'serversetup_gameboardchan') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleGameBoardChannelPicked(interaction);
+  }
   if (interaction.isChannelSelectMenu() && interaction.customId === 'serversetup_welcomechan') {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleWelcomeChannelPicked(interaction);
@@ -437,6 +453,14 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isModalSubmit() && interaction.customId === 'serversetup_stickymodal') {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleStickyModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId === 'serversetup_leveltuningmodal') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleLevelTuningModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('serversetup_grindmodal:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleGrindSetupModal(interaction);
   }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('serversetup_pingmodal:')) {
     const serverSetupModule = require('./commands/serversetup/serversetup');
@@ -582,6 +606,35 @@ client.on('guildMemberAdd', async (member) => {
     const { handleMemberJoin } = require('./events/verification');
     await handleMemberJoin(member, client);
   } catch (e) { console.error('[Verify] welcome on join:', e.message); }
+});
+
+// Welcome message when the bot joins a new server
+client.on('guildCreate', async (guild) => {
+  try {
+    const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+
+    const canPost = (ch) => ch.isTextBased() && !ch.isThread() &&
+      ch.permissionsFor(guild.members.me)?.has(PermissionFlagsBits.SendMessages);
+
+    let channel = guild.systemChannel && canPost(guild.systemChannel) ? guild.systemChannel : null;
+    if (!channel) {
+      channel = guild.channels.cache
+        .filter(canPost)
+        .sort((a, b) => a.rawPosition - b.rawPosition)
+        .first();
+    }
+    if (!channel) return;
+
+    const embed = new EmbedBuilder()
+      .setColor('#d6c2ee')
+      .setTitle('👑 Thanks for adding Veloura!')
+      .setDescription(
+        `Run \`/server-setup\` to get started — it walks you through every setting: channels, roles, staff & payroll, boosters, currency, giveaways, shop, and more, all in one place.\n\n` +
+        `Run \`/help\` any time for a quick FAQ on how everything works.`
+      );
+
+    await channel.send({ embeds: [embed] }).catch(() => {});
+  } catch (e) { console.error('[GuildCreate] welcome message error:', e.message); }
 });
 
 // Ban log

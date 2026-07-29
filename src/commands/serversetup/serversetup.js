@@ -212,6 +212,12 @@ function buildExtrasButtons() {
   );
 }
 
+function buildExtrasButtons2() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_extras:grindsetup').setLabel('Grind Setup').setStyle(ButtonStyle.Primary),
+  );
+}
+
 function buildGoosdateChannelPicker() {
   const menu = new ChannelSelectMenuBuilder()
     .setCustomId('serversetup_goosdatechan')
@@ -223,6 +229,20 @@ function buildGoosdateRolePicker(channelId) {
   const menu = new RoleSelectMenuBuilder()
     .setCustomId(`serversetup_goosdaterole:${channelId}`)
     .setPlaceholder('Pick the role to ping');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildGrindChannelPicker() {
+  const menu = new ChannelSelectMenuBuilder()
+    .setCustomId('serversetup_grindchan')
+    .setPlaceholder('Pick the channel for the Grind panel');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildGrindRolePicker(channelId) {
+  const menu = new RoleSelectMenuBuilder()
+    .setCustomId(`serversetup_grindrole:${channelId}`)
+    .setPlaceholder('Pick the notification role');
   return new ActionRowBuilder().addComponents(menu);
 }
 
@@ -372,7 +392,7 @@ module.exports = {
     if (key === 'settings') {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
-        components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
       });
     }
 
@@ -400,7 +420,7 @@ module.exports = {
     if (key === 'goosty') {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
-        components: [buildExtrasButtons(), buildBackButton()],
+        components: [buildExtrasButtons(), buildExtrasButtons2(), buildBackButton()],
       });
     }
 
@@ -700,6 +720,13 @@ module.exports = {
       });
     }
 
+    if (action === 'grindsetup') {
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the channel to post the Rumble Grind panel in:')],
+        components: [buildGrindChannelPicker(), buildBackButton()],
+      });
+    }
+
     if (action === 'goosdatestatus') {
       const { status } = require('../goosdate/goosdate');
       return status(interaction);
@@ -720,12 +747,12 @@ module.exports = {
       if (!res.rows.length) {
         return interaction.editReply({
           embeds: [new EmbedBuilder().setColor('#ff4444').setDescription('❌ GoosDate hasn\'t been set up yet — use GoosDate Setup first.')],
-          components: [buildExtrasButtons(), buildBackButton()],
+          components: [buildExtrasButtons(), buildExtrasButtons2(), buildBackButton()],
         });
       }
       return interaction.editReply({
         embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ GoosDate reminders are now **${enabled ? 'ON' : 'OFF'}**.`)],
-        components: [buildExtrasButtons(), buildBackButton()],
+        components: [buildExtrasButtons(), buildExtrasButtons2(), buildBackButton()],
       });
     }
   },
@@ -736,6 +763,74 @@ module.exports = {
       embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription(`Channel set to <#${channel.id}>. Now pick the role to ping:`)],
       components: [buildGoosdateRolePicker(channel.id), buildBackButton()],
     });
+  },
+
+  async handleGrindChannelPicked(interaction) {
+    const channel = interaction.channels.first();
+    return interaction.update({
+      embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription(`Channel set to <#${channel.id}>. Now pick the notification role:`)],
+      components: [buildGrindRolePicker(channel.id), buildBackButton()],
+    });
+  },
+
+  async handleGrindRolePicked(interaction) {
+    const [, channelId] = interaction.customId.split(':');
+    const role = interaction.roles.first();
+
+    const modal = new ModalBuilder().setCustomId(`serversetup_grindmodal:${channelId}:${role.id}`).setTitle('Grind Setup');
+    const maxChanInput = new TextInputBuilder().setCustomId('max_channels').setLabel('Max temp channels (default: 50)').setStyle(TextInputStyle.Short).setRequired(false);
+    const durationInput = new TextInputBuilder().setCustomId('duration').setLabel('Hours before auto-delete (default: 1)').setStyle(TextInputStyle.Short).setRequired(false);
+    const colorInput = new TextInputBuilder().setCustomId('embed_color').setLabel('Embed color hex (default: #d6c2ee)').setStyle(TextInputStyle.Short).setRequired(false);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(maxChanInput),
+      new ActionRowBuilder().addComponents(durationInput),
+      new ActionRowBuilder().addComponents(colorInput),
+    );
+    return interaction.showModal(modal);
+  },
+
+  async handleGrindSetupModal(interaction) {
+    const [, channelId, roleId] = interaction.customId.split(':');
+    await interaction.deferReply({ ephemeral: true });
+
+    const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
+    if (!channel) return interaction.editReply('❌ Couldn\'t find that channel anymore.');
+
+    const maxChannelsRaw = interaction.fields.getTextInputValue('max_channels');
+    const durationRaw = interaction.fields.getTextInputValue('duration');
+    const color = interaction.fields.getTextInputValue('embed_color') || '#d6c2ee';
+    const maxChannels = maxChannelsRaw ? parseInt(maxChannelsRaw, 10) : 50;
+    const duration = durationRaw ? parseInt(durationRaw, 10) : 1;
+
+    if (isNaN(maxChannels) || isNaN(duration)) {
+      return interaction.editReply('❌ Max channels and duration must be numbers.');
+    }
+
+    await query(`
+      INSERT INTO grind_config (guild_id, panel_channel_id, role_id, max_channels, duration_hours, embed_color)
+      VALUES ($1,$2,$3,$4,$5,$6)
+      ON CONFLICT (guild_id) DO UPDATE SET
+        panel_channel_id = EXCLUDED.panel_channel_id,
+        role_id          = EXCLUDED.role_id,
+        max_channels     = EXCLUDED.max_channels,
+        duration_hours   = EXCLUDED.duration_hours,
+        embed_color      = EXCLUDED.embed_color
+    `, [interaction.guildId, channelId, roleId, maxChannels, duration, color]);
+
+    const { buildPanelEmbeds, getChannelCount } = require('../grind/grind');
+    const count = await getChannelCount(interaction.guildId);
+    const config = { guild_id: interaction.guildId, embed_color: color, max_channels: maxChannels, duration_hours: duration };
+    const { subEmbed, chEmbed, subRow, chRow } = buildPanelEmbeds(config, count);
+
+    const msg1 = await channel.send({ embeds: [subEmbed], components: [subRow] });
+    const msg2 = await channel.send({ embeds: [chEmbed], components: [chRow] });
+
+    await query(`
+      UPDATE grind_config SET panel_message_id1=$1, panel_message_id2=$2 WHERE guild_id=$3
+    `, [msg1.id, msg2.id, interaction.guildId]).catch(() => {});
+
+    return interaction.editReply(`✅ Grind panel posted in <#${channelId}>, pinging <@&${roleId}>.`);
   },
 
   async handleGoosdateRolePicked(interaction) {
@@ -752,7 +847,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ GoosDate reminders will post in <#${channelId}> and ping <@&${role.id}>.`)],
-      components: [buildExtrasButtons(), buildBackButton()],
+      components: [buildExtrasButtons(), buildExtrasButtons2(), buildBackButton()],
     });
   },
 
@@ -1080,6 +1175,36 @@ module.exports = {
       });
     }
 
+    if (action === 'gameboard') {
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the channel for the live game schedule board:')],
+        components: [buildGameBoardChannelPicker(), buildBackButton()],
+      });
+    }
+
+    if (action === 'leveltuning') {
+      const cfgRes = await query('SELECT * FROM level_config WHERE guild_id=$1', [interaction.guildId]);
+      const cfg = cfgRes.rows[0] || {};
+      const modal = new ModalBuilder().setCustomId('serversetup_leveltuningmodal').setTitle('Level Tuning');
+
+      const announceInput = new TextInputBuilder().setCustomId('announce').setLabel('Announce level-ups? (true/false)').setStyle(TextInputStyle.Short).setRequired(false)
+        .setValue(String(cfg.announce_levelup ?? true));
+      const xpMinInput = new TextInputBuilder().setCustomId('xp_min').setLabel('Min XP per message').setStyle(TextInputStyle.Short).setRequired(false)
+        .setValue(String(cfg.xp_min ?? 15));
+      const xpMaxInput = new TextInputBuilder().setCustomId('xp_max').setLabel('Max XP per message').setStyle(TextInputStyle.Short).setRequired(false)
+        .setValue(String(cfg.xp_max ?? 25));
+      const cooldownInput = new TextInputBuilder().setCustomId('cooldown').setLabel('Cooldown seconds between XP gains').setStyle(TextInputStyle.Short).setRequired(false)
+        .setValue(String(cfg.cooldown_seconds ?? 60));
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(announceInput),
+        new ActionRowBuilder().addComponents(xpMinInput),
+        new ActionRowBuilder().addComponents(xpMaxInput),
+        new ActionRowBuilder().addComponents(cooldownInput),
+      );
+      return interaction.showModal(modal);
+    }
+
     if (action === 'levelon' || action === 'leveloff') {
       await interaction.deferUpdate();
       const enabled = action === 'levelon';
@@ -1089,7 +1214,7 @@ module.exports = {
       `, [interaction.guildId, enabled]);
       return interaction.editReply({
         embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Level system is now **${enabled ? 'ON' : 'OFF'}**.`)],
-        components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
       });
     }
 
@@ -1099,7 +1224,7 @@ module.exports = {
       if (!isGuildAllowedSins(interaction.guildId)) {
         return interaction.editReply({
           embeds: [new EmbedBuilder().setColor('#ff4444').setDescription('❌ Real Sins are only available in specific approved servers. Use "RR: Custom Currency" instead.')],
-          components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+          components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
         });
       }
       await query(`
@@ -1108,7 +1233,7 @@ module.exports = {
       `, [interaction.guildId]);
       return interaction.editReply({
         embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription('✅ Rumble Royale now uses real Sins.')],
-        components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
       });
     }
 
@@ -1132,7 +1257,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Timezone set to **${timezone}**.`)],
-      components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
     });
   },
 
@@ -1169,7 +1294,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Ban log channel set to <#${channel.id}>.`)],
-      components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
     });
   },
 
@@ -1184,8 +1309,50 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Level-up announcements will post in <#${channel.id}>.`)],
-      components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
     });
+  },
+
+  async handleGameBoardChannelPicked(interaction) {
+    const channel = interaction.channels.first();
+    await interaction.deferUpdate();
+
+    await query(`
+      INSERT INTO game_schedule_board (guild_id, channel_id)
+      VALUES ($1,$2)
+      ON CONFLICT (guild_id) DO UPDATE SET channel_id=$2, message_id=NULL, updated_at=NOW()
+    `, [interaction.guildId, channel.id]);
+
+    return interaction.editReply({
+      embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Game schedule board will post in <#${channel.id}>.`)],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+    });
+  },
+
+  async handleLevelTuningModal(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const announceRaw = interaction.fields.getTextInputValue('announce').trim().toLowerCase();
+    const announce = announceRaw === 'false' ? false : true;
+    const xpMin = parseInt(interaction.fields.getTextInputValue('xp_min'), 10);
+    const xpMax = parseInt(interaction.fields.getTextInputValue('xp_max'), 10);
+    const cooldown = parseInt(interaction.fields.getTextInputValue('cooldown'), 10);
+
+    if (isNaN(xpMin) || isNaN(xpMax) || isNaN(cooldown)) {
+      return interaction.editReply('❌ XP min/max and cooldown must all be numbers.');
+    }
+    if (xpMin > xpMax) {
+      return interaction.editReply('❌ Min XP can\'t be greater than max XP.');
+    }
+
+    await query(`
+      INSERT INTO level_config (guild_id, announce_levelup, xp_min, xp_max, cooldown_seconds)
+      VALUES ($1,$2,$3,$4,$5)
+      ON CONFLICT (guild_id) DO UPDATE SET
+        announce_levelup = $2, xp_min = $3, xp_max = $4, cooldown_seconds = $5
+    `, [interaction.guildId, announce, xpMin, xpMax, cooldown]);
+
+    return interaction.editReply(`✅ Level tuning updated — ${xpMin}-${xpMax} XP per message, ${cooldown}s cooldown, announcements ${announce ? 'on' : 'off'}.`);
   },
 
   async handleWelcomeChannelPicked(interaction) {
@@ -1275,6 +1442,13 @@ function buildSettingsButtons2() {
   );
 }
 
+function buildSettingsButtons3() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_gset:leveltuning').setLabel('Level Tuning').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_gset:gameboard').setLabel('Game Board Channel').setStyle(ButtonStyle.Secondary),
+  );
+}
+
 function buildTimezoneSelect() {
   const menu = new StringSelectMenuBuilder()
     .setCustomId('serversetup_timezone')
@@ -1301,6 +1475,13 @@ function buildLevelChannelPicker() {
   const menu = new ChannelSelectMenuBuilder()
     .setCustomId('serversetup_levelchan')
     .setPlaceholder('Pick the level-up announcement channel');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildGameBoardChannelPicker() {
+  const menu = new ChannelSelectMenuBuilder()
+    .setCustomId('serversetup_gameboardchan')
+    .setPlaceholder('Pick the game schedule board channel');
   return new ActionRowBuilder().addComponents(menu);
 }
 

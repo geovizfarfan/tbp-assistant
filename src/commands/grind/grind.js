@@ -329,3 +329,5 @@ function scheduleDelete(channel, guildId, userId, ms, client, config) {
 
 module.exports.scheduleDelete = scheduleDelete;
 module.exports.deleteTimers = deleteTimers;
+module.exports.buildPanelEmbeds = buildPanelEmbeds;
+module.exports.getChannelCount = getChannelCount;
