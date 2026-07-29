@@ -2,6 +2,7 @@ const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { query } = require('../../utils/database');
 const { baseEmbed, tsF, COLORS } = require('../../utils/embeds');
 const { e } = require('../../utils/appEmojis');
+const { adjustBalance } = require('../../utils/playAndRegretDb');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -15,7 +16,12 @@ module.exports = {
     .addSubcommand(sub => sub
       .setName('revoke')
       .setDescription('Undo the most recent payment if it was marked by mistake')
-      .addUserOption(o => o.setName('user').setDescription('Staff member or booster').setRequired(true))),
+      .addUserOption(o => o.setName('user').setDescription('Staff member or booster').setRequired(true))
+      .addStringOption(o => o.setName('type').setDescription('Which payment to revoke (default: both)').addChoices(
+        { name: 'Both', value: 'both' },
+        { name: 'Staff only', value: 'staff' },
+        { name: 'Booster only', value: 'booster' },
+      ))),
 
   async execute(interaction) {
     const member = interaction.member || await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
@@ -29,6 +35,15 @@ module.exports = {
     if (sub === 'revoke') return revokeUser(interaction);
   },
 };
+
+async function getGuildCurrency(guildId) {
+  const res = await query('SELECT currency_use_sins, currency_name FROM guild_config WHERE guild_id=$1', [guildId]);
+  const cfg = res.rows[0];
+  return {
+    useSins: cfg?.currency_use_sins || false,
+    currencyName: cfg?.currency_use_sins ? 'Sins' : (cfg?.currency_name || 'Crowns'),
+  };
+}
 
 async function payUser(interaction) {
   const user   = interaction.options.getUser('user');
@@ -46,8 +61,9 @@ async function payUser(interaction) {
     return interaction.editReply({ content: `${e('wrong')} <@${user.id}> isn't active staff or an active booster.` });
   }
 
-  // Block re-paying before the current period is actually due — this is what
-  // stops the same person from being marked paid multiple times in a row.
+  const { useSins, currencyName } = await getGuildCurrency(interaction.guildId);
+
+  // Block re-paying before the current period is actually due.
   const notYetDueStaff   = staffRes.rows[0]?.next_pay_due_at && new Date(staffRes.rows[0].next_pay_due_at) > now;
   const notYetDueBooster = boosterRes.rows[0]?.next_pay_due_at && new Date(boosterRes.rows[0].next_pay_due_at) > now;
 
@@ -68,10 +84,17 @@ async function payUser(interaction) {
     .addFields({ name: `${e('members')} Paid`, value: `<@${user.id}>`, inline: false });
 
   const receiptLines = [];
+  const skippedNotes = [];
+
+  if (staffRes.rows.length && notYetDueStaff) {
+    skippedNotes.push(`${e('atention')} Staff pay skipped — not due until ${tsF(staffRes.rows[0].next_pay_due_at)}`);
+  }
+  if (boosterRes.rows.length && notYetDueBooster) {
+    skippedNotes.push(`${e('atention')} Booster pay skipped — not due until ${tsF(boosterRes.rows[0].next_pay_due_at)}`);
+  }
 
   if (staffRes.rows.length && !notYetDueStaff) {
     const s = staffRes.rows[0];
-    const staffCurrency = s.pay_currency || 'MEE6';
 
     let staffAmount = amount;
     if (staffAmount === null) {
@@ -89,42 +112,61 @@ async function payUser(interaction) {
       staffAmount = (s.pay_amount || 0) + gamesHosted * bonusPerGame;
     }
 
+    let newBalanceNote = '';
+    if (useSins) {
+      const newBalance = await adjustBalance(user.id, user.username, staffAmount).catch((err) => {
+        console.error('[MarkPaid] Failed to credit Sins for staff pay:', err.message);
+        return null;
+      });
+      if (newBalance !== null) newBalanceNote = ` | New Sins balance: ${newBalance.toLocaleString()}`;
+    }
+
     await query(`UPDATE staff SET last_paid_at=$1, next_pay_due_at=$2 WHERE user_id=$3`, [now, nextDue, user.id]);
     await query(
       `INSERT INTO staff_payments (user_id, guild_id, amount, currency, paid_at, approved_by) VALUES ($1,$2,$3,$4,$5,$6)`,
-      [user.id, interaction.guildId, staffAmount, staffCurrency, now, interaction.user.id]
+      [user.id, interaction.guildId, staffAmount, currencyName, now, interaction.user.id]
     );
 
     embed.addFields({
       name: `${e('payday')} Staff Pay`,
-      value: `Amount: **${staffAmount} ${staffCurrency}**\nNext Due: ${tsF(nextDue)}`,
+      value: `Amount: **${staffAmount} ${currencyName}**${newBalanceNote}\nNext Due: ${tsF(nextDue)}`,
       inline: true,
     });
-    receiptLines.push(`${e('payday')} **Staff Pay:** ${staffAmount} ${staffCurrency}`);
+    receiptLines.push(`${e('payday')} **Staff Pay:** ${staffAmount} ${currencyName}`);
   }
 
   if (boosterRes.rows.length && !notYetDueBooster) {
     const b = boosterRes.rows[0];
     const boosterAmount = amount || b.amount_owed;
-    const boosterCurrency = b.currency;
 
-    await query(`UPDATE boosters SET last_paid_at=$1, next_pay_due_at=$2 WHERE guild_id=$3 AND user_id=$4`, [now, nextDue, interaction.guildId, user.id]);
+    let newBalanceNote = '';
+    if (useSins) {
+      const newBalance = await adjustBalance(user.id, user.username, boosterAmount).catch((err) => {
+        console.error('[MarkPaid] Failed to credit Sins for booster pay:', err.message);
+        return null;
+      });
+      if (newBalance !== null) newBalanceNote = ` | New Sins balance: ${newBalance.toLocaleString()}`;
+    }
+
+    await query(`UPDATE boosters SET last_paid_at=$1, next_pay_due_at=$2, currency=$3 WHERE guild_id=$4 AND user_id=$5`, [now, nextDue, currencyName, interaction.guildId, user.id]);
     await query(
       `INSERT INTO booster_payments (user_id, guild_id, amount, currency, paid_at, approved_by) VALUES ($1,$2,$3,$4,$5,$6)`,
-      [user.id, interaction.guildId, boosterAmount, boosterCurrency, now, interaction.user.id]
+      [user.id, interaction.guildId, boosterAmount, currencyName, now, interaction.user.id]
     );
 
     embed.addFields({
       name: `${e('payday')} Booster Pay`,
-      value: `Amount: **${boosterAmount} ${boosterCurrency}**\nNext Due: ${tsF(nextDue)}`,
+      value: `Amount: **${boosterAmount} ${currencyName}**${newBalanceNote}\nNext Due: ${tsF(nextDue)}`,
       inline: true,
     });
-    receiptLines.push(`${e('payday')} **Booster Pay:** ${boosterAmount} ${boosterCurrency}`);
+    receiptLines.push(`${e('payday')} **Booster Pay:** ${boosterAmount} ${currencyName}`);
   }
 
   embed.addFields({ name: '✍️ Approved by', value: `<@${interaction.user.id}>`, inline: false });
+  if (skippedNotes.length) {
+    embed.addFields({ name: `${e('atention')} Skipped`, value: skippedNotes.join('\n'), inline: false });
+  }
 
-  // Single combined DM receipt covering whichever payment(s) actually happened.
   if (receiptLines.length) {
     const dmMember = await interaction.guild.members.fetch(user.id).catch(() => null);
     if (dmMember) {
@@ -145,55 +187,77 @@ async function payUser(interaction) {
 
 async function revokeUser(interaction) {
   const user = interaction.options.getUser('user');
+  const type = interaction.options.getString('type') || 'both';
   await interaction.deferReply({ ephemeral: true });
 
   const revokedLines = [];
 
-  const staffPayments = await query(
-    `SELECT * FROM staff_payments WHERE user_id=$1 AND guild_id=$2 ORDER BY paid_at DESC LIMIT 2`,
-    [user.id, interaction.guildId]
-  );
-  if (staffPayments.rows.length) {
-    const [last, prior] = staffPayments.rows;
-    await query('DELETE FROM staff_payments WHERE id=$1', [last.id]);
-    await query(
-      `UPDATE staff SET last_paid_at=$1, next_pay_due_at=$2 WHERE user_id=$3`,
-      [prior?.paid_at || null, prior ? new Date(new Date(prior.paid_at).getTime() + 30 * 86400000) : null, user.id]
+  if (type === 'both' || type === 'staff') {
+    const staffPayments = await query(
+      `SELECT * FROM staff_payments WHERE user_id=$1 AND guild_id=$2 ORDER BY paid_at DESC LIMIT 2`,
+      [user.id, interaction.guildId]
     );
-    revokedLines.push(`${e('payday')} **Staff payment reversed:** ${last.amount} ${last.currency} (paid ${tsF(last.paid_at)})`);
-  } else {
-    const staffNow = await query('SELECT * FROM staff WHERE user_id=$1 AND active=true', [user.id]);
-    if (staffNow.rows.length && staffNow.rows[0].last_paid_at) {
-      await query(`UPDATE staff SET last_paid_at=NULL, next_pay_due_at=NULL WHERE user_id=$1`, [user.id]);
-      revokedLines.push(`${e('payday')} **Staff paid-status cleared** (no payment history existed to roll back to).`);
+    if (staffPayments.rows.length) {
+      const [last, prior] = staffPayments.rows;
+      await query('DELETE FROM staff_payments WHERE id=$1', [last.id]);
+      await query(
+        `UPDATE staff SET last_paid_at=$1, next_pay_due_at=$2 WHERE user_id=$3`,
+        [prior?.paid_at || null, prior ? new Date(new Date(prior.paid_at).getTime() + 30 * 86400000) : null, user.id]
+      );
+
+      let clawbackNote = '';
+      if (last.currency === 'Sins' && last.amount) {
+        const newBalance = await adjustBalance(user.id, user.username, -last.amount).catch((err) => {
+          console.error('[MarkPaid] Failed to claw back Sins for staff revoke:', err.message);
+          return null;
+        });
+        if (newBalance !== null) clawbackNote = ` | ${last.amount} Sins clawed back — new balance: ${newBalance.toLocaleString()}`;
+      }
+
+      revokedLines.push(`${e('payday')} **Staff payment reversed:** ${last.amount} ${last.currency} (paid ${tsF(last.paid_at)})${clawbackNote}`);
+    } else {
+      const staffNow = await query('SELECT * FROM staff WHERE user_id=$1 AND active=true', [user.id]);
+      if (staffNow.rows.length && staffNow.rows[0].last_paid_at) {
+        await query(`UPDATE staff SET last_paid_at=NULL, next_pay_due_at=NULL WHERE user_id=$1`, [user.id]);
+        revokedLines.push(`${e('payday')} **Staff paid-status cleared** (no payment history existed to roll back to or claw back from).`);
+      }
     }
   }
 
-  const boosterPayments = await query(
-    `SELECT * FROM booster_payments WHERE user_id=$1 AND guild_id=$2 ORDER BY paid_at DESC LIMIT 2`,
-    [user.id, interaction.guildId]
-  );
-  if (boosterPayments.rows.length) {
-    const [last, prior] = boosterPayments.rows;
-    await query('DELETE FROM booster_payments WHERE id=$1', [last.id]);
-    await query(
-      `UPDATE boosters SET last_paid_at=$1, next_pay_due_at=$2 WHERE guild_id=$3 AND user_id=$4`,
-      [prior?.paid_at || null, prior ? new Date(new Date(prior.paid_at).getTime() + 30 * 86400000) : null, interaction.guildId, user.id]
+  if (type === 'both' || type === 'booster') {
+    const boosterPayments = await query(
+      `SELECT * FROM booster_payments WHERE user_id=$1 AND guild_id=$2 ORDER BY paid_at DESC LIMIT 2`,
+      [user.id, interaction.guildId]
     );
-    revokedLines.push(`${e('payday')} **Booster payment reversed:** ${last.amount} ${last.currency} (paid ${tsF(last.paid_at)})`);
-  } else {
-    // No payment history exists (e.g. paid before payment tracking was added
-    // for boosters) — if they're still showing as recently paid, just clear
-    // that status directly since there's no prior record to roll back to.
-    const boosterNow = await query('SELECT * FROM boosters WHERE guild_id=$1 AND user_id=$2 AND active=true', [interaction.guildId, user.id]);
-    if (boosterNow.rows.length && boosterNow.rows[0].last_paid_at) {
-      await query(`UPDATE boosters SET last_paid_at=NULL, next_pay_due_at=NULL WHERE guild_id=$1 AND user_id=$2`, [interaction.guildId, user.id]);
-      revokedLines.push(`${e('payday')} **Booster paid-status cleared** (no payment history existed to roll back to — this was likely paid before history tracking existed).`);
+    if (boosterPayments.rows.length) {
+      const [last, prior] = boosterPayments.rows;
+      await query('DELETE FROM booster_payments WHERE id=$1', [last.id]);
+      await query(
+        `UPDATE boosters SET last_paid_at=$1, next_pay_due_at=$2 WHERE guild_id=$3 AND user_id=$4`,
+        [prior?.paid_at || null, prior ? new Date(new Date(prior.paid_at).getTime() + 30 * 86400000) : null, interaction.guildId, user.id]
+      );
+
+      let clawbackNote = '';
+      if (last.currency === 'Sins' && last.amount) {
+        const newBalance = await adjustBalance(user.id, user.username, -last.amount).catch((err) => {
+          console.error('[MarkPaid] Failed to claw back Sins for booster revoke:', err.message);
+          return null;
+        });
+        if (newBalance !== null) clawbackNote = ` | ${last.amount} Sins clawed back — new balance: ${newBalance.toLocaleString()}`;
+      }
+
+      revokedLines.push(`${e('payday')} **Booster payment reversed:** ${last.amount} ${last.currency} (paid ${tsF(last.paid_at)})${clawbackNote}`);
+    } else {
+      const boosterNow = await query('SELECT * FROM boosters WHERE guild_id=$1 AND user_id=$2 AND active=true', [interaction.guildId, user.id]);
+      if (boosterNow.rows.length && boosterNow.rows[0].last_paid_at) {
+        await query(`UPDATE boosters SET last_paid_at=NULL, next_pay_due_at=NULL WHERE guild_id=$1 AND user_id=$2`, [interaction.guildId, user.id]);
+        revokedLines.push(`${e('payday')} **Booster paid-status cleared** (no payment history existed to roll back to or claw back from).`);
+      }
     }
   }
 
   if (!revokedLines.length) {
-    return interaction.editReply({ content: `${e('wrong')} No recorded payments found for <@${user.id}> to revoke.` });
+    return interaction.editReply({ content: `${e('wrong')} No recorded payments found for <@${user.id}> to revoke${type !== 'both' ? ` (${type})` : ''}.` });
   }
 
   const embed = baseEmbed(`${e('checkmark')} Payment Revoked`, COLORS.softred, interaction.guild?.name)
