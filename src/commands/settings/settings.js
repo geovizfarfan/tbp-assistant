@@ -112,11 +112,11 @@ async function setTimezone(interaction) {
 async function setRequirements(interaction) {
   await interaction.deferReply({ ephemeral: true });
   const fields = {
-    min_games:      interaction.options.getInteger('min_games'),
-    min_rumble:     interaction.options.getInteger('min_auto_games'),
-    min_raffles:    interaction.options.getInteger('min_raffles'),
-    min_giveaways:  interaction.options.getInteger('min_giveaways'),
-    bonus_per_game: interaction.options.getInteger('bonus_per_game'),
+    min_games_hosted:      interaction.options.getInteger('min_games'),
+    min_rumble:            interaction.options.getInteger('min_auto_games'),
+    min_raffles_hosted:    interaction.options.getInteger('min_raffles'),
+    min_giveaways_hosted:  interaction.options.getInteger('min_giveaways'),
+    bonus_per_game:        interaction.options.getInteger('bonus_per_game'),
   };
   const setClauses = [];
   const vals = [interaction.guildId];

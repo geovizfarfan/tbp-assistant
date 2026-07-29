@@ -52,8 +52,12 @@ CREATE TABLE IF NOT EXISTS pay_requirements (
   max_missed_shifts INTEGER DEFAULT 1,
   ticket_response_limit_minutes INTEGER DEFAULT 30,
   pay_period_days INTEGER DEFAULT 30,
+  min_rumble INTEGER DEFAULT 4,
+  bonus_per_game INTEGER DEFAULT 400,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE pay_requirements ADD COLUMN IF NOT EXISTS min_rumble INTEGER DEFAULT 4;
+ALTER TABLE pay_requirements ADD COLUMN IF NOT EXISTS bonus_per_game INTEGER DEFAULT 400;
 
 -- Raffles
 CREATE TABLE IF NOT EXISTS raffles (

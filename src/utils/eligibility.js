@@ -8,10 +8,8 @@ async function checkEligibility(guildId, userId, periodDays) {
 
   const reqRes = await query(`SELECT * FROM pay_requirements WHERE guild_id=$1`, [guildId]);
   const req = reqRes.rows[0] || {
-    min_games_hosted: 10, min_giveaways_hosted: 2, min_raffles_hosted: 2, pay_period_days: 30,
+    min_games_hosted: 10, min_giveaways_hosted: 2, min_raffles_hosted: 2, min_rumble: 4, pay_period_days: 30,
   };
-  // Rumble minimum isn't a configurable column — kept as a fixed baseline.
-  const minRumble = 4;
 
   const gamesRes = await query(
     `SELECT COUNT(*) FROM game_logs WHERE guild_id=$1 AND host_id=$2 AND started_at > $3 AND status != 'cancelled'`,
@@ -37,7 +35,7 @@ async function checkEligibility(guildId, userId, periodDays) {
 
   const checks = [
     { name: 'Games',     actual: gamesHosted,     required: req.min_games_hosted,     pass: gamesHosted >= req.min_games_hosted },
-    { name: 'Rumble',    actual: rumbleGames,      required: minRumble,                pass: rumbleGames >= minRumble },
+    { name: 'Rumble',    actual: rumbleGames,      required: req.min_rumble,           pass: rumbleGames >= req.min_rumble },
     { name: 'Raffles',   actual: rafflesHosted,    required: req.min_raffles_hosted,   pass: rafflesHosted >= req.min_raffles_hosted },
     { name: 'Giveaways', actual: giveawaysHosted,  required: req.min_giveaways_hosted, pass: giveawaysHosted >= req.min_giveaways_hosted },
   ];
@@ -55,6 +53,7 @@ async function checkEligibility(guildId, userId, periodDays) {
       min_games_hosted: req.min_games_hosted,
       min_giveaways_hosted: req.min_giveaways_hosted,
       min_raffles_hosted: req.min_raffles_hosted,
+      min_rumble: req.min_rumble,
     },
   };
 }
