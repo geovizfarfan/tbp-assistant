@@ -200,25 +200,52 @@ module.exports = {
       // DM member
       const member = await interaction.guild.members.fetch(user.id).catch(() => null);
       if (member) {
-        const dmEmbed = paid
-          ? new EmbedBuilder().setColor('#248046')
-              .setTitle(`${E.check} Payment Receipt`)
-              .setDescription(`Your payment to **${interaction.user.username}** in **${interaction.guild.name}** has been logged as paid. Thank you!`)
-              .addFields(
-                { name: `${E.receipt} Service`,     value: service,              inline: true },
-                { name: `${E.money} Amount`,        value: `$${amount.toFixed(2)}`, inline: true },
-                { name: `${E.sparkle} Method`,      value: method,               inline: true },
-                { name: `<a:status:1523726617850024006> Status`,        value: 'Paid in full',        inline: true },
-              ).setFooter({ text: `${interaction.guild.name} • ID: #${payId}` }).setTimestamp()
-          : new EmbedBuilder().setColor('#ff4444')
-              .setTitle(`${E.payout} Payment Due`)
-              .setDescription(`You have a pending payment to **${interaction.user.username}** in **${interaction.guild.name}**.`)
-              .addFields(
-                { name: `${E.receipt} Service`,         value: service,                 inline: true },
-                { name: `${E.money} Amount Due`,        value: `$${amount.toFixed(2)}`, inline: true },
-                { name: `${E.sparkle} Method`,          value: method,                  inline: true },
-                { name: `${E.sparkle} How to Pay`,      value: formatSingleMethod(m, method),        inline: false },
-              ).setFooter({ text: `${interaction.guild.name} • ID: #${payId}` }).setTimestamp();
+        let dmEmbed;
+        if (paid) {
+          dmEmbed = new EmbedBuilder().setColor('#248046')
+            .setTitle(`${E.check} Payment Receipt`)
+            .setDescription(`Your payment to **${interaction.user.username}** in **${interaction.guild.name}** has been logged as paid. Thank you!`)
+            .addFields(
+              { name: `${E.receipt} Service`,     value: service,              inline: true },
+              { name: `${E.money} Amount`,        value: `$${amount.toFixed(2)}`, inline: true },
+              { name: `${E.sparkle} Method`,      value: method,               inline: true },
+              { name: `<a:status:1523726617850024006> Status`,        value: 'Paid in full',        inline: true },
+            ).setFooter({ text: `${interaction.guild.name} • ID: #${payId}` }).setTimestamp();
+        } else {
+          // Show every outstanding payment to this same seller, not just
+          // this one in isolation, plus a running total across all of them.
+          const outstandingRes = await query(
+            `SELECT * FROM payments WHERE seller_id=$1 AND user_id=$2 AND guild_id=$3 AND status IN ('unpaid','partial') ORDER BY created_at ASC`,
+            [interaction.user.id, user.id, interaction.guild.id]
+          );
+          const outstanding = outstandingRes.rows;
+          const total = outstanding.reduce((s, r) => s + (Number(r.amount) - Number(r.amount_paid)), 0);
+
+          const lines = outstanding.map(r => {
+            const remaining = Number(r.amount) - Number(r.amount_paid);
+            const tag = r.id === payId ? ' *(new)*' : '';
+            return `${E.receipt} **${r.service}** — $${remaining.toFixed(2)}${tag}`;
+          });
+
+          dmEmbed = new EmbedBuilder().setColor('#ff4444')
+            .setTitle(`${E.payout} Payment Due`)
+            .setDescription(`You have a pending payment to **${interaction.user.username}** in **${interaction.guild.name}**.`)
+            .addFields(
+              { name: `${E.receipt} This Payment`,    value: service,                 inline: true },
+              { name: `${E.money} Amount Due`,        value: `$${amount.toFixed(2)}`, inline: true },
+              { name: `${E.sparkle} Method`,          value: method,                  inline: true },
+            );
+
+          if (outstanding.length > 1) {
+            dmEmbed.addFields(
+              { name: `${E.loading} All Outstanding (${outstanding.length})`, value: lines.join('\n'), inline: false },
+              { name: `${E.money} Total Owed`, value: `**$${total.toFixed(2)}**`, inline: false },
+            );
+          }
+
+          dmEmbed.addFields({ name: `${E.sparkle} How to Pay`, value: formatSingleMethod(m, method), inline: false })
+            .setFooter({ text: `${interaction.guild.name} • ID: #${payId}` }).setTimestamp();
+        }
 
         await member.send({ embeds: [dmEmbed] }).catch(() => {});
       }

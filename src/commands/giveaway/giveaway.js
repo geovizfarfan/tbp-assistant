@@ -63,38 +63,7 @@ module.exports = {
 
     .addSubcommand(sub => sub
       .setName('list')
-      .setDescription('List active live giveaways'))
-
-    .addSubcommandGroup(group => group
-      .setName('bonusrole')
-      .setDescription('Manage the reusable bonus-entry role library')
-      .addSubcommand(sub => sub
-        .setName('add')
-        .setDescription('Add (or update) a role that grants bonus entries')
-        .addRoleOption(o => o.setName('role').setDescription('Role').setRequired(true))
-        .addIntegerOption(o => o.setName('entries').setDescription('Extra entries this role grants').setRequired(true)))
-      .addSubcommand(sub => sub
-        .setName('remove')
-        .setDescription('Remove a role from the bonus-entry library')
-        .addRoleOption(o => o.setName('role').setDescription('Role').setRequired(true)))
-      .addSubcommand(sub => sub
-        .setName('list')
-        .setDescription('List all configured bonus-entry roles')))
-
-    .addSubcommandGroup(group => group
-      .setName('requiredrole')
-      .setDescription('Manage the reusable entry-requirement role library')
-      .addSubcommand(sub => sub
-        .setName('add')
-        .setDescription('Add one or more roles to the entry-requirement library')
-        .addStringOption(o => o.setName('roles').setDescription('Type @ to mention roles — add as many as you want, e.g. @Role1 @Role2 @Role3').setRequired(true)))
-      .addSubcommand(sub => sub
-        .setName('remove')
-        .setDescription('Remove a role from the entry-requirement library')
-        .addRoleOption(o => o.setName('role').setDescription('Role').setRequired(true)))
-      .addSubcommand(sub => sub
-        .setName('list')
-        .setDescription('List all configured entry-requirement roles'))),
+      .setDescription('List active live giveaways')),
 
   async execute(interaction) {
     const group = interaction.options.getSubcommandGroup(false);
@@ -334,6 +303,10 @@ async function giveawayEntries(interaction) {
   const gwRes = await query('SELECT * FROM giveaway_events WHERE id=$1 AND guild_id=$2', [id, interaction.guildId]);
   if (!gwRes.rows.length) return interaction.editReply(`${e('wrong')} Giveaway not found.`);
   const gw = gwRes.rows[0];
+
+  if (interaction.user.id !== gw.host_id) {
+    return interaction.editReply(`${e('wrong')} Only the host of this giveaway (<@${gw.host_id}>) can view its entries.`);
+  }
 
   const channel = await interaction.client.channels.fetch(gw.channel_id).catch(() => null);
   const message = channel ? await channel.messages.fetch(gw.message_id).catch(() => null) : null;
@@ -745,6 +718,11 @@ async function rerollGiveaway(interaction) {
   const gwRes = await query('SELECT * FROM giveaway_events WHERE id=$1 AND guild_id=$2', [id, interaction.guildId]);
   if (!gwRes.rows.length) return interaction.editReply(`${e('wrong')} Giveaway not found.`);
   const gw = gwRes.rows[0];
+
+  if (interaction.user.id !== gw.host_id) {
+    return interaction.editReply(`${e('wrong')} Only the host of this giveaway (<@${gw.host_id}>) can reroll it.`);
+  }
+
   if (gw.status !== 'ended') return interaction.editReply(`${e('wrong')} That giveaway hasn't ended yet.`);
 
   const channel = await interaction.client.channels.fetch(gw.channel_id).catch(() => null);
