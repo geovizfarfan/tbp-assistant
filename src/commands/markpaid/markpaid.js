@@ -161,6 +161,12 @@ async function revokeUser(interaction) {
       [prior?.paid_at || null, prior ? new Date(new Date(prior.paid_at).getTime() + 30 * 86400000) : null, user.id]
     );
     revokedLines.push(`${e('payday')} **Staff payment reversed:** ${last.amount} ${last.currency} (paid ${tsF(last.paid_at)})`);
+  } else {
+    const staffNow = await query('SELECT * FROM staff WHERE user_id=$1 AND active=true', [user.id]);
+    if (staffNow.rows.length && staffNow.rows[0].last_paid_at) {
+      await query(`UPDATE staff SET last_paid_at=NULL, next_pay_due_at=NULL WHERE user_id=$1`, [user.id]);
+      revokedLines.push(`${e('payday')} **Staff paid-status cleared** (no payment history existed to roll back to).`);
+    }
   }
 
   const boosterPayments = await query(
@@ -175,6 +181,15 @@ async function revokeUser(interaction) {
       [prior?.paid_at || null, prior ? new Date(new Date(prior.paid_at).getTime() + 30 * 86400000) : null, interaction.guildId, user.id]
     );
     revokedLines.push(`${e('payday')} **Booster payment reversed:** ${last.amount} ${last.currency} (paid ${tsF(last.paid_at)})`);
+  } else {
+    // No payment history exists (e.g. paid before payment tracking was added
+    // for boosters) — if they're still showing as recently paid, just clear
+    // that status directly since there's no prior record to roll back to.
+    const boosterNow = await query('SELECT * FROM boosters WHERE guild_id=$1 AND user_id=$2 AND active=true', [interaction.guildId, user.id]);
+    if (boosterNow.rows.length && boosterNow.rows[0].last_paid_at) {
+      await query(`UPDATE boosters SET last_paid_at=NULL, next_pay_due_at=NULL WHERE guild_id=$1 AND user_id=$2`, [interaction.guildId, user.id]);
+      revokedLines.push(`${e('payday')} **Booster paid-status cleared** (no payment history existed to roll back to — this was likely paid before history tracking existed).`);
+    }
   }
 
   if (!revokedLines.length) {
