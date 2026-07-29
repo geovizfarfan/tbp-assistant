@@ -534,13 +534,11 @@ module.exports = {
         .setTitle(`Add Booster: ${user.username}`);
 
       const amountInput = new TextInputBuilder().setCustomId('amount').setLabel('Monthly Amount').setStyle(TextInputStyle.Short).setRequired(true);
-      const currencyInput = new TextInputBuilder().setCustomId('currency').setLabel('Currency (Crowns / Sins / Goos)').setStyle(TextInputStyle.Short).setRequired(false);
       const tierInput = new TextInputBuilder().setCustomId('tier').setLabel('Tier (basic / standard / premium)').setStyle(TextInputStyle.Short).setRequired(false);
       const notesInput = new TextInputBuilder().setCustomId('notes').setLabel('Notes').setStyle(TextInputStyle.Paragraph).setRequired(false);
 
       modal.addComponents(
         new ActionRowBuilder().addComponents(amountInput),
-        new ActionRowBuilder().addComponents(currencyInput),
         new ActionRowBuilder().addComponents(tierInput),
         new ActionRowBuilder().addComponents(notesInput),
       );
@@ -583,7 +581,6 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
 
     const amount = parseInt(interaction.fields.getTextInputValue('amount'), 10);
-    const currency = interaction.fields.getTextInputValue('currency') || 'Crowns';
     const tier = (interaction.fields.getTextInputValue('tier') || 'basic').toLowerCase();
     const notes = interaction.fields.getTextInputValue('notes') || null;
 
@@ -592,6 +589,9 @@ module.exports = {
 
     const user = await interaction.client.users.fetch(userId).catch(() => null);
     if (!user) return interaction.editReply('❌ Could not find that user.');
+
+    const currRes = await query('SELECT currency_name FROM guild_config WHERE guild_id=$1', [interaction.guildId]);
+    const currency = currRes.rows[0]?.currency_name || 'Crowns';
 
     const nextDue = new Date();
     nextDue.setDate(nextDue.getDate() + 30);
@@ -630,12 +630,10 @@ module.exports = {
         .setTitle(`Add Staff: ${user.username}`);
 
       const roleInput = new TextInputBuilder().setCustomId('role').setLabel('Role (owner/admin/staff/host/rumble_host)').setStyle(TextInputStyle.Short).setRequired(true);
-      const currencyInput = new TextInputBuilder().setCustomId('currency').setLabel('Pay Currency (Crowns / Sins / Goos)').setStyle(TextInputStyle.Short).setRequired(false);
       const payInput = new TextInputBuilder().setCustomId('pay').setLabel('Pay Amount').setStyle(TextInputStyle.Short).setRequired(false);
 
       modal.addComponents(
         new ActionRowBuilder().addComponents(roleInput),
-        new ActionRowBuilder().addComponents(currencyInput),
         new ActionRowBuilder().addComponents(payInput),
       );
       return interaction.showModal(modal);
@@ -666,7 +664,6 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
 
     const role = interaction.fields.getTextInputValue('role').toLowerCase().trim();
-    const currency = interaction.fields.getTextInputValue('currency') || 'Crowns';
     const payRaw = interaction.fields.getTextInputValue('pay');
     const pay = payRaw ? parseInt(payRaw, 10) : 0;
 
@@ -676,6 +673,9 @@ module.exports = {
 
     const user = await interaction.client.users.fetch(userId).catch(() => null);
     if (!user) return interaction.editReply('❌ Could not find that user.');
+
+    const currRes = await query('SELECT currency_name FROM guild_config WHERE guild_id=$1', [interaction.guildId]);
+    const currency = currRes.rows[0]?.currency_name || 'Crowns';
 
     const nextDue = new Date();
     nextDue.setDate(nextDue.getDate() + 30);

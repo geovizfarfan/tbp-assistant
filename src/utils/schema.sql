@@ -304,8 +304,14 @@ CREATE TABLE IF NOT EXISTS guild_config (
   admin_role_id TEXT,
   game_ping_role_id TEXT,
   ban_log_channel_id TEXT,
+  currency_use_sins BOOLEAN DEFAULT FALSE,
+  currency_name TEXT DEFAULT 'Crowns',
+  currency_emoji TEXT,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS currency_use_sins BOOLEAN DEFAULT FALSE;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS currency_name TEXT DEFAULT 'Crowns';
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS currency_emoji TEXT;
 
 -- Wheel role-based bonus entries
 -- Custom embeds posted via /embed create — stored so they can be reposted
@@ -553,8 +559,12 @@ CREATE TABLE IF NOT EXISTS rr_custom_balances (
   user_id TEXT NOT NULL,
   username TEXT,
   balance BIGINT NOT NULL DEFAULT 0,
+  total_earned BIGINT NOT NULL DEFAULT 0,
+  total_spent BIGINT NOT NULL DEFAULT 0,
   PRIMARY KEY (guild_id, user_id)
 );
+ALTER TABLE rr_custom_balances ADD COLUMN IF NOT EXISTS total_earned BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE rr_custom_balances ADD COLUMN IF NOT EXISTS total_spent BIGINT NOT NULL DEFAULT 0;
 
 -- RR achievements (tracks who collected all roles)
 CREATE TABLE IF NOT EXISTS rr_achievements (

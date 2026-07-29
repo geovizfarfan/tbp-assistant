@@ -4,13 +4,12 @@ const {
   ModalBuilder, TextInputBuilder, TextInputStyle,
 } = require('discord.js');
 const { query } = require('../../utils/database');
-const { getBalance, adjustBalance } = require('../../utils/playAndRegretDb');
+const { getGuildCurrencyConfig, adjustGuildBalance, getGuildBalance } = require('../../utils/currency');
 const { xpForLevel, getUserLevel } = require('../../utils/levelSystem');
 
 const TYPE_LABELS = { role: '<:role:1524456992683593979> Role', reaction: '<a:purplesparkle:1512912828489793626> Auto Reaction', custom: '<a:gift:1512915751458050268> Custom', nickname: '<:role:1524456992683593979> Nickname', nickname_remove: '<:role:1524456992683593979> Nickname Remover', levelup: '<a:trophies:1512912823062364281> Level Up' };
 const WRONG = '<:wrong:1512916350375301160>';
 const CHECK = '<:checkmark:1512916161493205165>';
-const SINS = '<a:SINS:1522338148380704910>';
 
 function formatDuration(hours) {
   if (!hours) return null;
@@ -30,7 +29,7 @@ async function getItems(guildId, activeOnly = true) {
   return res.rows;
 }
 
-function buildShopEmbed(category, items) {
+function buildShopEmbed(category, items, currency) {
   const embed = new EmbedBuilder()
     .setColor('#d6c2ee')
     .setTitle(`<a:shop:1524457010714640464> ${category}`)
@@ -40,7 +39,7 @@ function buildShopEmbed(category, items) {
 
   for (const item of items.slice(0, 25)) {
     embed.addFields({
-      name: `\`#${item.id}\` ${item.name} — ${Number(item.price).toLocaleString()} ${SINS} (sins)`,
+      name: `\`#${item.id}\` ${item.name} — ${Number(item.price).toLocaleString()} ${currency.emoji || ''} (${currency.name})`,
       value: `${TYPE_LABELS[item.type] || item.type}${item.description ? `\n${item.description}` : ''}${item.limit_per_user ? `\n<:vertical_line:1520457297476845741> Limit: ${item.limit_per_user} per user` : ''}${item.duration_hours ? `\n<:vertical_line:1520457297476845741> Lasts: ${formatDuration(item.duration_hours)}` : ''}`,
       inline: false,
     });
@@ -48,13 +47,13 @@ function buildShopEmbed(category, items) {
   return embed;
 }
 
-function buildShopSelect(items) {
+function buildShopSelect(items, currency) {
   if (!items.length) return null;
   const menu = new StringSelectMenuBuilder()
     .setCustomId('shop_select')
     .setPlaceholder('Choose an item to buy...')
     .addOptions(items.slice(0, 25).map(i => ({
-      label: `${i.name} — ${Number(i.price).toLocaleString()} Sins`.slice(0, 100),
+      label: `${i.name} — ${Number(i.price).toLocaleString()} ${currency.name}`.slice(0, 100),
       value: String(i.id),
       description: (i.description || TYPE_LABELS[i.type] || '').slice(0, 100),
     })));
@@ -68,6 +67,7 @@ async function renderAndPost(client, guildId) {
   if (!channel) return null;
 
   const items = await getItems(guildId);
+  const currency = await getGuildCurrencyConfig(guildId);
 
   const categoryOrder = [];
   const grouped = new Map();
@@ -87,8 +87,8 @@ async function renderAndPost(client, guildId) {
   let firstMsg = null;
   for (const cat of categoryOrder) {
     const catItems = grouped.get(cat);
-    const embed = buildShopEmbed(cat, catItems);
-    const row = buildShopSelect(catItems);
+    const embed = buildShopEmbed(cat, catItems, currency);
+    const row = buildShopSelect(catItems, currency);
 
     const oldMsgId = existingMap.get(cat);
     if (oldMsgId) {
@@ -144,7 +144,8 @@ function scheduleNicknameRevert(guild, targetId, originalNickname, ms, purchaseI
 
 // ── Buy: charge + add to inventory (no activation yet) ─────────────────────
 async function buyItem(interaction, item) {
-  const newBalance = await adjustBalance(interaction.user.id, interaction.user.username, -item.price);
+  const currency = await getGuildCurrencyConfig(interaction.guildId);
+  const newBalance = await adjustGuildBalance(interaction.guildId, interaction.user.id, interaction.user.username, -item.price);
 
   const purchaseRes = await query(
     'INSERT INTO shop_purchases (guild_id, item_id, user_id, quantity) VALUES ($1,$2,$3,1) RETURNING id',
@@ -157,8 +158,8 @@ async function buyItem(interaction, item) {
       .setColor('#d6c2ee')
       .setTitle(`<a:shop:1524457010714640464> Purchase Receipt`)
       .setDescription(
-        `You bought **${item.name}** for **${Number(item.price).toLocaleString()}** ${SINS} (sins).\n` +
-        `New balance: **${Number(newBalance).toLocaleString()}** ${SINS} (sins)\n\n` +
+        `You bought **${item.name}** for **${Number(item.price).toLocaleString()}** ${currency.emoji || ''} (${currency.name}).\n` +
+        `New balance: **${Number(newBalance).toLocaleString()}** ${currency.emoji || ''} (${currency.name})\n\n` +
         `Run \`/shop use item_id:${item.id}\` whenever you're ready to activate it!`
       )
       .setFooter({ text: interaction.guild?.name || 'Shop' })
@@ -198,19 +199,13 @@ module.exports = {
 
   data: new SlashCommandBuilder()
     .setName('shop')
-    .setDescription('Economy shop — spend Sins on roles, perks, and custom items')
-
-    .addSubcommand(sub => sub
-      .setName('setup')
-      .setDescription('Configure the shop channel and (optional) staff fulfillment channel')
-      .addChannelOption(o => o.setName('shop_channel').setDescription('Where the shop panel posts').setRequired(true))
-      .addChannelOption(o => o.setName('fulfillment_channel').setDescription('Where used/custom items get logged for staff')))
+    .setDescription('Economy shop — spend this server\'s currency on roles, perks, and custom items')
 
     .addSubcommand(sub => sub
       .setName('additem')
       .setDescription('Add an item to the shop')
       .addStringOption(o => o.setName('name').setDescription('Item name').setRequired(true))
-      .addIntegerOption(o => o.setName('price').setDescription('Price in Sins').setRequired(true))
+      .addIntegerOption(o => o.setName('price').setDescription('Price in this server\'s currency').setRequired(true))
       .addStringOption(o => o.setName('type').setDescription('Item type').setRequired(true).addChoices(
         { name: 'Role', value: 'role' },
         { name: 'Auto Reaction', value: 'reaction' },
@@ -240,7 +235,7 @@ module.exports = {
       .setDescription('Edit an existing shop item (only fills in fields you provide)')
       .addIntegerOption(o => o.setName('item_id').setDescription('Item ID (see /shop list)').setRequired(true))
       .addStringOption(o => o.setName('name').setDescription('New name'))
-      .addIntegerOption(o => o.setName('price').setDescription('New price in Sins'))
+      .addIntegerOption(o => o.setName('price').setDescription('New price in this server\'s currency'))
       .addStringOption(o => o.setName('description').setDescription('New description'))
       .addStringOption(o => o.setName('category').setDescription('New category'))
       .addRoleOption(o => o.setName('role').setDescription('New role (Role/Auto Reaction types)'))
@@ -340,7 +335,7 @@ module.exports = {
 
       const config = await getConfig(interaction.guild.id);
       if (!config?.shop_channel_id) {
-        return interaction.editReply(`${WRONG} Run \`/shop setup\` first to set a shop channel.`);
+        return interaction.editReply(`${WRONG} Run \`/server-setup\` → Payments & Sellers first to set a shop channel.`);
       }
 
       const res = await query(`
@@ -353,7 +348,8 @@ module.exports = {
       await renderAndPost(interaction.client, interaction.guild.id);
 
       const durLabel = formatDuration(duration);
-      return interaction.editReply(`${CHECK} Added **${name}** (ID \`${res.rows[0].id}\`) to **${category}** — ${price.toLocaleString()} ${SINS} (sins), type: ${TYPE_LABELS[type]}${durLabel ? `, lasts ${durLabel} once used` : ''}${type === 'levelup' ? `, grants +${levels} level${levels === 1 ? '' : 's'}` : ''}.`);
+      const currency = await getGuildCurrencyConfig(interaction.guild.id);
+      return interaction.editReply(`${CHECK} Added **${name}** (ID \`${res.rows[0].id}\`) to **${category}** — ${price.toLocaleString()} ${currency.emoji || ''} (${currency.name}), type: ${TYPE_LABELS[type]}${durLabel ? `, lasts ${durLabel} once used` : ''}${type === 'levelup' ? `, grants +${levels} level${levels === 1 ? '' : 's'}` : ''}.`);
     }
 
     if (sub === 'removeitem') {
@@ -507,6 +503,7 @@ module.exports = {
     if (sub === 'list') {
       const items = await getItems(interaction.guild.id, false);
       if (!items.length) return interaction.editReply('No shop items yet.');
+      const currency = await getGuildCurrencyConfig(interaction.guild.id);
 
       const byCategory = new Map();
       for (const i of items) {
@@ -518,7 +515,7 @@ module.exports = {
       const embed = new EmbedBuilder().setColor('#d6c2ee').setTitle('Shop Items');
       for (const [cat, catItems] of byCategory) {
         const lines = catItems.map(i =>
-          `\`${i.id}\` **${i.name}** — ${Number(i.price).toLocaleString()} ${SINS} (sins) (${TYPE_LABELS[i.type]})${i.active ? '' : ' *(inactive)*'}${i.limit_per_user ? ` — limit ${i.limit_per_user}/user` : ' — unlimited'}${i.duration_hours ? ` — lasts ${formatDuration(i.duration_hours)}` : ''}`
+          `\`${i.id}\` **${i.name}** — ${Number(i.price).toLocaleString()} ${currency.emoji || ''} (${currency.name}) (${TYPE_LABELS[i.type]})${i.active ? '' : ' *(inactive)*'}${i.limit_per_user ? ` — limit ${i.limit_per_user}/user` : ' — unlimited'}${i.duration_hours ? ` — lasts ${formatDuration(i.duration_hours)}` : ''}`
         ).join('\n');
         embed.addFields({ name: cat, value: lines });
       }
@@ -528,7 +525,7 @@ module.exports = {
 
     if (sub === 'repost') {
       const msg = await renderAndPost(interaction.client, interaction.guild.id);
-      if (!msg) return interaction.editReply(`${WRONG} No shop channel configured — run \`/shop setup\` first.`);
+      if (!msg) return interaction.editReply(`${WRONG} No shop channel configured — run \`/server-setup\` → Payments & Sellers first.`);
       return interaction.editReply(`${CHECK} Shop panel reposted.`);
     }
   },
@@ -552,9 +549,10 @@ module.exports = {
       }
     }
 
-    const balance = await getBalance(interaction.user.id);
+    const balance = await getGuildBalance(interaction.guildId, interaction.user.id);
+    const currency = await getGuildCurrencyConfig(interaction.guildId);
     if (balance === null || Number(balance) < Number(item.price)) {
-      return interaction.reply({ content: `${WRONG} You don't have enough ${SINS} Sins for **${item.name}** (need ${Number(item.price).toLocaleString()}, you have ${Number(balance || 0).toLocaleString()}).`, ephemeral: true });
+      return interaction.reply({ content: `${WRONG} You don't have enough ${currency.emoji || ''} ${currency.name} for **${item.name}** (need ${Number(item.price).toLocaleString()}, you have ${Number(balance || 0).toLocaleString()}).`, ephemeral: true });
     }
 
     await interaction.deferReply({ ephemeral: true });
@@ -562,7 +560,7 @@ module.exports = {
 
     return interaction.editReply({ embeds: [new EmbedBuilder()
       .setColor('#2ecc71')
-      .setDescription(`${CHECK} You bought **${item.name}** for **${Number(item.price).toLocaleString()}** ${SINS} (sins)!\nNew balance: **${Number(newBalance).toLocaleString()}** ${SINS} (sins)\n\nRun \`/shop use item_id:${item.id}\` whenever you're ready to activate it! (A receipt was also sent to your DMs.)`)] });
+      .setDescription(`${CHECK} You bought **${item.name}** for **${Number(item.price).toLocaleString()}** ${currency.emoji || ''} (${currency.name})!\nNew balance: **${Number(newBalance).toLocaleString()}** ${currency.emoji || ''} (${currency.name})\n\nRun \`/shop use item_id:${item.id}\` whenever you're ready to activate it! (A receipt was also sent to your DMs.)`)] });
   },
 
   // ── Emoji modal submit (for using Auto Reaction items) ──────────────────

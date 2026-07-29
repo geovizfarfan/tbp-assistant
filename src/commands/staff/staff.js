@@ -163,6 +163,17 @@ async function staffReport(interaction, userOverride) {
     embed.addFields({ name: `${e('receipt')} Notes`, value: eligibility.notes.join('\n') });
   }
 
+  const boosterRes = await query(`SELECT * FROM boosters WHERE guild_id=$1 AND user_id=$2 AND active=true`, [interaction.guildId, user.id]);
+  if (boosterRes.rows.length) {
+    const b = boosterRes.rows[0];
+    const overdue = b.next_pay_due_at && new Date(b.next_pay_due_at) < new Date();
+    embed.addFields({
+      name: `${e('payday')} Also an Active Booster`,
+      value: `Monthly: **${b.amount_owed} ${b.currency}**\nLast Paid: ${b.last_paid_at ? tsF(b.last_paid_at) : 'Never'}\nNext Due: ${b.next_pay_due_at ? tsF(b.next_pay_due_at) : 'N/A'}${overdue ? ` ${e('atention')} OVERDUE` : ''}`,
+      inline: false,
+    });
+  }
+
   await interaction.editReply({ embeds: [embed] });
 }
 
