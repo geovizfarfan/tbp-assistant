@@ -1,6 +1,6 @@
 const {
   SlashCommandBuilder, AttachmentBuilder, EmbedBuilder,
-  ActionRowBuilder, ButtonBuilder, ButtonStyle,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits,
 } = require('discord.js');
 const { e } = require('../../utils/appEmojis');
 const { baseEmbed, COLORS } = require('../../utils/embeds');
@@ -204,6 +204,13 @@ module.exports = {
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
+
+    if (['role-bonus-add', 'role-bonus-list', 'role-bonus-remove'].includes(sub) &&
+        !interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
+        interaction.user.id !== process.env.OWNER_ID) {
+      return interaction.reply({ content: `${e('wrong')} Admin only.`, ephemeral: true });
+    }
+
     if (sub === 'members') return spinMembers(interaction);
     if (sub === 'reactions') return spinReactions(interaction);
     if (sub === 'boosted') return spinBoosted(interaction);

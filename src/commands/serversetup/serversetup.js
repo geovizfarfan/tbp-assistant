@@ -246,6 +246,20 @@ function buildGrindRolePicker(channelId) {
   return new ActionRowBuilder().addComponents(menu);
 }
 
+function buildWheelAddRolePicker() {
+  const menu = new RoleSelectMenuBuilder()
+    .setCustomId('serversetup_wheeladdrole')
+    .setPlaceholder('Pick the role');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildWheelRemoveRolePicker() {
+  const menu = new RoleSelectMenuBuilder()
+    .setCustomId('serversetup_wheelremoverole')
+    .setPlaceholder('Pick the role to remove');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
 function buildGiveawayButtons() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('serversetup_gw:bonusadd').setLabel('Add Bonus Role').setStyle(ButtonStyle.Success),
@@ -392,7 +406,7 @@ module.exports = {
     if (key === 'settings') {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
-        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
       });
     }
 
@@ -788,6 +802,46 @@ module.exports = {
       new ActionRowBuilder().addComponents(colorInput),
     );
     return interaction.showModal(modal);
+  },
+
+  async handleWheelAddRolePicked(interaction) {
+    const role = interaction.roles.first();
+    const modal = new ModalBuilder().setCustomId(`serversetup_wheeladdmodal:${role.id}`).setTitle('Wheel Role Bonus');
+    const bonusInput = new TextInputBuilder().setCustomId('bonus').setLabel('Extra entries per member with this role').setStyle(TextInputStyle.Short).setRequired(true);
+    modal.addComponents(new ActionRowBuilder().addComponents(bonusInput));
+    return interaction.showModal(modal);
+  },
+
+  async handleWheelAddModal(interaction) {
+    const [, roleId] = interaction.customId.split(':');
+    await interaction.deferReply({ ephemeral: true });
+
+    const bonus = parseInt(interaction.fields.getTextInputValue('bonus'), 10);
+    if (isNaN(bonus) || bonus <= 0) return interaction.editReply('❌ Bonus must be a positive number.');
+
+    const role = await interaction.guild.roles.fetch(roleId).catch(() => null);
+    if (!role) return interaction.editReply('❌ Couldn\'t find that role anymore.');
+
+    await query(
+      'INSERT INTO wheel_role_bonuses (guild_id, role_id, role_name, bonus_entries, added_by) VALUES ($1,$2,$3,$4,$5) ' +
+      'ON CONFLICT (guild_id, role_id) DO UPDATE SET bonus_entries=$4, role_name=$3',
+      [interaction.guildId, role.id, role.name, bonus, interaction.user.id]
+    );
+
+    return interaction.editReply(`✅ ${role} now gets +${bonus} wheel entries.`);
+  },
+
+  async handleWheelRemoveRolePicked(interaction) {
+    const role = interaction.roles.first();
+    await interaction.deferUpdate();
+
+    const res = await query('DELETE FROM wheel_role_bonuses WHERE guild_id=$1 AND role_id=$2 RETURNING role_name', [interaction.guildId, role.id]);
+
+    return interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(res.rows.length ? '#2ecc71' : '#e74c3c')
+        .setDescription(res.rows.length ? `✅ Removed bonus entries for ${role}.` : `❌ ${role} had no bonus configured.`)],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
+    });
   },
 
   async handleGrindSetupModal(interaction) {
@@ -1205,6 +1259,37 @@ module.exports = {
       return interaction.showModal(modal);
     }
 
+    if (action === 'wheeladd') {
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the role to give bonus wheel entries:')],
+        components: [buildWheelAddRolePicker(), buildBackButton()],
+      });
+    }
+
+    if (action === 'wheelremove') {
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the role to remove bonus wheel entries from:')],
+        components: [buildWheelRemoveRolePicker(), buildBackButton()],
+      });
+    }
+
+    if (action === 'wheellist') {
+      await interaction.deferUpdate();
+      const res = await query('SELECT role_id, bonus_entries FROM wheel_role_bonuses WHERE guild_id=$1 ORDER BY bonus_entries DESC', [interaction.guildId]);
+      const embed = new EmbedBuilder().setColor('#d6c2ee').setTitle('🎡 Wheel Role Bonuses');
+      if (!res.rows.length) {
+        embed.setDescription('No role bonuses configured yet.');
+      } else {
+        for (const row of res.rows) {
+          embed.addFields({ name: `<@&${row.role_id}>`, value: `+${row.bonus_entries} entries`, inline: true });
+        }
+      }
+      return interaction.editReply({
+        embeds: [embed],
+        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
+      });
+    }
+
     if (action === 'levelon' || action === 'leveloff') {
       await interaction.deferUpdate();
       const enabled = action === 'levelon';
@@ -1214,7 +1299,7 @@ module.exports = {
       `, [interaction.guildId, enabled]);
       return interaction.editReply({
         embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Level system is now **${enabled ? 'ON' : 'OFF'}**.`)],
-        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
       });
     }
 
@@ -1224,7 +1309,7 @@ module.exports = {
       if (!isGuildAllowedSins(interaction.guildId)) {
         return interaction.editReply({
           embeds: [new EmbedBuilder().setColor('#ff4444').setDescription('❌ Real Sins are only available in specific approved servers. Use "RR: Custom Currency" instead.')],
-          components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+          components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
         });
       }
       await query(`
@@ -1233,7 +1318,7 @@ module.exports = {
       `, [interaction.guildId]);
       return interaction.editReply({
         embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription('✅ Rumble Royale now uses real Sins.')],
-        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
       });
     }
 
@@ -1257,7 +1342,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Timezone set to **${timezone}**.`)],
-      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
     });
   },
 
@@ -1294,7 +1379,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Ban log channel set to <#${channel.id}>.`)],
-      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
     });
   },
 
@@ -1309,7 +1394,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Level-up announcements will post in <#${channel.id}>.`)],
-      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
     });
   },
 
@@ -1325,7 +1410,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Game schedule board will post in <#${channel.id}>.`)],
-      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
     });
   },
 
@@ -1446,6 +1531,14 @@ function buildSettingsButtons3() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('serversetup_gset:leveltuning').setLabel('Level Tuning').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('serversetup_gset:gameboard').setLabel('Game Board Channel').setStyle(ButtonStyle.Secondary),
+  );
+}
+
+function buildSettingsButtons4() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_gset:wheeladd').setLabel('Wheel: Add Role Bonus').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('serversetup_gset:wheellist').setLabel('Wheel: List Bonuses').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_gset:wheelremove').setLabel('Wheel: Remove Bonus').setStyle(ButtonStyle.Danger),
   );
 }
 

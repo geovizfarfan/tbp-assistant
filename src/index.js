@@ -319,6 +319,14 @@ client.on('interactionCreate', async (interaction) => {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleGrindRolePicked(interaction);
   }
+  if (interaction.isRoleSelectMenu() && interaction.customId === 'serversetup_wheeladdrole') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleWheelAddRolePicked(interaction);
+  }
+  if (interaction.isRoleSelectMenu() && interaction.customId === 'serversetup_wheelremoverole') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleWheelRemoveRolePicked(interaction);
+  }
   if (interaction.isButton() && interaction.customId.startsWith('serversetup_gw:')) {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleGiveawayButton(interaction);
@@ -463,6 +471,10 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isModalSubmit() && interaction.customId.startsWith('serversetup_grindmodal:')) {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleGrindSetupModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('serversetup_wheeladdmodal:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleWheelAddModal(interaction);
   }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('serversetup_pingmodal:')) {
     const serverSetupModule = require('./commands/serversetup/serversetup');
