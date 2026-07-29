@@ -22,16 +22,17 @@ async function payDueStaff(client, guildId) {
   if (!dueRes.rows.length) return;
 
   const { currencyName } = await getGuildCurrencyConfig(guildId);
-  const reqRes = await query(`SELECT * FROM pay_requirements WHERE guild_id=$1`, [guildId]);
-  const req = reqRes.rows[0] || { bonus_per_game: 400, pay_period_days: 30 };
-  const bonusPerGame = req.bonus_per_game || 400;
-  const periodDays = req.pay_period_days || 30;
-  const periodStart = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
+  const { getPayRequirements } = require('./eligibility');
 
   const paidLines = [];
   const guild = await client.guilds.fetch(guildId).catch(() => null);
 
   for (const s of dueRes.rows) {
+    const req = await getPayRequirements(guildId, s.role);
+    const bonusPerGame = req.bonus_per_game || 400;
+    const periodDays = req.pay_period_days || 30;
+    const periodStart = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
+
     const gamesRes = await query(
       `SELECT COUNT(*) FROM game_logs WHERE guild_id=$1 AND host_id=$2 AND started_at > $3`,
       [guildId, s.user_id, periodStart]

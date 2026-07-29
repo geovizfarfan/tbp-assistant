@@ -274,11 +274,10 @@ function chunkLines(lines, limit = 1000) {
 async function paySummary(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
-  const reqRes = await query(`SELECT * FROM pay_requirements WHERE guild_id=$1`, [interaction.guildId]);
-  const req = reqRes.rows[0] || { bonus_per_game: 400, pay_period_days: 30 };
-  const bonusPerGame = req.bonus_per_game || 400;
-  const periodDays   = req.pay_period_days || 30;
-  const periodStart  = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
+  const { getPayRequirements } = require('../../utils/eligibility');
+  const defaultReq = await getPayRequirements(interaction.guildId, 'default');
+  const periodDays  = defaultReq.pay_period_days || 30;
+  const periodStart = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
 
   // Staff totals
   const staffRes = await query(`SELECT * FROM staff WHERE guild_id=$1 AND active=true ORDER BY role`, [interaction.guildId]);
@@ -286,6 +285,8 @@ async function paySummary(interaction) {
   const staffLines = [];
 
   for (const s of staffRes.rows) {
+    const roleReq = await getPayRequirements(interaction.guildId, s.role);
+    const bonusPerGame = roleReq.bonus_per_game || 400;
     const gamesRes = await query(`SELECT COUNT(*) FROM game_logs WHERE guild_id=$1 AND host_id=$2 AND started_at > $3`, [interaction.guildId, s.user_id, periodStart]);
     const gamesHosted = parseInt(gamesRes.rows[0].count);
     const gameBonus   = gamesHosted * bonusPerGame;
@@ -338,7 +339,7 @@ async function paycheckCheck(interaction) {
   const staffRes = await query(`SELECT * FROM staff WHERE user_id=$1`, [user.id]);
   if (!staffRes.rows.length) return interaction.editReply({ content: `${e('wrong')} Not in staff database.` });
 
-  const result = await checkEligibility(interaction.guildId, user.id);
+  const result = await checkEligibility(interaction.guildId, user.id, staffRes.rows[0].role);
   const embed = eligibilityEmbed(staffRes.rows[0], result, e, interaction.guild?.name);
   await interaction.editReply({ embeds: [embed] });
 }

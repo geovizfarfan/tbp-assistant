@@ -2,7 +2,7 @@ const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { query } = require('../../utils/database');
 const { baseEmbed, tsF, COLORS } = require('../../utils/embeds');
 const { e } = require('../../utils/appEmojis');
-const { adjustBalance } = require('../../utils/playAndRegretDb');
+const { getGuildCurrencyConfig, adjustGuildBalance } = require('../../utils/currency');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -36,14 +36,7 @@ module.exports = {
   },
 };
 
-async function getGuildCurrency(guildId) {
-  const res = await query('SELECT currency_use_sins, currency_name FROM guild_config WHERE guild_id=$1', [guildId]);
-  const cfg = res.rows[0];
-  return {
-    useSins: cfg?.currency_use_sins || false,
-    currencyName: cfg?.currency_use_sins ? 'Sins' : (cfg?.currency_name || 'Crowns'),
-  };
-}
+
 
 async function payUser(interaction) {
   const user   = interaction.options.getUser('user');
@@ -61,7 +54,7 @@ async function payUser(interaction) {
     return interaction.editReply({ content: `${e('wrong')} <@${user.id}> isn't active staff or an active booster.` });
   }
 
-  const { useSins, currencyName } = await getGuildCurrency(interaction.guildId);
+  const { useSins, currencyName } = await getGuildCurrencyConfig(interaction.guildId);
 
   // Block re-paying before the current period is actually due.
   const notYetDueStaff   = staffRes.rows[0]?.next_pay_due_at && new Date(staffRes.rows[0].next_pay_due_at) > now;
@@ -98,8 +91,8 @@ async function payUser(interaction) {
 
     let staffAmount = amount;
     if (staffAmount === null) {
-      const reqRes = await query(`SELECT * FROM pay_requirements WHERE guild_id=$1`, [interaction.guildId]);
-      const req = reqRes.rows[0] || { bonus_per_game: 400, pay_period_days: 30 };
+      const { getPayRequirements } = require('../../utils/eligibility');
+      const req = await getPayRequirements(interaction.guildId, s.role);
       const bonusPerGame = req.bonus_per_game || 400;
       const periodDays   = req.pay_period_days || 30;
       const periodStart  = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
@@ -113,13 +106,8 @@ async function payUser(interaction) {
     }
 
     let newBalanceNote = '';
-    if (useSins) {
-      const newBalance = await adjustBalance(user.id, user.username, staffAmount).catch((err) => {
-        console.error('[MarkPaid] Failed to credit Sins for staff pay:', err.message);
-        return null;
-      });
-      if (newBalance !== null) newBalanceNote = ` | New Sins balance: ${newBalance.toLocaleString()}`;
-    }
+    const staffNewBalance = await adjustGuildBalance(interaction.guildId, user.id, user.username, staffAmount);
+    if (staffNewBalance !== null) newBalanceNote = ` | New ${currencyName} balance: ${Number(staffNewBalance).toLocaleString()}`;
 
     await query(`UPDATE staff SET last_paid_at=$1, next_pay_due_at=$2 WHERE user_id=$3`, [now, nextDue, user.id]);
     await query(
@@ -140,13 +128,8 @@ async function payUser(interaction) {
     const boosterAmount = amount || b.amount_owed;
 
     let newBalanceNote = '';
-    if (useSins) {
-      const newBalance = await adjustBalance(user.id, user.username, boosterAmount).catch((err) => {
-        console.error('[MarkPaid] Failed to credit Sins for booster pay:', err.message);
-        return null;
-      });
-      if (newBalance !== null) newBalanceNote = ` | New Sins balance: ${newBalance.toLocaleString()}`;
-    }
+    const boosterNewBalance = await adjustGuildBalance(interaction.guildId, user.id, user.username, boosterAmount);
+    if (boosterNewBalance !== null) newBalanceNote = ` | New ${currencyName} balance: ${Number(boosterNewBalance).toLocaleString()}`;
 
     await query(`UPDATE boosters SET last_paid_at=$1, next_pay_due_at=$2, currency=$3 WHERE guild_id=$4 AND user_id=$5`, [now, nextDue, currencyName, interaction.guildId, user.id]);
     await query(
@@ -206,12 +189,9 @@ async function revokeUser(interaction) {
       );
 
       let clawbackNote = '';
-      if (last.currency === 'Sins' && last.amount) {
-        const newBalance = await adjustBalance(user.id, user.username, -last.amount).catch((err) => {
-          console.error('[MarkPaid] Failed to claw back Sins for staff revoke:', err.message);
-          return null;
-        });
-        if (newBalance !== null) clawbackNote = ` | ${last.amount} Sins clawed back — new balance: ${newBalance.toLocaleString()}`;
+      if (last.amount) {
+        const newBalance = await adjustGuildBalance(interaction.guildId, user.id, user.username, -last.amount);
+        if (newBalance !== null) clawbackNote = ` | ${last.amount} ${last.currency} clawed back — new balance: ${Number(newBalance).toLocaleString()}`;
       }
 
       revokedLines.push(`${e('payday')} **Staff payment reversed:** ${last.amount} ${last.currency} (paid ${tsF(last.paid_at)})${clawbackNote}`);
@@ -238,12 +218,9 @@ async function revokeUser(interaction) {
       );
 
       let clawbackNote = '';
-      if (last.currency === 'Sins' && last.amount) {
-        const newBalance = await adjustBalance(user.id, user.username, -last.amount).catch((err) => {
-          console.error('[MarkPaid] Failed to claw back Sins for booster revoke:', err.message);
-          return null;
-        });
-        if (newBalance !== null) clawbackNote = ` | ${last.amount} Sins clawed back — new balance: ${newBalance.toLocaleString()}`;
+      if (last.amount) {
+        const newBalance = await adjustGuildBalance(interaction.guildId, user.id, user.username, -last.amount);
+        if (newBalance !== null) clawbackNote = ` | ${last.amount} ${last.currency} clawed back — new balance: ${Number(newBalance).toLocaleString()}`;
       }
 
       revokedLines.push(`${e('payday')} **Booster payment reversed:** ${last.amount} ${last.currency} (paid ${tsF(last.paid_at)})${clawbackNote}`);

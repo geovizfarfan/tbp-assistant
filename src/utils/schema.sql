@@ -55,7 +55,8 @@ CREATE TABLE IF NOT EXISTS pay_periods (
 
 -- Pay requirements config (per guild)
 CREATE TABLE IF NOT EXISTS pay_requirements (
-  guild_id TEXT PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'default',
   min_games_hosted INTEGER DEFAULT 10,
   min_giveaways_hosted INTEGER DEFAULT 2,
   min_raffles_hosted INTEGER DEFAULT 2,
@@ -65,10 +66,28 @@ CREATE TABLE IF NOT EXISTS pay_requirements (
   pay_period_days INTEGER DEFAULT 30,
   min_rumble INTEGER DEFAULT 4,
   bonus_per_game INTEGER DEFAULT 400,
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (guild_id, role)
 );
 ALTER TABLE pay_requirements ADD COLUMN IF NOT EXISTS min_rumble INTEGER DEFAULT 4;
 ALTER TABLE pay_requirements ADD COLUMN IF NOT EXISTS bonus_per_game INTEGER DEFAULT 400;
+ALTER TABLE pay_requirements ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'default';
+-- Migrate from the old guild_id-only primary key to (guild_id, role) if the
+-- table still has the old single-column key from before per-role support.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE table_name = 'pay_requirements' AND constraint_type = 'PRIMARY KEY'
+      AND constraint_name = 'pay_requirements_pkey'
+  ) AND (
+    SELECT COUNT(*) FROM information_schema.key_column_usage
+    WHERE table_name = 'pay_requirements' AND constraint_name = 'pay_requirements_pkey'
+  ) = 1 THEN
+    ALTER TABLE pay_requirements DROP CONSTRAINT pay_requirements_pkey;
+    ALTER TABLE pay_requirements ADD PRIMARY KEY (guild_id, role);
+  END IF;
+END $$;
 
 -- Raffles
 CREATE TABLE IF NOT EXISTS raffles (

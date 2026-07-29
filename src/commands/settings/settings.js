@@ -9,7 +9,16 @@ module.exports = {
     .setDescription('Configure bot settings for this server')
     .addSubcommand(sub => sub
       .setName('requirements')
-      .setDescription('Set staff pay requirements for this server')
+      .setDescription('Set staff pay requirements — per role, or Default for anyone without an override')
+      .addStringOption(o => o.setName('role').setDescription('Staff role').setRequired(true)
+        .addChoices(
+          { name: 'Default (fallback for any role without its own)', value: 'default' },
+          { name: 'Owner',       value: 'owner'       },
+          { name: 'Admin',       value: 'admin'       },
+          { name: 'Mod',         value: 'staff'       },
+          { name: 'Host',        value: 'host'        },
+          { name: 'Rumble Host', value: 'rumble_host' },
+        ))
       .addIntegerOption(o => o.setName('min_games').setDescription('Min games per period').setRequired(false))
       .addIntegerOption(o => o.setName('min_auto_games').setDescription('Min auto-games per period').setRequired(false))
       .addIntegerOption(o => o.setName('min_raffles').setDescription('Min raffles per period').setRequired(false))
@@ -44,6 +53,7 @@ module.exports = {
 
 async function setRequirements(interaction) {
   await interaction.deferReply({ ephemeral: true });
+  const role = interaction.options.getString('role');
   const fields = {
     min_games_hosted:      interaction.options.getInteger('min_games'),
     min_rumble:            interaction.options.getInteger('min_auto_games'),
@@ -51,18 +61,23 @@ async function setRequirements(interaction) {
     min_giveaways_hosted:  interaction.options.getInteger('min_giveaways'),
     bonus_per_game:        interaction.options.getInteger('bonus_per_game'),
   };
-  const setClauses = [];
-  const vals = [interaction.guildId];
-  let idx = 2;
-  for (const [k, v] of Object.entries(fields)) {
-    if (v !== null) { setClauses.push(k + '=$' + idx++); vals.push(v); }
+  if (Object.values(fields).every(v => v === null)) {
+    return interaction.editReply({ content: e('wrong') + ' Please provide at least one field.' });
   }
-  if (setClauses.length === 0) return interaction.editReply({ content: e('wrong') + ' No fields provided.' });
   await query(
-    'INSERT INTO pay_requirements (guild_id) VALUES ($1) ON CONFLICT (guild_id) DO UPDATE SET ' + setClauses.join(', '),
-    vals
+    `INSERT INTO pay_requirements (guild_id, role, min_games_hosted, min_rumble, min_raffles_hosted, min_giveaways_hosted, bonus_per_game)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     ON CONFLICT (guild_id, role) DO UPDATE SET
+       min_games_hosted     = COALESCE($3, pay_requirements.min_games_hosted),
+       min_rumble           = COALESCE($4, pay_requirements.min_rumble),
+       min_raffles_hosted   = COALESCE($5, pay_requirements.min_raffles_hosted),
+       min_giveaways_hosted = COALESCE($6, pay_requirements.min_giveaways_hosted),
+       bonus_per_game       = COALESCE($7, pay_requirements.bonus_per_game),
+       updated_at = NOW()`,
+    [interaction.guildId, role, fields.min_games_hosted, fields.min_rumble, fields.min_raffles_hosted, fields.min_giveaways_hosted, fields.bonus_per_game]
   );
-  await interaction.editReply({ content: e('checkmark') + ' Pay requirements updated.' });
+  const roleLabels = { default: 'Default', owner: 'Owner', admin: 'Admin', staff: 'Mod', host: 'Host', rumble_host: 'Rumble Host' };
+  await interaction.editReply({ content: e('checkmark') + ' Pay requirements updated for **' + (roleLabels[role] || role) + '**.' });
 }
 
 async function setDailyGoals(interaction) {
