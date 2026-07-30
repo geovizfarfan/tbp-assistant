@@ -25,7 +25,8 @@ module.exports = {
       .setName('bulk-remove')
       .setDescription('Remove a role from multiple members, or everyone who has it')
       .addRoleOption(o => o.setName('role').setDescription('Role to strip').setRequired(true))
-      .addStringOption(o => o.setName('users').setDescription('Type @ to mention specific members — leave blank to remove from everyone with the role'))),
+      .addBooleanOption(o => o.setName('all').setDescription('Remove from every member who has this role').setRequired(false))
+      .addStringOption(o => o.setName('users').setDescription('Type @ to mention specific members (ignored if "all" is True)').setRequired(false))),
 
   async execute(interaction) {
     if (!isStaffOrAdmin(interaction)) {
@@ -75,11 +76,21 @@ async function removeRole(interaction) {
 
 async function bulkRemove(interaction) {
   const role = interaction.options.getRole('role');
+  const all = interaction.options.getBoolean('all');
   const usersRaw = interaction.options.getString('users');
+
+  if (!all && !usersRaw) {
+    return interaction.reply({ content: `${e('wrong')} Set \`all:True\` to remove from everyone, or provide \`users\` for specific members.`, ephemeral: true });
+  }
+
   await interaction.deferReply({ ephemeral: true });
 
   let targets;
-  if (usersRaw) {
+  if (all) {
+    // Ensure the role's member cache is fresh before iterating.
+    await interaction.guild.members.fetch();
+    targets = [...role.members.values()];
+  } else {
     const ids = [...usersRaw.matchAll(/<@!?(\d+)>/g)].map(m => m[1]);
     if (!ids.length) return interaction.editReply(`${e('wrong')} Couldn't find any member mentions in that — type @ to mention them.`);
     targets = [];
@@ -87,10 +98,6 @@ async function bulkRemove(interaction) {
       const member = await interaction.guild.members.fetch(id).catch(() => null);
       if (member && member.roles.cache.has(role.id)) targets.push(member);
     }
-  } else {
-    // Ensure the role's member cache is fresh before iterating.
-    await interaction.guild.members.fetch();
-    targets = [...role.members.values()];
   }
 
   if (!targets.length) {

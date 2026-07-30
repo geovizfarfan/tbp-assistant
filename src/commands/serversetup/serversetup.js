@@ -281,6 +281,13 @@ function buildWheelAddRolePicker() {
   return new ActionRowBuilder().addComponents(menu);
 }
 
+function buildBulkRemoveRolePicker() {
+  const menu = new RoleSelectMenuBuilder()
+    .setCustomId('serversetup_bulkremoverole')
+    .setPlaceholder('Pick the role to strip');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
 function buildWheelRemoveRolePicker() {
   const menu = new RoleSelectMenuBuilder()
     .setCustomId('serversetup_wheelremoverole')
@@ -842,6 +849,104 @@ module.exports = {
     return interaction.showModal(modal);
   },
 
+  async handleBulkRemoveRolePicked(interaction) {
+    const role = interaction.roles.first();
+    await interaction.deferUpdate();
+
+    await interaction.guild.members.fetch();
+    const count = role.members.size;
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`serversetup_bulkremove_all:${role.id}`).setLabel(`Remove from ALL (${count})`).setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`serversetup_bulkremove_specific:${role.id}`).setLabel('Remove from Specific Members').setStyle(ButtonStyle.Secondary),
+    );
+
+    return interaction.editReply({
+      embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription(`${role} is currently held by **${count}** member${count === 1 ? '' : 's'}. What do you want to do?`)],
+      components: [row, buildBackButton()],
+    });
+  },
+
+  async handleBulkRemoveAllStart(interaction) {
+    const [, roleId] = interaction.customId.split(':');
+    const role = await interaction.guild.roles.fetch(roleId).catch(() => null);
+    if (!role) return interaction.update({ content: '❌ Couldn\'t find that role anymore.', embeds: [], components: [] });
+
+    await interaction.guild.members.fetch();
+    const count = role.members.size;
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`serversetup_bulkremove_allconfirm:${roleId}`).setLabel(`Yes, remove from all ${count}`).setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('serversetup_nav:settings').setLabel('Cancel').setStyle(ButtonStyle.Secondary),
+    );
+
+    return interaction.update({
+      embeds: [new EmbedBuilder().setColor('#e74c3c').setDescription(`⚠️ This will remove ${role} from **${count}** member${count === 1 ? '' : 's'}. This can't be undone. Are you sure?`)],
+      components: [row],
+    });
+  },
+
+  async handleBulkRemoveAllConfirm(interaction) {
+    const [, roleId] = interaction.customId.split(':');
+    await interaction.deferUpdate();
+
+    const role = await interaction.guild.roles.fetch(roleId).catch(() => null);
+    if (!role) return interaction.editReply({ content: '❌ Couldn\'t find that role anymore.', embeds: [], components: [] });
+
+    await interaction.guild.members.fetch();
+    const targets = [...role.members.values()];
+
+    let removed = 0, failed = 0;
+    for (const member of targets) {
+      await member.roles.remove(role).then(() => removed++).catch(() => failed++);
+    }
+
+    return interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(failed ? '#faa61a' : '#2ecc71').setDescription(
+        `✅ Removed ${role} from **${removed}** member${removed === 1 ? '' : 's'}.` +
+        (failed ? `\n❌ Failed on ${failed} (likely a role hierarchy issue).` : '')
+      )],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+    });
+  },
+
+  async handleBulkRemoveSpecificStart(interaction) {
+    const [, roleId] = interaction.customId.split(':');
+    const modal = new ModalBuilder().setCustomId(`serversetup_bulkremovemodal:${roleId}`).setTitle('Remove From Specific Members');
+    const usersInput = new TextInputBuilder().setCustomId('users').setLabel('Type @ to mention members').setStyle(TextInputStyle.Paragraph).setRequired(true);
+    modal.addComponents(new ActionRowBuilder().addComponents(usersInput));
+    return interaction.showModal(modal);
+  },
+
+  async handleBulkRemoveSpecificModal(interaction) {
+    const [, roleId] = interaction.customId.split(':');
+    await interaction.deferReply({ ephemeral: true });
+
+    const role = await interaction.guild.roles.fetch(roleId).catch(() => null);
+    if (!role) return interaction.editReply('❌ Couldn\'t find that role anymore.');
+
+    const usersRaw = interaction.fields.getTextInputValue('users');
+    const ids = [...usersRaw.matchAll(/<@!?(\d+)>/g)].map(m => m[1]);
+    if (!ids.length) return interaction.editReply('❌ Couldn\'t find any member mentions in that — type @ to mention them.');
+
+    const targets = [];
+    for (const id of ids) {
+      const member = await interaction.guild.members.fetch(id).catch(() => null);
+      if (member && member.roles.cache.has(role.id)) targets.push(member);
+    }
+    if (!targets.length) return interaction.editReply('❌ None of those members have that role.');
+
+    let removed = 0, failed = 0;
+    for (const member of targets) {
+      await member.roles.remove(role).then(() => removed++).catch(() => failed++);
+    }
+
+    return interaction.editReply(
+      `✅ Removed ${role} from **${removed}** member${removed === 1 ? '' : 's'}.` +
+      (failed ? `\n❌ Failed on ${failed} (likely a role hierarchy issue).` : '')
+    );
+  },
+
   async handleWheelAddRolePicked(interaction) {
     const role = interaction.roles.first();
     const modal = new ModalBuilder().setCustomId(`serversetup_wheeladdmodal:${role.id}`).setTitle('Wheel Role Bonus');
@@ -1297,6 +1402,13 @@ module.exports = {
       return interaction.showModal(modal);
     }
 
+    if (action === 'bulkremoverole') {
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the role to bulk-remove:')],
+        components: [buildBulkRemoveRolePicker(), buildBackButton()],
+      });
+    }
+
     if (action === 'wheeladd') {
       return interaction.update({
         embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the role to give bonus wheel entries:')],
@@ -1565,6 +1677,7 @@ function buildSettingsButtons2() {
     new ButtonBuilder().setCustomId('serversetup_gset:leveloff').setLabel('Level Up OFF').setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId('serversetup_gset:levelchan').setLabel('Level-Up Channel').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('serversetup_gset:leveltuning').setLabel('Level Tuning').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_gset:bulkremoverole').setLabel('Bulk Remove Role').setStyle(ButtonStyle.Danger),
   );
 }
 
