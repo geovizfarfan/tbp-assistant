@@ -104,7 +104,7 @@ function buildHomeEmbed(guild) {
     '💳 **Payments, Sellers & Shop** — approve sellers, shop channel setup',
     '🧩 **Panels & Embeds** — ping panels, custom embeds',
     '📌 **Sticky Notes** — the message pinned to the bottom of a channel',
-    '⚔️ **Rumble Setup** — RR currency, Grind panel, role achievement channel',
+    '⚔️ **Rumble Setup** — RR currency, Grind panel, role achievement channel, active seasons',
   ];
   return new EmbedBuilder()
     .setColor('#d6c2ee')
@@ -463,7 +463,7 @@ module.exports = {
     if (key === 'rumble') {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
-        components: [buildRumbleButtons(), buildBackButton()],
+        components: [buildRumbleButtons(), buildRumbleButtons2(), buildBackButton()],
       });
     }
 
@@ -805,6 +805,28 @@ module.exports = {
       });
     }
 
+    if (action === 'seasonlist') {
+      await interaction.deferUpdate();
+      const res = await query(
+        `SELECT s.*, COUNT(DISTINCT sc.channel_id) AS channel_count
+         FROM rr_seasons s LEFT JOIN rr_season_channels sc ON sc.season_id = s.id
+         WHERE s.guild_id = $1 AND s.status = 'active'
+         GROUP BY s.id ORDER BY s.started_at ASC`,
+        [interaction.guildId]
+      );
+      const embed = new EmbedBuilder().setColor('#d6c2ee').setTitle('⚔️ Active Seasons');
+      if (!res.rows.length) {
+        embed.setDescription('No active seasons. Start one with `/rumble season start`.');
+      } else {
+        const lines = res.rows.map(s => `**${s.name}** — ${s.channel_count} channel(s) — started <t:${Math.floor(new Date(s.started_at).getTime()/1000)}:R>`).join('\n');
+        embed.setDescription(lines);
+      }
+      return interaction.editReply({
+        embeds: [embed],
+        components: [buildRumbleButtons(), buildRumbleButtons2(), buildBackButton()],
+      });
+    }
+
     if (action === 'goosdatestatus') {
       const { status } = require('../goosdate/goosdate');
       return status(interaction);
@@ -855,7 +877,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ "Collected all roles" announcements will post in <#${channel.id}>.`)],
-      components: [buildRumbleButtons(), buildBackButton()],
+      components: [buildRumbleButtons(), buildRumbleButtons2(), buildBackButton()],
     });
   },
 
@@ -1606,7 +1628,7 @@ module.exports = {
       if (!isGuildAllowedSins(interaction.guildId)) {
         return interaction.editReply({
           embeds: [new EmbedBuilder().setColor('#ff4444').setDescription('❌ Real Sins are only available in specific approved servers. Use "RR: Custom Currency" instead.')],
-          components: [buildRumbleButtons(), buildBackButton()],
+          components: [buildRumbleButtons(), buildRumbleButtons2(), buildBackButton()],
         });
       }
       await query(`
@@ -1615,7 +1637,7 @@ module.exports = {
       `, [interaction.guildId]);
       return interaction.editReply({
         embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription('✅ Rumble Royale now uses real Sins.')],
-        components: [buildRumbleButtons(), buildBackButton()],
+        components: [buildRumbleButtons(), buildRumbleButtons2(), buildBackButton()],
       });
     }
 
@@ -1839,6 +1861,12 @@ function buildRumbleButtons() {
     new ButtonBuilder().setCustomId('serversetup_gset:rrcustom').setLabel('RR: Custom Currency').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('serversetup_extras:grindsetup').setLabel('Grind Setup').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('serversetup_gset:roleachievement').setLabel('Role Achievement Channel').setStyle(ButtonStyle.Secondary),
+  );
+}
+
+function buildRumbleButtons2() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_gset:seasonlist').setLabel('List Active Seasons').setStyle(ButtonStyle.Secondary),
   );
 }
 
