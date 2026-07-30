@@ -46,23 +46,6 @@ module.exports = {
       .addStringOption(o => o.setName('duration').setDescription('How long the raffle runs e.g. 2h, 30m, 1h30m, 24h').setRequired(true))
       .addIntegerOption(o => o.setName('amount').setDescription('Prize amount (if currency-based)').setRequired(false))
       .addStringOption(o => o.setName('custom_prize').setDescription('Custom prize name (only for Other Gift)').setRequired(false))
-    )
-    .addSubcommand(sub => sub
-      .setName('end')
-      .setDescription('Manually end a raffle')
-      .addIntegerOption(o => o.setName('id').setDescription('Raffle ID').setRequired(true))
-    )
-    .addSubcommand(sub => sub
-      .setName('list')
-      .setDescription('List raffles')
-      .addBooleanOption(o => o.setName('ended').setDescription('Show ended raffles instead of active').setRequired(false))
-      .addUserOption(o => o.setName('user').setDescription('Admin only: view another staff member\'s raffles').setRequired(false))
-    )
-    .addSubcommand(sub => sub
-      .setName('cancel')
-      .setDescription('Cancel an active raffle — no winner selected')
-      .addIntegerOption(o => o.setName('id').setDescription('Raffle ID').setRequired(true))
-      .addStringOption(o => o.setName('reason').setDescription('Reason for cancellation').setRequired(false))
     ),
 
   async execute(interaction) {

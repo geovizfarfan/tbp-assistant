@@ -343,10 +343,6 @@ module.exports = {
       .addStringOption(o => o.setName('open_message').setDescription('New default open message')))
 
     .addSubcommand(sub => sub
-      .setName('panels')
-      .setDescription('List all ticket panels and their IDs'))
-
-    .addSubcommand(sub => sub
       .setName('add')
       .setDescription('Add a user to the current ticket thread')
       .addUserOption(o => o.setName('user').setDescription('User to add').setRequired(true)))
@@ -359,17 +355,7 @@ module.exports = {
     .addSubcommand(sub => sub
       .setName('close')
       .setDescription('Close the ticket in this thread (run inside the ticket)')
-      .addStringOption(o => o.setName('reason').setDescription('Reason for closing')))
-
-    .addSubcommand(sub => sub
-      .setName('repost')
-      .setDescription('Repost a panel (e.g. if its message was accidentally deleted)')
-      .addStringOption(o => o.setName('panel_id').setDescription('Panel ID').setRequired(true)))
-
-    .addSubcommand(sub => sub
-      .setName('removepanel')
-      .setDescription('Remove a ticket panel and all its types')
-      .addStringOption(o => o.setName('panel_id').setDescription('Panel ID to remove').setRequired(true))),
+      .addStringOption(o => o.setName('reason').setDescription('Reason for closing'))),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();

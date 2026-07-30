@@ -858,7 +858,7 @@ module.exports = {
       );
       const embed = new EmbedBuilder().setColor('#d6c2ee').setTitle('⚔️ Active Seasons');
       if (!res.rows.length) {
-        embed.setDescription('No active seasons. Start one with `/rumble season start`.');
+        embed.setDescription('No active seasons. Use the "Start Season" button below to start one.');
       } else {
         const lines = res.rows.map(s => `**${s.name}** — ${s.channel_count} channel(s) — started <t:${Math.floor(new Date(s.started_at).getTime()/1000)}:R>`).join('\n');
         embed.setDescription(lines);

@@ -14,43 +14,7 @@ module.exports = {
 
     .addSubcommand(sub => sub
       .setName('leaderboard')
-      .setDescription('See the top members by level'))
-
-    .addSubcommand(sub => sub
-      .setName('set')
-      .setDescription('Manually set a member\'s level (admin)')
-      .addUserOption(o => o.setName('user').setDescription('Member').setRequired(true))
-      .addIntegerOption(o => o.setName('level').setDescription('Level to set').setRequired(true)))
-
-    .addSubcommand(sub => sub
-      .setName('reset')
-      .setDescription('Reset every member\'s level and XP on this server (admin, cannot be undone)')
-      .addBooleanOption(o => o.setName('confirm').setDescription('Type True to confirm — this cannot be undone').setRequired(true)))
-
-    .addSubcommand(sub => sub
-      .setName('config')
-      .setDescription('Configure XP gain and level-up announcements (admin)')
-      .addBooleanOption(o => o.setName('enabled').setDescription('Turn XP gain on/off — starts OFF until you enable it'))
-      .addChannelOption(o => o.setName('levelup_channel').setDescription('Where level-up announcements post (blank = same channel as the message)'))
-      .addBooleanOption(o => o.setName('announce').setDescription('Announce level-ups at all'))
-      .addIntegerOption(o => o.setName('xp_min').setDescription('Minimum XP per message'))
-      .addIntegerOption(o => o.setName('xp_max').setDescription('Maximum XP per message'))
-      .addIntegerOption(o => o.setName('cooldown_seconds').setDescription('Seconds between XP gains per member')))
-
-    .addSubcommandGroup(group => group
-      .setName('exclude')
-      .setDescription('Manage which channels don\'t earn XP')
-      .addSubcommand(sub => sub
-        .setName('add')
-        .setDescription('Exclude a channel from earning XP')
-        .addChannelOption(o => o.setName('channel').setDescription('Channel').setRequired(true)))
-      .addSubcommand(sub => sub
-        .setName('remove')
-        .setDescription('Re-enable XP for a channel')
-        .addChannelOption(o => o.setName('channel').setDescription('Channel').setRequired(true)))
-      .addSubcommand(sub => sub
-        .setName('list')
-        .setDescription('List excluded channels'))),
+      .setDescription('See the top members by level')),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();

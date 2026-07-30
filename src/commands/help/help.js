@@ -134,7 +134,7 @@ function buildCategoryEmbed(category) {
         { name: 'How do I set up tickets?', value: '`/ticket setup` — configures staff role, category, and core behavior. Listing/reposting/removing existing panels is also in `/server-setup` → Panels & Embeds.', inline: false },
         { name: 'How do I create a ticket panel?', value: '`/ticket panel` to create one, then `/ticket addtype` to add buttons to it.', inline: false },
         { name: 'How does a member open or close a ticket?', value: 'They click the panel button to open; staff use `/ticket close reason:` to close.', inline: false },
-        { name: 'What if a panel gets deleted?', value: '`/ticket panels repost panel_id:` rebuilds it.', inline: false },
+        { name: 'What if a panel gets deleted?', value: 'Run `/server-setup` → Panels & Embeds → Repost Ticket Panel to rebuild it.', inline: false },
       ),
 
     rumble: new EmbedBuilder().setColor('#d6c2ee')
@@ -143,7 +143,7 @@ function buildCategoryEmbed(category) {
         { name: 'How do I set up Rumble Royale?', value: '`/rr setup channel:#ch` — configure reward, winner role, ping roles, and announcement style for a channel. Currency and a few other settings are also in `/server-setup` → Rumble Setup.', inline: false },
         { name: 'How do I add a one-time bonus reward?', value: '`/rr reward add channel:#ch other_reward:"..."` — updates the *live* announcement immediately. `/rr reward remove` clears it.', inline: false },
         { name: 'How do I set up Rumble Slaughter?', value: '`/rs setup channel:#ch winner_role:@Role` — mirrors RR setup; Veloura detects the champion and posts its own summary automatically.', inline: false },
-        { name: 'Can I run multiple seasons at once?', value: 'Yes — run `/server-setup` → Rumble Setup for the full season toolkit (start/end/info/add-channel/remove-channel/link-campaign), or `/rumble season start name:"..."` directly. Each season is independent, and can link to a Wheel Roles campaign.', inline: false },
+        { name: 'Can I run multiple seasons at once?', value: 'Yes — run `/server-setup` → Rumble Setup for the full season toolkit (start/end/info/add-channel/remove-channel/link-campaign). Each season is independent, and can link to a Wheel Roles campaign.', inline: false },
       ),
 
     payments: new EmbedBuilder().setColor('#d6c2ee')
@@ -179,7 +179,7 @@ function buildCategoryEmbed(category) {
     level: new EmbedBuilder().setColor('#d6c2ee')
       .setTitle('🏅 Level System')
       .addFields(
-        { name: 'How do I turn leveling on?', value: 'Run `/server-setup` → Other Settings, or `/level config enabled:True` directly — off by default.', inline: false },
+        { name: 'How do I turn leveling on?', value: 'Run `/server-setup` → Other Settings — off by default.', inline: false },
         { name: 'How do I check my level?', value: '`/level check` — or `/level leaderboard` for the top of the server.', inline: false },
       ),
 

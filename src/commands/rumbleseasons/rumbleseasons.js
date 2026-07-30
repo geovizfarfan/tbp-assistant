@@ -151,6 +151,7 @@ async function getSeasonInfoEmbed(interaction, seasonName) {
 }
 
 module.exports = {
+  hidden: true, // reachable via /server-setup - not a standalone slash command
   data: new SlashCommandBuilder()
     .setName('rumble')
     .setDescription('Manage Rumble Royale seasons')

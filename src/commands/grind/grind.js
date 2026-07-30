@@ -67,14 +67,6 @@ module.exports = {
     .setName('grind')
     .setDescription('Rumble Grind channel management')
     .addSubcommand(sub => sub
-      .setName('setup')
-      .setDescription('Set up the Rumble Grind panel')
-      .addChannelOption(o => o.setName('channel').setDescription('Channel to post the panel in').setRequired(true))
-      .addRoleOption(o => o.setName('role').setDescription('Notification role for subscribers').setRequired(true))
-      .addIntegerOption(o => o.setName('max_channels').setDescription('Max temp channels allowed (default: 50)').setMinValue(1).setMaxValue(200))
-      .addIntegerOption(o => o.setName('duration').setDescription('Hours before auto-delete (default: 1)').setMinValue(1).setMaxValue(24))
-      .addStringOption(o => o.setName('embed_color').setDescription('Embed color hex (default: #d6c2ee)')))
-    .addSubcommand(sub => sub
       .setName('panel')
       .setDescription('Re-post the Rumble Grind panel'))
     .addSubcommand(sub => sub
@@ -83,48 +75,6 @@ module.exports = {
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
-
-    // ── /grind setup ────────────────────────────────────────────────────────
-    if (sub === 'setup') {
-      if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
-          interaction.user.id !== process.env.OWNER_ID) {
-        return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
-      }
-      await interaction.deferReply({ ephemeral: true });
-
-      const channel     = interaction.options.getChannel('channel');
-      const role        = interaction.options.getRole('role');
-      const maxChannels = interaction.options.getInteger('max_channels') || 50;
-      const duration    = interaction.options.getInteger('duration') || 1;
-      const color       = interaction.options.getString('embed_color') || '#d6c2ee';
-
-      await query(`
-        INSERT INTO grind_config (guild_id, panel_channel_id, role_id, max_channels, duration_hours, embed_color)
-        VALUES ($1,$2,$3,$4,$5,$6)
-        ON CONFLICT (guild_id) DO UPDATE SET
-          panel_channel_id = EXCLUDED.panel_channel_id,
-          role_id          = EXCLUDED.role_id,
-          max_channels     = EXCLUDED.max_channels,
-          duration_hours   = EXCLUDED.duration_hours,
-          embed_color      = EXCLUDED.embed_color
-      `, [interaction.guild.id, channel.id, role.id, maxChannels, duration, color]);
-
-      // Post panel
-      const count = await getChannelCount(interaction.guild.id);
-      const config = { guild_id: interaction.guild.id, embed_color: color, max_channels: maxChannels, duration_hours: duration };
-      const { subEmbed, chEmbed, subRow, chRow } = buildPanelEmbeds(config, count);
-
-      const msg1 = await channel.send({ embeds: [subEmbed], components: [subRow] });
-      const msg2 = await channel.send({ embeds: [chEmbed], components: [chRow] });
-
-      await query(`
-        UPDATE grind_config SET panel_message_id1 = $1, panel_message_id2 = $2 WHERE guild_id = $3
-      `, [msg1.id, msg2.id, interaction.guild.id]);
-
-      return interaction.editReply({ embeds: [new EmbedBuilder().setColor(color)
-        .setTitle('✅ Grind Panel Posted!')
-        .setDescription(`Panel posted in <#${channel.id}>.\nRole: <@&${role.id}>\nMax channels: ${maxChannels}\nAuto-delete: ${duration}h`)]});
-    }
 
     // ── /grind panel (re-post) ──────────────────────────────────────────────
     if (sub === 'panel') {

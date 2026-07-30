@@ -173,21 +173,6 @@ module.exports = {
       .addStringOption(buildPaletteOption)
     )
     .addSubcommand(sub => sub
-      .setName('role-bonus-add')
-      .setDescription('Add or update a role\'s bonus wheel entries')
-      .addRoleOption(o => o.setName('role').setDescription('Role to configure').setRequired(true))
-      .addIntegerOption(o => o.setName('bonus').setDescription('Extra entries per member with this role').setRequired(true))
-    )
-    .addSubcommand(sub => sub
-      .setName('role-bonus-list')
-      .setDescription('View all configured role bonuses for the wheel')
-    )
-    .addSubcommand(sub => sub
-      .setName('role-bonus-remove')
-      .setDescription('Remove a role\'s bonus wheel entries')
-      .addRoleOption(o => o.setName('role').setDescription('Role to remove').setRequired(true))
-    )
-    .addSubcommand(sub => sub
       .setName('prizes')
       .setDescription('Spin a wheel of prizes for a winner you already picked')
       .addStringOption(o => o.setName('prizes').setDescription('Comma-separated prize list').setRequired(true))

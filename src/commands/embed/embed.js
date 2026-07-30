@@ -82,23 +82,7 @@ module.exports = {
       .addChannelOption(o => o.setName('channel').setDescription('Channel the message is in (default: current channel)'))
       .addStringOption(o => o.setName('color').setDescription('New hex color, e.g. #d6c2ee'))
       .addStringOption(o => o.setName('image').setDescription('New image URL'))
-      .addStringOption(o => o.setName('thumbnail').setDescription('New thumbnail URL')))
-
-    .addSubcommand(sub => sub
-      .setName('list')
-      .setDescription('List custom embeds Veloura has posted, with their IDs')
-      .addIntegerOption(o => o.setName('page').setDescription('Page number (15 per page, default: 1)')))
-
-    .addSubcommand(sub => sub
-      .setName('repost')
-      .setDescription('Repost an embed if its message was deleted (does nothing if it still exists)')
-      .addIntegerOption(o => o.setName('id').setDescription('Embed ID (see /embed list)').setRequired(true)))
-
-    .addSubcommand(sub => sub
-      .setName('delete')
-      .setDescription('Delete a custom embed message and its stored data')
-      .addStringOption(o => o.setName('message_id').setDescription('Message ID of the embed to delete').setRequired(true))
-      .addChannelOption(o => o.setName('channel').setDescription('Channel it\'s posted in (default: current channel)'))),
+      .addStringOption(o => o.setName('thumbnail').setDescription('New thumbnail URL'))),
 
   async execute(interaction) {
     const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
