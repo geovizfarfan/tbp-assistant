@@ -23,25 +23,18 @@ const CATEGORIES = {
     description: 'Every key channel the bot posts to or reads from, plus the Private Room button — buttons below.',
     items: [
       'Ticket transcripts channel — *not yet split from game transcripts, coming in a later phase*',
-      'Grind setup — `/grind setup`',
     ],
   },
   settings: {
-    label: 'Server Settings',
+    label: 'Other Settings',
     emoji: '⚙️',
-    description: 'General server-wide behavior — buttons below. Verify setup stays standalone (`/verify setup`) since it involves 2 channels, a role, and long rules text — too much for one form. Shop and Staff setup live under their own categories.',
+    description: 'General server-wide behavior plus GoosDate reminders — buttons below. Verify setup stays standalone (`/verify setup`) since it involves 2 channels, a role, and long rules text — too much for one form. Shop and Staff setup live under their own categories.',
     items: [],
   },
   roles: {
     label: 'Server Role Set',
     emoji: '🎭',
     description: 'Roles the bot pings or manages automatically — buttons below.',
-    items: [],
-  },
-  goosty: {
-    label: 'Extras & Utilities',
-    emoji: '✨',
-    description: 'GoosDate reminders — buttons below.',
     items: [],
   },
   boosters: {
@@ -102,9 +95,8 @@ const CATEGORIES = {
 function buildHomeEmbed(guild) {
   const summaries = [
     '📺 **Server Channel Set** — schedule board, winners, tickets, staff notifications, boosts, transcripts, game board, private rooms',
-    '⚙️ **Server Settings** — timezone, claim time, welcome message, leveling',
+    '⚙️ **Other Settings** — timezone, claim time, welcome message, leveling, GoosDate reminders, bulk role removal',
     '🎭 **Server Role Set** — mod, admin, and game-ping roles',
-    '✨ **Extras & Utilities** — GoosDate reminders',
     '🚀 **Server Booster Set** — manage boosters and payments',
     '👥 **Staff & Payroll** — staff roster, pay requirements per role, daily goals',
     '📋 **Settings Summary** — a live snapshot of everything configured so far',
@@ -236,15 +228,6 @@ function buildStaffUserPicker(action) {
     .setCustomId(`serversetup_staffuser:${action}`)
     .setPlaceholder(`Pick who to ${action}`);
   return new ActionRowBuilder().addComponents(menu);
-}
-
-function buildExtrasButtons() {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('serversetup_extras:goosdatesetup').setLabel('GoosDate Setup').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId('serversetup_extras:goosdateon').setLabel('GoosDate ON').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('serversetup_extras:goosdateoff').setLabel('GoosDate OFF').setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId('serversetup_extras:goosdatestatus').setLabel('GoosDate Status').setStyle(ButtonStyle.Secondary),
-  );
 }
 
 function buildGoosdateChannelPicker() {
@@ -473,7 +456,7 @@ module.exports = {
     if (key === 'settings') {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
-        components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
       });
     }
 
@@ -502,13 +485,6 @@ module.exports = {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
         components: [buildStaffButtons(), buildBackButton()],
-      });
-    }
-
-    if (key === 'goosty') {
-      return interaction.update({
-        embeds: [buildCategoryEmbed(key, interaction.guild)],
-        components: [buildExtrasButtons(), buildBackButton()],
       });
     }
 
@@ -849,12 +825,12 @@ module.exports = {
       if (!res.rows.length) {
         return interaction.editReply({
           embeds: [new EmbedBuilder().setColor('#ff4444').setDescription('❌ GoosDate hasn\'t been set up yet — use GoosDate Setup first.')],
-          components: [buildExtrasButtons(), buildBackButton()],
+          components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
         });
       }
       return interaction.editReply({
         embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ GoosDate reminders are now **${enabled ? 'ON' : 'OFF'}**.`)],
-        components: [buildExtrasButtons(), buildBackButton()],
+        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
       });
     }
   },
@@ -1001,7 +977,7 @@ module.exports = {
         `✅ Removed ${role} from **${removed}** member${removed === 1 ? '' : 's'}.` +
         (failed ? `\n❌ Failed on ${failed} (likely a role hierarchy issue).` : '')
       )],
-      components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
     });
   },
 
@@ -1139,7 +1115,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ GoosDate reminders will post in <#${channelId}> and ping <@&${role.id}>.`)],
-      components: [buildExtrasButtons(), buildBackButton()],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
     });
   },
 
@@ -1620,7 +1596,7 @@ module.exports = {
       `, [interaction.guildId, enabled]);
       return interaction.editReply({
         embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Level system is now **${enabled ? 'ON' : 'OFF'}**.`)],
-        components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
       });
     }
 
@@ -1663,7 +1639,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Timezone set to **${timezone}**.`)],
-      components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
     });
   },
 
@@ -1700,7 +1676,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Ban log channel set to <#${channel.id}>.`)],
-      components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
     });
   },
 
@@ -1715,7 +1691,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Level-up announcements will post in <#${channel.id}>.`)],
-      components: [buildSettingsButtons(), buildSettingsButtons2(), buildBackButton()],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
     });
   },
 
@@ -1845,6 +1821,15 @@ function buildSettingsButtons2() {
     new ButtonBuilder().setCustomId('serversetup_gset:levelchan').setLabel('Level-Up Channel').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('serversetup_gset:leveltuning').setLabel('Level Tuning').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('serversetup_gset:bulkremoverole').setLabel('Bulk Remove Role').setStyle(ButtonStyle.Danger),
+  );
+}
+
+function buildSettingsButtons3() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_extras:goosdatesetup').setLabel('GoosDate Setup').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('serversetup_extras:goosdateon').setLabel('GoosDate ON').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('serversetup_extras:goosdateoff').setLabel('GoosDate OFF').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('serversetup_extras:goosdatestatus').setLabel('GoosDate Status').setStyle(ButtonStyle.Secondary),
   );
 }
 
