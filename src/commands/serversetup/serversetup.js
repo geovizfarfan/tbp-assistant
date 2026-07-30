@@ -68,9 +68,9 @@ const CATEGORIES = {
     ],
   },
   giveaways: {
-    label: 'Giveaway & Raffle Settings',
+    label: 'Game & Perks Settings',
     emoji: '🎁',
-    description: 'Bonus-entry and required-role libraries for giveaways, plus Wheel role bonuses — buttons below. Raffles have no separate settings; running one is `/raffle start`.',
+    description: 'Giveaway bonus/required-role libraries, Wheel role bonuses, and raffle management — buttons below.',
     items: [],
   },
   sellers: {
@@ -108,7 +108,7 @@ function buildHomeEmbed(guild) {
     '🚀 **Server Booster Set** — manage boosters and payments',
     '👥 **Staff & Payroll** — staff roster, pay requirements per role, daily goals',
     '📋 **Settings Summary** — a live snapshot of everything configured so far',
-    '🎁 **Giveaway & Raffle Settings** — bonus/required role libraries, wheel role bonuses',
+    '🎁 **Game & Perks Settings** — giveaway bonus/required roles, wheel role bonuses, raffle management',
     '💳 **Payments, Sellers & Shop** — approve sellers, shop channel setup',
     '🧩 **Panels & Embeds** — ping panels, custom embeds',
     '📌 **Sticky Notes** — the message pinned to the bottom of a channel',
