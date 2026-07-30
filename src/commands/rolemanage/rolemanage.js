@@ -43,7 +43,7 @@ module.exports = {
 async function addRole(interaction) {
   const user = interaction.options.getUser('user');
   const role = interaction.options.getRole('role');
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply();
 
   const member = await interaction.guild.members.fetch(user.id).catch(() => null);
   if (!member) return interaction.editReply(`${e('wrong')} Couldn't find that member in this server.`);
@@ -60,7 +60,7 @@ async function addRole(interaction) {
 async function removeRole(interaction) {
   const user = interaction.options.getUser('user');
   const role = interaction.options.getRole('role');
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply();
 
   const member = await interaction.guild.members.fetch(user.id).catch(() => null);
   if (!member) return interaction.editReply(`${e('wrong')} Couldn't find that member in this server.`);
