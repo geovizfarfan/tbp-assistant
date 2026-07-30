@@ -759,6 +759,19 @@ client.on('guildCreate', async (guild) => {
   } catch (e) { console.error('[GuildCreate] welcome message error:', e.message); }
 });
 
+// Sticky message manually deleted — clear the record so it doesn't get
+// reposted on the next message in that channel. Skips deletions the bot
+// itself triggered on purpose (repost cycle, /sticky edit, /sticky remove).
+client.on('messageDelete', async (message) => {
+  try {
+    if (!message.guildId) return;
+    const { wasExpected } = require('./utils/stickyDeleteTracker');
+    if (wasExpected(message.id)) return;
+    const { query } = require('./utils/database');
+    await query('DELETE FROM sticky_messages WHERE guild_id=$1 AND message_id=$2', [message.guildId, message.id]);
+  } catch (e) { /* ignore */ }
+});
+
 // Ban log
 client.on('guildBanAdd', async (ban) => {
   try { await banlogModule.handleBan(ban, client); }

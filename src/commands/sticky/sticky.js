@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const { query } = require('../../utils/database');
+const { markExpected } = require('../../utils/stickyDeleteTracker');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -68,7 +69,7 @@ module.exports = {
 
       // Delete old message
       const oldMsg = await channel.messages.fetch(sticky.message_id).catch(() => null);
-      if (oldMsg) await oldMsg.delete().catch(() => {});
+      if (oldMsg) { markExpected(oldMsg.id); await oldMsg.delete().catch(() => {}); }
 
       // Post updated message
       const embed = new EmbedBuilder().setColor(newColor).setDescription(text);
@@ -90,7 +91,7 @@ module.exports = {
 
       // Delete the actual message
       const oldMsg = await channel.messages.fetch(res.rows[0].message_id).catch(() => null);
-      if (oldMsg) await oldMsg.delete().catch(() => {});
+      if (oldMsg) { markExpected(oldMsg.id); await oldMsg.delete().catch(() => {}); }
 
       return interaction.editReply(`✅ Sticky message removed from <#${channel.id}>.`);
     }
@@ -112,7 +113,7 @@ module.exports = {
 
       // Delete old sticky message
       const oldMsg = await message.channel.messages.fetch(sticky.message_id).catch(() => null);
-      if (oldMsg) await oldMsg.delete().catch(() => {});
+      if (oldMsg) { markExpected(oldMsg.id); await oldMsg.delete().catch(() => {}); }
 
       // Repost
       const embed = new EmbedBuilder().setColor(sticky.color || '#d6c2ee').setDescription(sticky.content);
