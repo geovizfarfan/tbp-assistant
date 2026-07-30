@@ -87,7 +87,7 @@ const CATEGORIES = {
   rumble: {
     label: 'Rumble Setup',
     emoji: '⚔️',
-    description: 'RR currency, Rumble Grind panel, and the "collected all roles" achievement channel — buttons below. Full battle setup (channels, roles, rewards) and season management are more involved than fits here — use `/rr setup`, `/rs setup`, and `/rumble season` directly for those.',
+    description: 'RR currency, Rumble Grind panel, achievement channel, and full season management — buttons below. Full battle setup (channels, roles, rewards) is more involved than fits here — use `/rr setup` and `/rs setup` directly for that.',
     items: [],
   },
 };
@@ -104,7 +104,7 @@ function buildHomeEmbed(guild) {
     '💳 **Payments, Sellers & Shop** — approve sellers, shop channel setup',
     '🧩 **Panels & Embeds** — ping panels, custom embeds',
     '📌 **Sticky Notes** — the message pinned to the bottom of a channel',
-    '⚔️ **Rumble Setup** — RR currency, Grind panel, role achievement channel, active seasons',
+    '⚔️ **Rumble Setup** — RR currency, Grind panel, role achievement channel, full season management',
   ];
   return new EmbedBuilder()
     .setColor('#d6c2ee')
@@ -276,6 +276,19 @@ function buildBulkRemoveRolePicker() {
   const menu = new RoleSelectMenuBuilder()
     .setCustomId('serversetup_bulkremoverole')
     .setPlaceholder('Pick the role to strip');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+async function buildSeasonSelectMenu(guildId, customId, placeholder) {
+  const res = await query(`SELECT name FROM rr_seasons WHERE guild_id=$1 AND status='active' ORDER BY started_at DESC LIMIT 25`, [guildId]);
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(customId)
+    .setPlaceholder(placeholder);
+  if (!res.rows.length) {
+    menu.addOptions({ label: 'No active seasons', value: 'none' }).setDisabled(true);
+  } else {
+    menu.addOptions(res.rows.map(r => ({ label: r.name, value: r.name })));
+  }
   return new ActionRowBuilder().addComponents(menu);
 }
 
@@ -463,7 +476,7 @@ module.exports = {
     if (key === 'rumble') {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
-        components: [buildRumbleButtons(), buildRumbleButtons2(), buildBackButton()],
+        components: [buildRumbleButtons(), buildRumbleButtons2(), buildRumbleButtons3(), buildBackButton()],
       });
     }
 
@@ -823,9 +836,61 @@ module.exports = {
       }
       return interaction.editReply({
         embeds: [embed],
-        components: [buildRumbleButtons(), buildRumbleButtons2(), buildBackButton()],
+        components: [buildRumbleButtons(), buildRumbleButtons2(), buildRumbleButtons3(), buildBackButton()],
       });
     }
+
+    if (action === 'seasonstart') {
+      const modal = new ModalBuilder().setCustomId('serversetup_seasonstartmodal').setTitle('Start Season');
+      const nameInput = new TextInputBuilder().setCustomId('name').setLabel('Season name').setStyle(TextInputStyle.Short).setRequired(true);
+      const campaignInput = new TextInputBuilder().setCustomId('wheel_campaign').setLabel('Wheel Roles campaign (optional)').setStyle(TextInputStyle.Short).setRequired(false);
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(nameInput),
+        new ActionRowBuilder().addComponents(campaignInput),
+      );
+      return interaction.showModal(modal);
+    }
+
+    if (action === 'seasoninfo') {
+      const row = await buildSeasonSelectMenu(interaction.guildId, 'serversetup_seasoninfopick', 'Pick a season for details');
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick a season to view details:')],
+        components: [row, buildBackButton()],
+      });
+    }
+
+    if (action === 'seasonend') {
+      const row = await buildSeasonSelectMenu(interaction.guildId, 'serversetup_seasonendpick', 'Pick a season to end');
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick a season to end (this removes all its winner roles):')],
+        components: [row, buildBackButton()],
+      });
+    }
+
+    if (action === 'seasonaddchan') {
+      const row = await buildSeasonSelectMenu(interaction.guildId, 'serversetup_seasonaddchanpick', 'Pick a season');
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick which season to add a channel to:')],
+        components: [row, buildBackButton()],
+      });
+    }
+
+    if (action === 'seasonremovechan') {
+      const row = await buildSeasonSelectMenu(interaction.guildId, 'serversetup_seasonremovechanpick', 'Pick a season');
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick which season to remove a channel from:')],
+        components: [row, buildBackButton()],
+      });
+    }
+
+    if (action === 'seasonlink') {
+      const row = await buildSeasonSelectMenu(interaction.guildId, 'serversetup_seasonlinkpick', 'Pick a season');
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick which season to link (or unlink) a Wheel Roles campaign for:')],
+        components: [row, buildBackButton()],
+      });
+    }
+
 
     if (action === 'goosdatestatus') {
       const { status } = require('../goosdate/goosdate');
@@ -877,7 +942,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ "Collected all roles" announcements will post in <#${channel.id}>.`)],
-      components: [buildRumbleButtons(), buildRumbleButtons2(), buildBackButton()],
+      components: [buildRumbleButtons(), buildRumbleButtons2(), buildRumbleButtons3(), buildBackButton()],
     });
   },
 
@@ -940,6 +1005,130 @@ module.exports = {
     const { deleteEmbedCore } = require('../embed/embed');
     const result = await deleteEmbedCore(interaction, interaction.channel, messageId);
     return interaction.editReply(result);
+  },
+
+  async handleSeasonStartModal(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    const name = interaction.fields.getTextInputValue('name');
+    const wheelCampaign = interaction.fields.getTextInputValue('wheel_campaign') || null;
+    const { startSeasonCore } = require('../rumbleseasons/rumbleseasons');
+    const result = await startSeasonCore(interaction, name, wheelCampaign);
+    if (result.error) return interaction.editReply(result.error);
+    return interaction.editReply({ embeds: [result.embed] });
+  },
+
+  async handleSeasonInfoPicked(interaction) {
+    const seasonName = interaction.values[0];
+    await interaction.deferUpdate();
+    const { getSeasonInfoEmbed } = require('../rumbleseasons/rumbleseasons');
+    const embed = await getSeasonInfoEmbed(interaction, seasonName);
+    if (!embed) return interaction.editReply(`❌ No active season named **${seasonName}**.`);
+    return interaction.editReply({
+      embeds: [embed],
+      components: [buildRumbleButtons(), buildRumbleButtons2(), buildRumbleButtons3(), buildBackButton()],
+    });
+  },
+
+  async handleSeasonEndPicked(interaction) {
+    const seasonName = interaction.values[0];
+    if (seasonName === 'none') return interaction.update({ content: 'No active seasons.', embeds: [], components: [] });
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`serversetup_seasonendconfirm:${encodeURIComponent(seasonName)}`).setLabel(`Yes, end "${seasonName}"`).setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('serversetup_nav:rumble').setLabel('Cancel').setStyle(ButtonStyle.Secondary),
+    );
+    return interaction.update({
+      embeds: [new EmbedBuilder().setColor('#e74c3c').setDescription(`⚠️ Ending **${seasonName}** removes all its winner roles from every member and resets its achievements. This can't be undone. Are you sure?`)],
+      components: [row],
+    });
+  },
+
+  async handleSeasonEndConfirm(interaction) {
+    const [, encodedName] = interaction.customId.split(':');
+    const seasonName = decodeURIComponent(encodedName);
+    await interaction.deferUpdate();
+    const { endSeasonCore } = require('../rumbleseasons/rumbleseasons');
+    const result = await endSeasonCore(interaction, seasonName);
+    if (result.error) return interaction.editReply({ content: result.error, embeds: [], components: [buildRumbleButtons(), buildRumbleButtons2(), buildRumbleButtons3(), buildBackButton()] });
+    return interaction.editReply({
+      embeds: [result.embed],
+      components: [buildRumbleButtons(), buildRumbleButtons2(), buildRumbleButtons3(), buildBackButton()],
+    });
+  },
+
+  async handleSeasonAddChanPicked(interaction) {
+    const seasonName = interaction.values[0];
+    if (seasonName === 'none') return interaction.update({ content: 'No active seasons.', embeds: [], components: [] });
+
+    const menu = new ChannelSelectMenuBuilder()
+      .setCustomId(`serversetup_seasonaddchanselect:${encodeURIComponent(seasonName)}`)
+      .setPlaceholder(`Pick the channel to add to ${seasonName}`);
+    return interaction.update({
+      embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription(`Pick the channel to add to **${seasonName}**:`)],
+      components: [new ActionRowBuilder().addComponents(menu), buildBackButton()],
+    });
+  },
+
+  async handleSeasonAddChanSelected(interaction) {
+    const [, encodedName] = interaction.customId.split(':');
+    const seasonName = decodeURIComponent(encodedName);
+    const channel = interaction.channels.first();
+    await interaction.deferUpdate();
+    const { addChannelCore } = require('../rumbleseasons/rumbleseasons');
+    const result = await addChannelCore(interaction, seasonName, channel);
+    const color = result.error ? '#ff4444' : '#2ecc71';
+    return interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(color).setDescription(result.error || result.text)],
+      components: [buildRumbleButtons(), buildRumbleButtons2(), buildRumbleButtons3(), buildBackButton()],
+    });
+  },
+
+  async handleSeasonRemoveChanPicked(interaction) {
+    const seasonName = interaction.values[0];
+    if (seasonName === 'none') return interaction.update({ content: 'No active seasons.', embeds: [], components: [] });
+
+    const menu = new ChannelSelectMenuBuilder()
+      .setCustomId(`serversetup_seasonremovechanselect:${encodeURIComponent(seasonName)}`)
+      .setPlaceholder(`Pick the channel to remove from ${seasonName}`);
+    return interaction.update({
+      embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription(`Pick the channel to remove from **${seasonName}**:`)],
+      components: [new ActionRowBuilder().addComponents(menu), buildBackButton()],
+    });
+  },
+
+  async handleSeasonRemoveChanSelected(interaction) {
+    const [, encodedName] = interaction.customId.split(':');
+    const seasonName = decodeURIComponent(encodedName);
+    const channel = interaction.channels.first();
+    await interaction.deferUpdate();
+    const { removeChannelCore } = require('../rumbleseasons/rumbleseasons');
+    const result = await removeChannelCore(interaction, seasonName, channel);
+    const color = result.error ? '#ff4444' : '#2ecc71';
+    return interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(color).setDescription(result.error || result.text)],
+      components: [buildRumbleButtons(), buildRumbleButtons2(), buildRumbleButtons3(), buildBackButton()],
+    });
+  },
+
+  async handleSeasonLinkPicked(interaction) {
+    const seasonName = interaction.values[0];
+    if (seasonName === 'none') return interaction.update({ content: 'No active seasons.', embeds: [], components: [] });
+
+    const modal = new ModalBuilder().setCustomId(`serversetup_seasonlinkmodal:${encodeURIComponent(seasonName)}`).setTitle(`Link Campaign — ${seasonName}`.slice(0, 45));
+    const campaignInput = new TextInputBuilder().setCustomId('wheel_campaign').setLabel('Campaign name (leave blank to unlink)').setStyle(TextInputStyle.Short).setRequired(false);
+    modal.addComponents(new ActionRowBuilder().addComponents(campaignInput));
+    return interaction.showModal(modal);
+  },
+
+  async handleSeasonLinkModal(interaction) {
+    const [, encodedName] = interaction.customId.split(':');
+    const seasonName = decodeURIComponent(encodedName);
+    await interaction.deferReply({ ephemeral: true });
+    const wheelCampaign = interaction.fields.getTextInputValue('wheel_campaign') || null;
+    const { linkSeasonCore } = require('../rumbleseasons/rumbleseasons');
+    const result = await linkSeasonCore(interaction, seasonName, wheelCampaign);
+    if (result.error) return interaction.editReply(result.error);
+    return interaction.editReply(result.text);
   },
 
   async handleBulkRemoveRolePicked(interaction) {
@@ -1628,7 +1817,7 @@ module.exports = {
       if (!isGuildAllowedSins(interaction.guildId)) {
         return interaction.editReply({
           embeds: [new EmbedBuilder().setColor('#ff4444').setDescription('❌ Real Sins are only available in specific approved servers. Use "RR: Custom Currency" instead.')],
-          components: [buildRumbleButtons(), buildRumbleButtons2(), buildBackButton()],
+          components: [buildRumbleButtons(), buildRumbleButtons2(), buildRumbleButtons3(), buildBackButton()],
         });
       }
       await query(`
@@ -1637,7 +1826,7 @@ module.exports = {
       `, [interaction.guildId]);
       return interaction.editReply({
         embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription('✅ Rumble Royale now uses real Sins.')],
-        components: [buildRumbleButtons(), buildRumbleButtons2(), buildBackButton()],
+        components: [buildRumbleButtons(), buildRumbleButtons2(), buildRumbleButtons3(), buildBackButton()],
       });
     }
 
@@ -1867,6 +2056,17 @@ function buildRumbleButtons() {
 function buildRumbleButtons2() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('serversetup_gset:seasonlist').setLabel('List Active Seasons').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_gset:seasonstart').setLabel('Start Season').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('serversetup_gset:seasoninfo').setLabel('Season Info').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_gset:seasonend').setLabel('End Season').setStyle(ButtonStyle.Danger),
+  );
+}
+
+function buildRumbleButtons3() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_gset:seasonaddchan').setLabel('Add Channel to Season').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('serversetup_gset:seasonremovechan').setLabel('Remove Channel from Season').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('serversetup_gset:seasonlink').setLabel('Link Wheel Campaign').setStyle(ButtonStyle.Secondary),
   );
 }
 

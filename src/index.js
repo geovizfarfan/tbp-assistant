@@ -331,6 +331,38 @@ client.on('interactionCreate', async (interaction) => {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleBulkRemoveRolePicked(interaction);
   }
+  if (interaction.isStringSelectMenu() && interaction.customId === 'serversetup_seasoninfopick') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleSeasonInfoPicked(interaction);
+  }
+  if (interaction.isStringSelectMenu() && interaction.customId === 'serversetup_seasonendpick') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleSeasonEndPicked(interaction);
+  }
+  if (interaction.isStringSelectMenu() && interaction.customId === 'serversetup_seasonaddchanpick') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleSeasonAddChanPicked(interaction);
+  }
+  if (interaction.isStringSelectMenu() && interaction.customId === 'serversetup_seasonremovechanpick') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleSeasonRemoveChanPicked(interaction);
+  }
+  if (interaction.isStringSelectMenu() && interaction.customId === 'serversetup_seasonlinkpick') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleSeasonLinkPicked(interaction);
+  }
+  if (interaction.isChannelSelectMenu() && interaction.customId.startsWith('serversetup_seasonaddchanselect:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleSeasonAddChanSelected(interaction);
+  }
+  if (interaction.isChannelSelectMenu() && interaction.customId.startsWith('serversetup_seasonremovechanselect:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleSeasonRemoveChanSelected(interaction);
+  }
+  if (interaction.isButton() && interaction.customId.startsWith('serversetup_seasonendconfirm:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleSeasonEndConfirm(interaction);
+  }
   if (interaction.isRoleSelectMenu() && interaction.customId === 'serversetup_wheelremoverole') {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleWheelRemoveRolePicked(interaction);
@@ -499,6 +531,14 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isModalSubmit() && interaction.customId.startsWith('serversetup_bulkremovemodal:')) {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleBulkRemoveSpecificModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId === 'serversetup_seasonstartmodal') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleSeasonStartModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('serversetup_seasonlinkmodal:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleSeasonLinkModal(interaction);
   }
   if (interaction.isModalSubmit() && interaction.customId === 'serversetup_raffleendmodal') {
     const serverSetupModule = require('./commands/serversetup/serversetup');

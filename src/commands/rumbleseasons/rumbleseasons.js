@@ -8,6 +8,148 @@ async function getLogChannel(client, guildId, type = 'admin') {
   return id ? (await client.channels.fetch(id).catch(() => null)) : null;
 }
 
+async function startSeasonCore(interaction, name, wheelCampaignName) {
+  const existing = await query('SELECT id FROM rr_seasons WHERE guild_id=$1 AND name=$2 AND status=$3', [interaction.guildId, name, 'active']);
+  if (existing.rows.length) {
+    return { error: `❌ A season named **${name}** is already active. Pick a different name, or end it first.` };
+  }
+
+  let wheelCampaignId = null;
+  if (wheelCampaignName) {
+    const campRes = await query(`SELECT id FROM wheel_role_campaigns WHERE guild_id=$1 AND name=$2 AND status='active'`, [interaction.guildId, wheelCampaignName]);
+    if (!campRes.rows.length) return { error: `❌ No active Wheel Roles campaign named **${wheelCampaignName}**. Create one first with \`/wheel roles create\`, or leave this blank.` };
+    wheelCampaignId = campRes.rows[0].id;
+  }
+
+  await query('INSERT INTO rr_seasons (guild_id, name, status, linked_wheel_campaign_id) VALUES ($1, $2, $3, $4) RETURNING id', [interaction.guildId, name, 'active', wheelCampaignId]);
+
+  const adminLog = await getLogChannel(interaction.client, interaction.guildId, 'admin');
+  const embed = new EmbedBuilder().setColor('#d6c2ee')
+    .setTitle('<:rumble:1522372419338375299> New Season Started!')
+    .setDescription(`**${name}** has begun! Add channels to it from Rumble Setup.\n\nOther active seasons keep running independently — this doesn't affect them.${wheelCampaignName ? `\n\n🎡 Completing this season will auto-enter members into Wheel Roles campaign **${wheelCampaignName}**.` : ''}`)
+    .setTimestamp().setFooter({ text: interaction.guild.name });
+  if (adminLog) await adminLog.send({ embeds: [embed] }).catch(() => {});
+  return { embed };
+}
+
+async function linkSeasonCore(interaction, seasonName, wheelCampaignName) {
+  const seasonRes = await query('SELECT * FROM rr_seasons WHERE guild_id=$1 AND name=$2 AND status=$3', [interaction.guildId, seasonName, 'active']);
+  const season = seasonRes.rows[0];
+  if (!season) return { error: `❌ No active season named **${seasonName}**.` };
+
+  if (!wheelCampaignName) {
+    await query('UPDATE rr_seasons SET linked_wheel_campaign_id = NULL WHERE id = $1', [season.id]);
+    return { text: `✅ **${seasonName}** is no longer linked to a Wheel Roles campaign.` };
+  }
+
+  const campRes = await query(`SELECT id FROM wheel_role_campaigns WHERE guild_id=$1 AND name=$2 AND status='active'`, [interaction.guildId, wheelCampaignName]);
+  if (!campRes.rows.length) return { error: `❌ No active Wheel Roles campaign named **${wheelCampaignName}**.` };
+
+  await query('UPDATE rr_seasons SET linked_wheel_campaign_id = $1 WHERE id = $2', [campRes.rows[0].id, season.id]);
+  return { text: `✅ **${seasonName}** now auto-enters members into Wheel Roles campaign **${wheelCampaignName}** when they complete it.` };
+}
+
+async function addChannelCore(interaction, seasonName, channel) {
+  const seasonRes = await query('SELECT * FROM rr_seasons WHERE guild_id=$1 AND name=$2 AND status=$3', [interaction.guildId, seasonName, 'active']);
+  const season = seasonRes.rows[0];
+  if (!season) return { error: `❌ No active season named **${seasonName}**.` };
+
+  const rrCfg = await query('SELECT winner_role_id FROM rr_channel_config WHERE channel_id = $1 AND winner_role_id IS NOT NULL', [channel.id]);
+  const rsCfg = rrCfg.rows.length ? null : await query('SELECT winner_role_id FROM rumble_slaughter_config WHERE channel_id = $1 AND winner_role_id IS NOT NULL', [channel.id]);
+
+  if (!rrCfg.rows.length && !rsCfg?.rows.length) {
+    return { error: `❌ <#${channel.id}> needs a winner role configured. Run \`/rr setup\` or \`/rs setup\` first.` };
+  }
+
+  const source = rrCfg.rows.length ? 'rr' : 'rs';
+  await query('INSERT INTO rr_season_channels (season_id, channel_id, guild_id, source) VALUES ($1, $2, $3, $4) ON CONFLICT (season_id, channel_id) DO UPDATE SET source = $4',
+    [season.id, channel.id, interaction.guildId, source]);
+  return { text: `<a:trophies:1512912823062364281> <#${channel.id}> (${source === 'rr' ? 'Rumble Royale' : 'Rumble Slaughter'}) added to season **${season.name}**!` };
+}
+
+async function removeChannelCore(interaction, seasonName, channel) {
+  const seasonRes = await query('SELECT * FROM rr_seasons WHERE guild_id=$1 AND name=$2 AND status=$3', [interaction.guildId, seasonName, 'active']);
+  const season = seasonRes.rows[0];
+  if (!season) return { error: `❌ No active season named **${seasonName}**.` };
+
+  await query('DELETE FROM rr_season_channels WHERE season_id = $1 AND channel_id = $2', [season.id, channel.id]);
+  return { text: `<#${channel.id}> removed from season **${season.name}**.` };
+}
+
+async function endSeasonCore(interaction, seasonName) {
+  const seasonRes = await query('SELECT * FROM rr_seasons WHERE guild_id=$1 AND name=$2 AND status=$3', [interaction.guildId, seasonName, 'active']);
+  const season = seasonRes.rows[0];
+  if (!season) return { error: `❌ No active season named **${seasonName}**.` };
+
+  const chRes = await query(
+    `SELECT rc.winner_role_id FROM rr_season_channels sc
+     JOIN rr_channel_config rc ON rc.channel_id = sc.channel_id
+     WHERE sc.season_id = $1 AND rc.winner_role_id IS NOT NULL`, [season.id]
+  );
+  const roleIds = [...new Set(chRes.rows.map(r => r.winner_role_id))];
+  let removed = 0;
+  if (roleIds.length) {
+    const members = await interaction.guild.members.fetch().catch(() => null);
+    if (members) {
+      for (const [, member] of members) {
+        for (const roleId of roleIds) {
+          if (member.roles.cache.has(roleId)) {
+            await member.roles.remove(roleId).catch(() => {});
+            removed++;
+          }
+        }
+      }
+    }
+  }
+
+  await query('UPDATE rr_seasons SET status = $1, ended_at = NOW() WHERE id = $2', ['ended', season.id]);
+  await query('DELETE FROM rr_achievements WHERE season_id = $1', [season.id]);
+
+  const embed = new EmbedBuilder().setColor('#5b209a')
+    .setTitle('<:rumble:1522372419338375299> Season Ended!')
+    .setDescription(`**${season.name}** ended.\n<:member:1512912827424309278> **${removed}** roles removed.\n<a:again:1522458630795034694> This season's achievements reset — other active seasons are unaffected.`)
+    .setTimestamp().setFooter({ text: interaction.guild.name });
+
+  const adminLog = await getLogChannel(interaction.client, interaction.guildId, 'admin');
+  if (adminLog) await adminLog.send({ embeds: [embed] }).catch(() => {});
+  return { embed };
+}
+
+async function getSeasonInfoEmbed(interaction, seasonName) {
+  const seasonRes = await query('SELECT * FROM rr_seasons WHERE guild_id=$1 AND name=$2 AND status=$3', [interaction.guildId, seasonName, 'active']);
+  const season = seasonRes.rows[0];
+  if (!season) return null;
+
+  const chRes = await query(
+    `SELECT sc.channel_id, rc.winner_role_id, 'Rumble Royale' AS source_label
+     FROM rr_season_channels sc JOIN rr_channel_config rc ON rc.channel_id = sc.channel_id
+     WHERE sc.season_id = $1 AND sc.source = 'rr'
+     UNION ALL
+     SELECT sc.channel_id, rs.winner_role_id, 'Rumble Slaughter' AS source_label
+     FROM rr_season_channels sc JOIN rumble_slaughter_config rs ON rs.channel_id = sc.channel_id
+     WHERE sc.season_id = $1 AND sc.source = 'rs'`, [season.id]
+  );
+  const achRes = await query(
+    'SELECT user_id, completions FROM rr_achievements WHERE season_id = $1 ORDER BY completions DESC LIMIT 10',
+    [season.id]
+  );
+
+  const channelLines = chRes.rows.length
+    ? chRes.rows.map(r => `<#${r.channel_id}> — <@&${r.winner_role_id}> *(${r.source_label})*`).join('\n')
+    : 'No channels added yet.';
+  const achieveLines = achRes.rows.length
+    ? achRes.rows.map((r, i) => `**${i+1}.** <@${r.user_id}> — ${r.completions} completion(s)`).join('\n')
+    : 'No completions yet.';
+
+  return new EmbedBuilder().setColor('#d6c2ee')
+    .setTitle(`<:rumble:1522372419338375299> Season: ${season.name}`)
+    .addFields(
+      { name: 'Channels', value: channelLines, inline: false },
+      { name: 'Top Completions', value: achieveLines, inline: false },
+    )
+    .setFooter({ text: interaction.guild.name });
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('rumble')
@@ -60,148 +202,55 @@ module.exports = {
       `SELECT name FROM rr_seasons WHERE guild_id = $1 AND status = 'active' AND name ILIKE $2 ORDER BY started_at DESC LIMIT 25`,
       [interaction.guild.id, `%${focused.value}%`]
     );
-    await interaction.respond(res.rows.map(r => ({ name: r.name, value: r.name })));
+    return interaction.respond(res.rows.map(r => ({ name: r.name, value: r.name })));
   },
 
   async execute(interaction) {
+    const sub = interaction.options.getSubcommand();
+
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
         interaction.user.id !== process.env.OWNER_ID) {
       return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
     }
-
-    const sub = interaction.options.getSubcommand();
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply();
 
     if (sub === 'start') {
       const name = interaction.options.getString('name');
       const wheelCampaignName = interaction.options.getString('wheel_campaign');
-
-      const existing = await query('SELECT id FROM rr_seasons WHERE guild_id=$1 AND name=$2 AND status=$3', [interaction.guild.id, name, 'active']);
-      if (existing.rows.length) {
-        return interaction.editReply(`❌ A season named **${name}** is already active. Pick a different name, or end it first.`);
-      }
-
-      let wheelCampaignId = null;
-      if (wheelCampaignName) {
-        const campRes = await query(`SELECT id FROM wheel_role_campaigns WHERE guild_id=$1 AND name=$2 AND status='active'`, [interaction.guild.id, wheelCampaignName]);
-        if (!campRes.rows.length) return interaction.editReply(`❌ No active Wheel Roles campaign named **${wheelCampaignName}**. Create one first with \`/wheel roles create\`, or leave this blank.`);
-        wheelCampaignId = campRes.rows[0].id;
-      }
-
-      const insertRes = await query('INSERT INTO rr_seasons (guild_id, name, status, linked_wheel_campaign_id) VALUES ($1, $2, $3, $4) RETURNING id', [interaction.guild.id, name, 'active', wheelCampaignId]);
-
-      const adminLog = await getLogChannel(interaction.client, interaction.guild.id, 'admin');
-      const embed = new EmbedBuilder().setColor('#d6c2ee')
-        .setTitle('<:rumble:1522372419338375299> New Season Started!')
-        .setDescription(`**${name}** has begun! Use \`/rumble season add season:"${name}"\` to add channels.\n\nOther active seasons keep running independently — this doesn't affect them.${wheelCampaignName ? `\n\n🎡 Completing this season will auto-enter members into Wheel Roles campaign **${wheelCampaignName}**.` : ''}`)
-        .setTimestamp().setFooter({ text: interaction.guild.name });
-      if (adminLog) await adminLog.send({ embeds: [embed] }).catch(() => {});
-      return interaction.editReply({ embeds: [embed] });
+      const result = await startSeasonCore(interaction, name, wheelCampaignName);
+      if (result.error) return interaction.editReply(result.error);
+      return interaction.editReply({ embeds: [result.embed] });
     }
 
     if (sub === 'link') {
       const seasonName = interaction.options.getString('season');
       const wheelCampaignName = interaction.options.getString('wheel_campaign');
-
-      const seasonRes = await query('SELECT * FROM rr_seasons WHERE guild_id=$1 AND name=$2 AND status=$3', [interaction.guild.id, seasonName, 'active']);
-      const season = seasonRes.rows[0];
-      if (!season) return interaction.editReply(`❌ No active season named **${seasonName}**.`);
-
-      if (!wheelCampaignName) {
-        await query('UPDATE rr_seasons SET linked_wheel_campaign_id = NULL WHERE id = $1', [season.id]);
-        return interaction.editReply(`✅ **${seasonName}** is no longer linked to a Wheel Roles campaign.`);
-      }
-
-      const campRes = await query(`SELECT id FROM wheel_role_campaigns WHERE guild_id=$1 AND name=$2 AND status='active'`, [interaction.guild.id, wheelCampaignName]);
-      if (!campRes.rows.length) return interaction.editReply(`❌ No active Wheel Roles campaign named **${wheelCampaignName}**.`);
-
-      await query('UPDATE rr_seasons SET linked_wheel_campaign_id = $1 WHERE id = $2', [campRes.rows[0].id, season.id]);
-      return interaction.editReply(`✅ **${seasonName}** now auto-enters members into Wheel Roles campaign **${wheelCampaignName}** when they complete it.`);
+      const result = await linkSeasonCore(interaction, seasonName, wheelCampaignName);
+      if (result.error) return interaction.editReply(result.error);
+      return interaction.editReply(result.text);
     }
 
     if (sub === 'add') {
       const seasonName = interaction.options.getString('season');
       const channel = interaction.options.getChannel('channel');
-
-      const seasonRes = await query('SELECT * FROM rr_seasons WHERE guild_id=$1 AND name=$2 AND status=$3', [interaction.guild.id, seasonName, 'active']);
-      const season = seasonRes.rows[0];
-      if (!season) return interaction.editReply(`❌ No active season named **${seasonName}**.`);
-
-      // Check RR first, then fall back to RS — a season can mix channels from both
-      const rrCfg = await query(
-        'SELECT winner_role_id FROM rr_channel_config WHERE channel_id = $1 AND winner_role_id IS NOT NULL',
-        [channel.id]
-      );
-      const rsCfg = rrCfg.rows.length ? null : await query(
-        'SELECT winner_role_id FROM rumble_slaughter_config WHERE channel_id = $1 AND winner_role_id IS NOT NULL',
-        [channel.id]
-      );
-
-      if (!rrCfg.rows.length && !rsCfg?.rows.length) {
-        return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#ff4444')
-          .setDescription(`❌ <#${channel.id}> needs a winner role configured. Run \`/rr setup\` or \`/rs setup\` first.`)]});
-      }
-
-      const source = rrCfg.rows.length ? 'rr' : 'rs';
-
-      await query('INSERT INTO rr_season_channels (season_id, channel_id, guild_id, source) VALUES ($1, $2, $3, $4) ON CONFLICT (season_id, channel_id) DO UPDATE SET source = $4',
-        [season.id, channel.id, interaction.guild.id, source]);
-      return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
-        .setDescription(`<a:trophies:1512912823062364281> <#${channel.id}> (${source === 'rr' ? 'Rumble Royale' : 'Rumble Slaughter'}) added to season **${season.name}**!`)]});
+      const result = await addChannelCore(interaction, seasonName, channel);
+      if (result.error) return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#ff4444').setDescription(result.error)] });
+      return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription(result.text)] });
     }
 
     if (sub === 'remove') {
       const seasonName = interaction.options.getString('season');
       const channel = interaction.options.getChannel('channel');
-
-      const seasonRes = await query('SELECT * FROM rr_seasons WHERE guild_id=$1 AND name=$2 AND status=$3', [interaction.guild.id, seasonName, 'active']);
-      const season = seasonRes.rows[0];
-      if (!season) return interaction.editReply(`❌ No active season named **${seasonName}**.`);
-
-      await query('DELETE FROM rr_season_channels WHERE season_id = $1 AND channel_id = $2', [season.id, channel.id]);
-      return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
-        .setDescription(`<#${channel.id}> removed from season **${season.name}**.`)]});
+      const result = await removeChannelCore(interaction, seasonName, channel);
+      if (result.error) return interaction.editReply(result.error);
+      return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription(result.text)] });
     }
 
     if (sub === 'end') {
       const seasonName = interaction.options.getString('season');
-
-      const seasonRes = await query('SELECT * FROM rr_seasons WHERE guild_id=$1 AND name=$2 AND status=$3', [interaction.guild.id, seasonName, 'active']);
-      const season = seasonRes.rows[0];
-      if (!season) return interaction.editReply(`❌ No active season named **${seasonName}**.`);
-
-      const chRes = await query(
-        `SELECT rc.winner_role_id FROM rr_season_channels sc
-         JOIN rr_channel_config rc ON rc.channel_id = sc.channel_id
-         WHERE sc.season_id = $1 AND rc.winner_role_id IS NOT NULL`, [season.id]
-      );
-      const roleIds = [...new Set(chRes.rows.map(r => r.winner_role_id))];
-      let removed = 0;
-      if (roleIds.length) {
-        const members = await interaction.guild.members.fetch().catch(() => null);
-        if (members) {
-          for (const [, member] of members) {
-            for (const roleId of roleIds) {
-              if (member.roles.cache.has(roleId)) {
-                await member.roles.remove(roleId).catch(() => {});
-                removed++;
-              }
-            }
-          }
-        }
-      }
-
-      await query('UPDATE rr_seasons SET status = $1, ended_at = NOW() WHERE id = $2', ['ended', season.id]);
-      await query('DELETE FROM rr_achievements WHERE season_id = $1', [season.id]);
-
-      const embed = new EmbedBuilder().setColor('#5b209a')
-        .setTitle('<:rumble:1522372419338375299> Season Ended!')
-        .setDescription(`**${season.name}** ended.\n<:member:1512912827424309278> **${removed}** roles removed.\n<a:again:1522458630795034694> This season's achievements reset — other active seasons are unaffected.`)
-        .setTimestamp().setFooter({ text: interaction.guild.name });
-
-      const adminLog = await getLogChannel(interaction.client, interaction.guild.id, 'admin');
-      if (adminLog) await adminLog.send({ embeds: [embed] }).catch(() => {});
-      return interaction.editReply({ embeds: [embed] });
+      const result = await endSeasonCore(interaction, seasonName);
+      if (result.error) return interaction.editReply(result.error);
+      return interaction.editReply({ embeds: [result.embed] });
     }
 
     if (sub === 'list') {
@@ -224,7 +273,6 @@ module.exports = {
       const seasonName = interaction.options.getString('season');
 
       if (!seasonName) {
-        // No season specified — same as list
         const res = await query(
           `SELECT s.*, COUNT(DISTINCT sc.channel_id) AS channel_count
            FROM rr_seasons s LEFT JOIN rr_season_channels sc ON sc.season_id = s.id
@@ -239,38 +287,16 @@ module.exports = {
           .setDescription(lines + '\n\nUse `/rumble season info season:"..."` for details on one.')]});
       }
 
-      const seasonRes = await query('SELECT * FROM rr_seasons WHERE guild_id=$1 AND name=$2 AND status=$3', [interaction.guild.id, seasonName, 'active']);
-      const season = seasonRes.rows[0];
-      if (!season) return interaction.editReply(`❌ No active season named **${seasonName}**.`);
-
-      const chRes = await query(
-        `SELECT sc.channel_id, rc.winner_role_id, 'Rumble Royale' AS source_label
-         FROM rr_season_channels sc JOIN rr_channel_config rc ON rc.channel_id = sc.channel_id
-         WHERE sc.season_id = $1 AND sc.source = 'rr'
-         UNION ALL
-         SELECT sc.channel_id, rs.winner_role_id, 'Rumble Slaughter' AS source_label
-         FROM rr_season_channels sc JOIN rumble_slaughter_config rs ON rs.channel_id = sc.channel_id
-         WHERE sc.season_id = $1 AND sc.source = 'rs'`, [season.id]
-      );
-      const achRes = await query(
-        'SELECT user_id, completions FROM rr_achievements WHERE season_id = $1 ORDER BY completions DESC LIMIT 10',
-        [season.id]
-      );
-
-      const channelLines = chRes.rows.length
-        ? chRes.rows.map(r => `<#${r.channel_id}> — <@&${r.winner_role_id}> *(${r.source_label})*`).join('\n')
-        : 'No channels added yet.';
-      const achieveLines = achRes.rows.length
-        ? achRes.rows.map((r, i) => `**${i+1}.** <@${r.user_id}> — ${r.completions} completion(s)`).join('\n')
-        : 'No completions yet.';
-
-      return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee')
-        .setTitle(`<:rumble:1522372419338375299> Season: ${season.name}`)
-        .addFields(
-          { name: 'Channels', value: channelLines, inline: false },
-          { name: 'Top Completions', value: achieveLines, inline: false },
-        )
-        .setFooter({ text: interaction.guild.name })]});
+      const embed = await getSeasonInfoEmbed(interaction, seasonName);
+      if (!embed) return interaction.editReply(`❌ No active season named **${seasonName}**.`);
+      return interaction.editReply({ embeds: [embed] });
     }
   },
 };
+
+module.exports.startSeasonCore = startSeasonCore;
+module.exports.linkSeasonCore = linkSeasonCore;
+module.exports.addChannelCore = addChannelCore;
+module.exports.removeChannelCore = removeChannelCore;
+module.exports.endSeasonCore = endSeasonCore;
+module.exports.getSeasonInfoEmbed = getSeasonInfoEmbed;
