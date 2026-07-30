@@ -80,9 +80,15 @@ const CATEGORIES = {
     items: [],
   },
   panels: {
-    label: 'Panels & Sticky Content',
+    label: 'Panels & Embeds',
     emoji: '🧩',
-    description: 'Sticky notes and ping panels — buttons below. Role panels and ticket panels involve adding items one at a time (roles, ticket types), which is an ongoing management flow rather than a single setup step — use `/rolepanel` and `/ticket panel` directly for those.',
+    description: 'Ping panels and custom embeds — buttons below. Role panels and ticket panels involve adding items one at a time (roles, ticket types), which is an ongoing management flow rather than a single setup step — use `/rolepanel` and `/ticket panel` directly for those.',
+    items: [],
+  },
+  sticky: {
+    label: 'Sticky Notes',
+    emoji: '📌',
+    description: 'The message that stays pinned to the bottom of a channel — buttons below.',
     items: [],
   },
   rumble: {
@@ -104,7 +110,8 @@ function buildHomeEmbed(guild) {
     '📋 **Settings Summary** — a live snapshot of everything configured so far',
     '🎁 **Giveaway & Raffle Settings** — bonus/required role libraries, wheel role bonuses',
     '💳 **Payments, Sellers & Shop** — approve sellers, shop channel setup',
-    '🧩 **Panels & Sticky Content** — sticky messages, ping panels',
+    '🧩 **Panels & Embeds** — ping panels, custom embeds',
+    '📌 **Sticky Notes** — the message pinned to the bottom of a channel',
     '⚔️ **Rumble Setup** — RR currency (Sins or custom)',
   ];
   return new EmbedBuilder()
@@ -388,10 +395,15 @@ function buildFulfillChannelPicker(shopChannelId) {
 
 function buildPanelsButtons() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('serversetup_panels:stickyset').setLabel('Set Sticky').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('serversetup_panels:stickyremove').setLabel('Remove Sticky').setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId('serversetup_panels:pingpost').setLabel('Post Ping Panel').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('serversetup_panels:pingremove').setLabel('Remove Ping Panel').setStyle(ButtonStyle.Danger),
+  );
+}
+
+function buildStickyButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_panels:stickyset').setLabel('Set Sticky').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('serversetup_panels:stickyremove').setLabel('Remove Sticky').setStyle(ButtonStyle.Danger),
   );
 }
 
@@ -517,6 +529,13 @@ module.exports = {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
         components: [buildPanelsButtons(), buildPanelsButtons2(), buildBackButton()],
+      });
+    }
+
+    if (key === 'sticky') {
+      return interaction.update({
+        embeds: [buildCategoryEmbed(key, interaction.guild)],
+        components: [buildStickyButtons(), buildBackButton()],
       });
     }
 
@@ -1291,7 +1310,7 @@ module.exports = {
       const msg = res.rows.length ? `✅ Sticky message removed from this channel.` : `❌ No sticky message found in this channel.`;
       return interaction.editReply({
         embeds: [new EmbedBuilder().setColor(res.rows.length ? '#2ecc71' : '#ff4444').setDescription(msg)],
-        components: [buildPanelsButtons(), buildPanelsButtons2(), buildBackButton()],
+        components: [buildStickyButtons(), buildBackButton()],
       });
     }
 
