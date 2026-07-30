@@ -12,14 +12,14 @@ module.exports = {
       .addStringOption(o => o.setName('color').setDescription('Embed color hex (default: #d6c2ee)'))
       .addStringOption(o => o.setName('title').setDescription('Optional embed title')))
     .addSubcommand(sub => sub
-      .setName('remove')
-      .setDescription('Remove the sticky message from the current channel'))
-    .addSubcommand(sub => sub
       .setName('edit')
       .setDescription('Edit the sticky message in the current channel')
       .addStringOption(o => o.setName('message').setDescription('New message content').setRequired(true))
       .addStringOption(o => o.setName('title').setDescription('New title (leave empty to keep current)'))
-      .addStringOption(o => o.setName('color').setDescription('New embed color hex'))),
+      .addStringOption(o => o.setName('color').setDescription('New embed color hex')))
+    .addSubcommand(sub => sub
+      .setName('remove')
+      .setDescription('Remove the sticky message from the current channel')),
 
   async execute(interaction) {
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
@@ -60,7 +60,7 @@ module.exports = {
       const title = interaction.options.getString('title');
 
       const res = await query('SELECT * FROM sticky_messages WHERE guild_id = $1 AND channel_id = $2', [interaction.guild.id, channel.id]);
-      if (!res.rows.length) return interaction.editReply('❌ No sticky message found in this channel. Use `/sticky set` first.');
+      if (!res.rows.length) return interaction.editReply('❌ No sticky message found in this channel. Set one up via `/server-setup` → Panels & Sticky Content first.');
 
       const sticky = res.rows[0];
       const newColor = color || sticky.color;
