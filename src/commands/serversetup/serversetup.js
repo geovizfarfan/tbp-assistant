@@ -387,6 +387,14 @@ function buildPanelsButtons() {
   );
 }
 
+function buildPanelsButtons2() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_panels:embedlist').setLabel('List Embeds').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_panels:embedrepost').setLabel('Repost Embed').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_panels:embeddelete').setLabel('Delete Embed').setStyle(ButtonStyle.Danger),
+  );
+}
+
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -500,7 +508,7 @@ module.exports = {
     if (key === 'panels') {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
-        components: [buildPanelsButtons(), buildBackButton()],
+        components: [buildPanelsButtons(), buildPanelsButtons2(), buildBackButton()],
       });
     }
 
@@ -847,6 +855,23 @@ module.exports = {
       new ActionRowBuilder().addComponents(colorInput),
     );
     return interaction.showModal(modal);
+  },
+
+  async handleEmbedRepostModal(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    const id = parseInt(interaction.fields.getTextInputValue('id'), 10);
+    if (isNaN(id)) return interaction.editReply('❌ Embed ID must be a number.');
+    const { repostEmbedCore } = require('../embed/embed');
+    const result = await repostEmbedCore(interaction, id);
+    return interaction.editReply(result);
+  },
+
+  async handleEmbedDeleteModal(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    const messageId = interaction.fields.getTextInputValue('message_id').trim();
+    const { deleteEmbedCore } = require('../embed/embed');
+    const result = await deleteEmbedCore(interaction, interaction.channel, messageId);
+    return interaction.editReply(result);
   },
 
   async handleBulkRemoveRolePicked(interaction) {
@@ -1239,7 +1264,7 @@ module.exports = {
       const msg = res.rows.length ? `✅ Sticky message removed from this channel.` : `❌ No sticky message found in this channel.`;
       return interaction.editReply({
         embeds: [new EmbedBuilder().setColor(res.rows.length ? '#2ecc71' : '#ff4444').setDescription(msg)],
-        components: [buildPanelsButtons(), buildBackButton()],
+        components: [buildPanelsButtons(), buildPanelsButtons2(), buildBackButton()],
       });
     }
 
@@ -1248,6 +1273,39 @@ module.exports = {
         embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the role this panel gives/removes:')],
         components: [buildPingRolePicker(), buildBackButton()],
       });
+    }
+
+    if (action === 'embedlist') {
+      await interaction.deferUpdate();
+      const countRes = await query('SELECT COUNT(*) FROM custom_embeds WHERE guild_id = $1', [interaction.guildId]);
+      const total = parseInt(countRes.rows[0].count);
+      if (!total) {
+        return interaction.editReply({
+          embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('No custom embeds tracked yet — only ones posted after the tracking update will show up here.')],
+          components: [buildPanelsButtons(), buildPanelsButtons2(), buildBackButton()],
+        });
+      }
+      const res = await query('SELECT * FROM custom_embeds WHERE guild_id = $1 ORDER BY created_at DESC LIMIT 15', [interaction.guildId]);
+      const lines = res.rows.map(r => `\`#${r.id}\` ${r.title ? `**${r.title}**` : '*(no title)*'} — <#${r.channel_id}>`).join('\n');
+      return interaction.editReply({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setTitle('📋 Recent Custom Embeds').setDescription(lines)
+          .setFooter({ text: `Showing latest 15 of ${total} • use /embed list for more pages` })],
+        components: [buildPanelsButtons(), buildPanelsButtons2(), buildBackButton()],
+      });
+    }
+
+    if (action === 'embedrepost') {
+      const modal = new ModalBuilder().setCustomId('serversetup_embedrepostmodal').setTitle('Repost Embed');
+      const idInput = new TextInputBuilder().setCustomId('id').setLabel('Embed ID (see List Embeds)').setStyle(TextInputStyle.Short).setRequired(true);
+      modal.addComponents(new ActionRowBuilder().addComponents(idInput));
+      return interaction.showModal(modal);
+    }
+
+    if (action === 'embeddelete') {
+      const modal = new ModalBuilder().setCustomId('serversetup_embeddeletemodal').setTitle('Delete Embed');
+      const msgIdInput = new TextInputBuilder().setCustomId('message_id').setLabel('Message ID of the embed to delete').setStyle(TextInputStyle.Short).setRequired(true);
+      modal.addComponents(new ActionRowBuilder().addComponents(msgIdInput));
+      return interaction.showModal(modal);
     }
 
     if (action === 'pingremove') {
@@ -1329,7 +1387,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Ping panel removed from <#${channel.id}>.`)],
-      components: [buildPanelsButtons(), buildBackButton()],
+      components: [buildPanelsButtons(), buildPanelsButtons2(), buildBackButton()],
     });
   },
 

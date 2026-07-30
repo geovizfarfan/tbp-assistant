@@ -496,6 +496,14 @@ client.on('interactionCreate', async (interaction) => {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleBulkRemoveSpecificModal(interaction);
   }
+  if (interaction.isModalSubmit() && interaction.customId === 'serversetup_embedrepostmodal') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleEmbedRepostModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId === 'serversetup_embeddeletemodal') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleEmbedDeleteModal(interaction);
+  }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('serversetup_pingmodal:')) {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handlePingPanelModal(interaction);

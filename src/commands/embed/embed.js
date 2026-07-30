@@ -335,20 +335,17 @@ async function listEmbeds(interaction) {
     .setFooter({ text: `Page ${page}/${totalPages} • ${total} total • /embed list page:${page + 1} for more` })]});
 }
 
-async function repostEmbed(interaction) {
-  const id = interaction.options.getInteger('id');
-  await interaction.deferReply({ ephemeral: true });
-
+async function repostEmbedCore(interaction, id) {
   const res = await query('SELECT * FROM custom_embeds WHERE id = $1 AND guild_id = $2', [id, interaction.guildId]);
-  if (!res.rows.length) return interaction.editReply(`❌ No embed #${id} found.`);
+  if (!res.rows.length) return `❌ No embed #${id} found.`;
   const stored = res.rows[0];
 
   const channel = await interaction.client.channels.fetch(stored.channel_id).catch(() => null);
-  if (!channel) return interaction.editReply(`❌ Couldn't find that embed's channel — it may have been deleted.`);
+  if (!channel) return `❌ Couldn't find that embed's channel — it may have been deleted.`;
 
   if (stored.message_id) {
     const existing = await channel.messages.fetch(stored.message_id).catch(() => null);
-    if (existing) return interaction.editReply(`✅ That embed's message still exists — no repost needed. ${existing.url}`);
+    if (existing) return `✅ That embed's message still exists — no repost needed. ${existing.url}`;
   }
 
   const embed = new EmbedBuilder().setColor(stored.color || '#d6c2ee').setDescription(stored.description || '');
@@ -359,20 +356,23 @@ async function repostEmbed(interaction) {
   if (stored.author) embed.setAuthor({ name: stored.author });
 
   const msg = await channel.send({ embeds: [embed] }).catch(() => null);
-  if (!msg) return interaction.editReply(`❌ Failed to repost — Veloura may lack permission in <#${channel.id}>.`);
+  if (!msg) return `❌ Failed to repost — Veloura may lack permission in <#${channel.id}>.`;
 
   await query('UPDATE custom_embeds SET message_id = $1 WHERE id = $2', [msg.id, id]);
-  return interaction.editReply(`✅ Reposted embed #${id} in <#${channel.id}>. ${msg.url}`);
+  return `✅ Reposted embed #${id} in <#${channel.id}>. ${msg.url}`;
 }
 
-async function deleteEmbed(interaction) {
-  const channel = interaction.options.getChannel('channel') || interaction.channel;
-  const messageId = interaction.options.getString('message_id').trim();
+async function repostEmbed(interaction) {
+  const id = interaction.options.getInteger('id');
   await interaction.deferReply({ ephemeral: true });
+  const result = await repostEmbedCore(interaction, id);
+  return interaction.editReply(result);
+}
 
+async function deleteEmbedCore(interaction, channel, messageId) {
   const msg = await channel.messages.fetch(messageId).catch(() => null);
   if (msg && msg.author.id !== interaction.client.user.id) {
-    return interaction.editReply(`❌ That message wasn't posted by Veloura — can't delete it with this command.`);
+    return `❌ That message wasn't posted by Veloura — can't delete it with this command.`;
   }
 
   if (msg) await msg.delete().catch(() => {});
@@ -380,13 +380,24 @@ async function deleteEmbed(interaction) {
   const del = await query('DELETE FROM custom_embeds WHERE message_id = $1 AND guild_id = $2 RETURNING id', [messageId, interaction.guildId]);
 
   if (!msg && !del.rows.length) {
-    return interaction.editReply(`❌ Couldn't find that message or any stored data for it — it may already be gone.`);
+    return `❌ Couldn't find that message or any stored data for it — it may already be gone.`;
   }
 
-  return interaction.editReply(`✅ Deleted${msg ? ' the message' : ' the stored data (message was already gone)'} in <#${channel.id}>.`);
+  return `✅ Deleted${msg ? ' the message' : ' the stored data (message was already gone)'} in <#${channel.id}>.`;
+}
+
+async function deleteEmbed(interaction) {
+  const channel = interaction.options.getChannel('channel') || interaction.channel;
+  const messageId = interaction.options.getString('message_id').trim();
+  await interaction.deferReply({ ephemeral: true });
+  const result = await deleteEmbedCore(interaction, channel, messageId);
+  return interaction.editReply(result);
 }
 
 module.exports.handleEditModal = handleEditModal;
+module.exports.repostEmbedCore = repostEmbedCore;
+module.exports.deleteEmbedCore = deleteEmbedCore;
+module.exports.listEmbeds = listEmbeds;
 
 async function handlePageButton(interaction) {
   const [, dbId, pageIndexStr] = interaction.customId.split(':');
