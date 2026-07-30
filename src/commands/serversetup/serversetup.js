@@ -20,7 +20,7 @@ const CATEGORIES = {
   channels: {
     label: 'Server Channel Set',
     emoji: '📺',
-    description: 'Every key channel the bot posts to or reads from — buttons below.',
+    description: 'Every key channel the bot posts to or reads from, plus the Private Room button — buttons below.',
     items: [
       'Ticket transcripts channel — *not yet split from game transcripts, coming in a later phase*',
       'Grind setup — `/grind setup`',
@@ -41,7 +41,7 @@ const CATEGORIES = {
   goosty: {
     label: 'Extras & Utilities',
     emoji: '✨',
-    description: 'GoosDate reminders and private rooms — buttons below.',
+    description: 'GoosDate reminders — buttons below.',
     items: [],
   },
   boosters: {
@@ -101,10 +101,10 @@ const CATEGORIES = {
 
 function buildHomeEmbed(guild) {
   const summaries = [
-    '📺 **Server Channel Set** — schedule board, winners, tickets, staff notifications, boosts, transcripts, game board',
+    '📺 **Server Channel Set** — schedule board, winners, tickets, staff notifications, boosts, transcripts, game board, private rooms',
     '⚙️ **Server Settings** — timezone, claim time, welcome message, leveling',
     '🎭 **Server Role Set** — mod, admin, and game-ping roles',
-    '✨ **Extras & Utilities** — GoosDate reminders, private rooms, Rumble Grind panel',
+    '✨ **Extras & Utilities** — GoosDate reminders, Rumble Grind panel',
     '🚀 **Server Booster Set** — manage boosters and payments',
     '👥 **Staff & Payroll** — staff roster, pay requirements per role, daily goals',
     '📋 **Settings Summary** — a live snapshot of everything configured so far',
@@ -176,6 +176,7 @@ function buildChannelSettingSelect() {
 function buildChannelExtraButtons() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('serversetup_gset:gameboard').setLabel('Game Board Channel').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_extras:privateroom').setLabel('Post Private Room Button').setStyle(ButtonStyle.Secondary),
   );
 }
 
@@ -243,7 +244,6 @@ function buildExtrasButtons() {
     new ButtonBuilder().setCustomId('serversetup_extras:goosdateon').setLabel('GoosDate ON').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('serversetup_extras:goosdateoff').setLabel('GoosDate OFF').setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId('serversetup_extras:goosdatestatus').setLabel('GoosDate Status').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('serversetup_extras:privateroom').setLabel('Post Private Room Button').setStyle(ButtonStyle.Secondary),
   );
 }
 
