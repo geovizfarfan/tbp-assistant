@@ -315,6 +315,10 @@ client.on('interactionCreate', async (interaction) => {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleGrindChannelPicked(interaction);
   }
+  if (interaction.isChannelSelectMenu() && interaction.customId === 'serversetup_roleachievementchan') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleRoleAchievementChannelPicked(interaction);
+  }
   if (interaction.isRoleSelectMenu() && interaction.customId.startsWith('serversetup_grindrole:')) {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleGrindRolePicked(interaction);

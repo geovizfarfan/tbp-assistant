@@ -94,7 +94,7 @@ const CATEGORIES = {
   rumble: {
     label: 'Rumble Setup',
     emoji: '⚔️',
-    description: 'Currency for Rumble Royale rewards — buttons below. Full battle setup (channels, roles, rewards) is more involved than fits here — use `/rr setup` and `/rs setup` directly for that.',
+    description: 'RR currency, Rumble Grind panel, and the "collected all roles" achievement channel — buttons below. Full battle setup (channels, roles, rewards) and season management are more involved than fits here — use `/rr setup`, `/rs setup`, and `/rumble season` directly for those.',
     items: [],
   },
 };
@@ -104,7 +104,7 @@ function buildHomeEmbed(guild) {
     '📺 **Server Channel Set** — schedule board, winners, tickets, staff notifications, boosts, transcripts, game board, private rooms',
     '⚙️ **Server Settings** — timezone, claim time, welcome message, leveling',
     '🎭 **Server Role Set** — mod, admin, and game-ping roles',
-    '✨ **Extras & Utilities** — GoosDate reminders, Rumble Grind panel',
+    '✨ **Extras & Utilities** — GoosDate reminders',
     '🚀 **Server Booster Set** — manage boosters and payments',
     '👥 **Staff & Payroll** — staff roster, pay requirements per role, daily goals',
     '📋 **Settings Summary** — a live snapshot of everything configured so far',
@@ -112,7 +112,7 @@ function buildHomeEmbed(guild) {
     '💳 **Payments, Sellers & Shop** — approve sellers, shop channel setup',
     '🧩 **Panels & Embeds** — ping panels, custom embeds',
     '📌 **Sticky Notes** — the message pinned to the bottom of a channel',
-    '⚔️ **Rumble Setup** — RR currency (Sins or custom)',
+    '⚔️ **Rumble Setup** — RR currency, Grind panel, role achievement channel',
   ];
   return new EmbedBuilder()
     .setColor('#d6c2ee')
@@ -247,12 +247,6 @@ function buildExtrasButtons() {
   );
 }
 
-function buildExtrasButtons2() {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('serversetup_extras:grindsetup').setLabel('Grind Setup').setStyle(ButtonStyle.Primary),
-  );
-}
-
 function buildGoosdateChannelPicker() {
   const menu = new ChannelSelectMenuBuilder()
     .setCustomId('serversetup_goosdatechan')
@@ -271,6 +265,13 @@ function buildGrindChannelPicker() {
   const menu = new ChannelSelectMenuBuilder()
     .setCustomId('serversetup_grindchan')
     .setPlaceholder('Pick the channel for the Grind panel');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildRoleAchievementChannelPicker() {
+  const menu = new ChannelSelectMenuBuilder()
+    .setCustomId('serversetup_roleachievementchan')
+    .setPlaceholder('Pick the achievement announcement channel');
   return new ActionRowBuilder().addComponents(menu);
 }
 
@@ -507,7 +508,7 @@ module.exports = {
     if (key === 'goosty') {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
-        components: [buildExtrasButtons(), buildExtrasButtons2(), buildBackButton()],
+        components: [buildExtrasButtons(), buildBackButton()],
       });
     }
 
@@ -821,6 +822,13 @@ module.exports = {
       });
     }
 
+    if (action === 'roleachievement') {
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the channel for "collected all roles" announcements:')],
+        components: [buildRoleAchievementChannelPicker(), buildBackButton()],
+      });
+    }
+
     if (action === 'goosdatestatus') {
       const { status } = require('../goosdate/goosdate');
       return status(interaction);
@@ -841,12 +849,12 @@ module.exports = {
       if (!res.rows.length) {
         return interaction.editReply({
           embeds: [new EmbedBuilder().setColor('#ff4444').setDescription('❌ GoosDate hasn\'t been set up yet — use GoosDate Setup first.')],
-          components: [buildExtrasButtons(), buildExtrasButtons2(), buildBackButton()],
+          components: [buildExtrasButtons(), buildBackButton()],
         });
       }
       return interaction.editReply({
         embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ GoosDate reminders are now **${enabled ? 'ON' : 'OFF'}**.`)],
-        components: [buildExtrasButtons(), buildExtrasButtons2(), buildBackButton()],
+        components: [buildExtrasButtons(), buildBackButton()],
       });
     }
   },
@@ -856,6 +864,22 @@ module.exports = {
     return interaction.update({
       embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription(`Channel set to <#${channel.id}>. Now pick the role to ping:`)],
       components: [buildGoosdateRolePicker(channel.id), buildBackButton()],
+    });
+  },
+
+  async handleRoleAchievementChannelPicked(interaction) {
+    const channel = interaction.channels.first();
+    await interaction.deferUpdate();
+
+    await query(`
+      INSERT INTO rr_guild_config (guild_id, achievement_log_channel_id)
+      VALUES ($1, $2)
+      ON CONFLICT (guild_id) DO UPDATE SET achievement_log_channel_id = EXCLUDED.achievement_log_channel_id
+    `, [interaction.guildId, channel.id]);
+
+    return interaction.editReply({
+      embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ "Collected all roles" announcements will post in <#${channel.id}>.`)],
+      components: [buildRumbleButtons(), buildBackButton()],
     });
   },
 
@@ -1115,7 +1139,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ GoosDate reminders will post in <#${channelId}> and ping <@&${role.id}>.`)],
-      components: [buildExtrasButtons(), buildExtrasButtons2(), buildBackButton()],
+      components: [buildExtrasButtons(), buildBackButton()],
     });
   },
 
@@ -1828,6 +1852,8 @@ function buildRumbleButtons() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('serversetup_gset:rrsins').setLabel('RR: Use Sins').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('serversetup_gset:rrcustom').setLabel('RR: Custom Currency').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_extras:grindsetup').setLabel('Grind Setup').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('serversetup_gset:roleachievement').setLabel('Role Achievement Channel').setStyle(ButtonStyle.Secondary),
   );
 }
 
