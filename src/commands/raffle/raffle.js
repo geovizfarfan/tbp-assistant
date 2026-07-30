@@ -324,13 +324,9 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
 }
 
 
-async function cancelRaffle(interaction) {
-  const id     = interaction.options.getInteger('id');
-  const reason = interaction.options.getString('reason') || 'No reason provided';
-  await interaction.deferReply({ ephemeral: true });
-
+async function cancelRaffleCore(interaction, id, reason) {
   const raffleRes = await query(`SELECT * FROM raffles WHERE id=$1 AND guild_id=$2 AND status='active'`, [id, interaction.guildId]);
-  if (!raffleRes.rows.length) return interaction.editReply({ content: `${e('wrong')} Active raffle #${id} not found.` });
+  if (!raffleRes.rows.length) return `${e('wrong')} Active raffle #${id} not found.`;
   const raffle = raffleRes.rows[0];
 
   await query(`UPDATE raffles SET status='cancelled', ended_at=NOW() WHERE id=$1`, [id]);
@@ -350,16 +346,29 @@ async function cancelRaffle(interaction) {
     await msg.edit({ embeds: [cancelEmbed], components: [] });
   } catch {}
 
-  await interaction.editReply({ content: `${e('checkmark')} Raffle #${id} cancelled. No winner selected.` });
+  return `${e('checkmark')} Raffle #${id} cancelled. No winner selected.`;
+}
+
+async function cancelRaffle(interaction) {
+  const id     = interaction.options.getInteger('id');
+  const reason = interaction.options.getString('reason') || 'No reason provided';
+  await interaction.deferReply({ ephemeral: true });
+  const result = await cancelRaffleCore(interaction, id, reason);
+  await interaction.editReply({ content: result });
+}
+
+async function endRaffleCore(interaction, id) {
+  const raffleRes = await query(`SELECT * FROM raffles WHERE id=$1 AND guild_id=$2`, [id, interaction.guildId]);
+  if (!raffleRes.rows.length) return `${e('wrong')} Raffle not found.`;
+  await autoEndRaffle(interaction.client, id, interaction.guildId, raffleRes.rows[0].channel_id, raffleRes.rows[0].message_id);
+  return `${e('checkmark')} Raffle #${id} ended manually.`;
 }
 
 async function endRaffle(interaction) {
   const id = interaction.options.getInteger('id');
   await interaction.deferReply({ ephemeral: true });
-  const raffleRes = await query(`SELECT * FROM raffles WHERE id=$1 AND guild_id=$2`, [id, interaction.guildId]);
-  if (!raffleRes.rows.length) return interaction.editReply({ content: `${e('wrong')} Raffle not found.` });
-  await autoEndRaffle(interaction.client, id, interaction.guildId, raffleRes.rows[0].channel_id, raffleRes.rows[0].message_id);
-  await interaction.editReply({ content: `${e('checkmark')} Raffle #${id} ended manually.` });
+  const result = await endRaffleCore(interaction, id);
+  await interaction.editReply({ content: result });
 }
 
 async function listRaffles(interaction) {
@@ -402,3 +411,5 @@ async function listRaffles(interaction) {
 }
 
 module.exports.autoEndRaffle = autoEndRaffle;
+module.exports.cancelRaffleCore = cancelRaffleCore;
+module.exports.endRaffleCore = endRaffleCore;

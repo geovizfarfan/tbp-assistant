@@ -314,6 +314,14 @@ function buildGiveawayButtons2() {
   );
 }
 
+function buildGiveawayButtons3() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_gset:rafflelist').setLabel('List My Raffles').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_gset:raffleend').setLabel('End Raffle').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_gset:rafflecancel').setLabel('Cancel Raffle').setStyle(ButtonStyle.Danger),
+  );
+}
+
 function buildBonusRolePicker() {
   const menu = new RoleSelectMenuBuilder()
     .setCustomId('serversetup_gwbonusrole')
@@ -494,7 +502,7 @@ module.exports = {
     if (key === 'giveaways') {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
-        components: [buildGiveawayButtons(), buildGiveawayButtons2(), buildBackButton()],
+        components: [buildGiveawayButtons(), buildGiveawayButtons2(), buildGiveawayButtons3(), buildBackButton()],
       });
     }
 
@@ -857,6 +865,25 @@ module.exports = {
     return interaction.showModal(modal);
   },
 
+  async handleRaffleEndModal(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    const id = parseInt(interaction.fields.getTextInputValue('id'), 10);
+    if (isNaN(id)) return interaction.editReply('❌ Raffle ID must be a number.');
+    const { endRaffleCore } = require('../raffle/raffle');
+    const result = await endRaffleCore(interaction, id);
+    return interaction.editReply(result);
+  },
+
+  async handleRaffleCancelModal(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    const id = parseInt(interaction.fields.getTextInputValue('id'), 10);
+    if (isNaN(id)) return interaction.editReply('❌ Raffle ID must be a number.');
+    const reason = interaction.fields.getTextInputValue('reason') || 'No reason provided';
+    const { cancelRaffleCore } = require('../raffle/raffle');
+    const result = await cancelRaffleCore(interaction, id, reason);
+    return interaction.editReply(result);
+  },
+
   async handleEmbedRepostModal(interaction) {
     await interaction.deferReply({ ephemeral: true });
     const id = parseInt(interaction.fields.getTextInputValue('id'), 10);
@@ -1008,7 +1035,7 @@ module.exports = {
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor(res.rows.length ? '#2ecc71' : '#e74c3c')
         .setDescription(res.rows.length ? `✅ Removed bonus entries for ${role}.` : `❌ ${role} had no bonus configured.`)],
-      components: [buildGiveawayButtons(), buildGiveawayButtons2(), buildBackButton()],
+      components: [buildGiveawayButtons(), buildGiveawayButtons2(), buildGiveawayButtons3(), buildBackButton()],
     });
   },
 
@@ -1139,7 +1166,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor(del.rows.length ? '#2ecc71' : '#ff4444').setDescription(msg)],
-      components: [buildGiveawayButtons(), buildGiveawayButtons2(), buildBackButton()],
+      components: [buildGiveawayButtons(), buildGiveawayButtons2(), buildGiveawayButtons3(), buildBackButton()],
     });
   },
 
@@ -1156,7 +1183,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Added to the entry-requirement library: ${roles.map(r => `<@&${r.id}>`).join(', ')}`)],
-      components: [buildGiveawayButtons(), buildGiveawayButtons2(), buildBackButton()],
+      components: [buildGiveawayButtons(), buildGiveawayButtons2(), buildGiveawayButtons3(), buildBackButton()],
     });
   },
 
@@ -1171,7 +1198,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor(del.rows.length ? '#2ecc71' : '#ff4444').setDescription(msg)],
-      components: [buildGiveawayButtons(), buildGiveawayButtons2(), buildBackButton()],
+      components: [buildGiveawayButtons(), buildGiveawayButtons2(), buildGiveawayButtons3(), buildBackButton()],
     });
   },
 
@@ -1460,6 +1487,45 @@ module.exports = {
       return interaction.showModal(modal);
     }
 
+    if (action === 'rafflelist') {
+      await interaction.deferUpdate();
+      const res = await query(
+        `SELECT * FROM raffles WHERE guild_id=$1 AND host_id=$2 AND status='active' ORDER BY ends_at DESC LIMIT 20`,
+        [interaction.guildId, interaction.user.id]
+      );
+      const embed = new EmbedBuilder().setColor('#d6c2ee').setTitle('🎟️ Your Active Raffles');
+      if (!res.rows.length) {
+        embed.setDescription('You have no active raffles.');
+      } else {
+        for (const r of res.rows) {
+          embed.addFields({ name: `#${r.id} — ${r.prize}`, value: `Ends: <t:${Math.floor(new Date(r.ends_at).getTime()/1000)}:f>` });
+        }
+      }
+      return interaction.editReply({
+        embeds: [embed],
+        components: [buildGiveawayButtons(), buildGiveawayButtons2(), buildGiveawayButtons3(), buildBackButton()],
+      });
+    }
+
+    if (action === 'raffleend') {
+      const modal = new ModalBuilder().setCustomId('serversetup_raffleendmodal').setTitle('End Raffle');
+      const idInput = new TextInputBuilder().setCustomId('id').setLabel('Raffle ID').setStyle(TextInputStyle.Short).setRequired(true);
+      modal.addComponents(new ActionRowBuilder().addComponents(idInput));
+      return interaction.showModal(modal);
+    }
+
+    if (action === 'rafflecancel') {
+      const modal = new ModalBuilder().setCustomId('serversetup_rafflecancelmodal').setTitle('Cancel Raffle');
+      const idInput = new TextInputBuilder().setCustomId('id').setLabel('Raffle ID').setStyle(TextInputStyle.Short).setRequired(true);
+      const reasonInput = new TextInputBuilder().setCustomId('reason').setLabel('Reason (optional)').setStyle(TextInputStyle.Short).setRequired(false);
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(idInput),
+        new ActionRowBuilder().addComponents(reasonInput),
+      );
+      return interaction.showModal(modal);
+    }
+
+
     if (action === 'bulkremoverole') {
       return interaction.update({
         embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the role to bulk-remove:')],
@@ -1498,7 +1564,7 @@ module.exports = {
       }
       return interaction.editReply({
         embeds: [embed],
-        components: [buildGiveawayButtons(), buildGiveawayButtons2(), buildBackButton()],
+        components: [buildGiveawayButtons(), buildGiveawayButtons2(), buildGiveawayButtons3(), buildBackButton()],
       });
     }
 

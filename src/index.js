@@ -496,6 +496,14 @@ client.on('interactionCreate', async (interaction) => {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleBulkRemoveSpecificModal(interaction);
   }
+  if (interaction.isModalSubmit() && interaction.customId === 'serversetup_raffleendmodal') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleRaffleEndModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId === 'serversetup_rafflecancelmodal') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleRaffleCancelModal(interaction);
+  }
   if (interaction.isModalSubmit() && interaction.customId === 'serversetup_embedrepostmodal') {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleEmbedRepostModal(interaction);
