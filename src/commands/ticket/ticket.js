@@ -75,6 +75,58 @@ async function repostActionRow(thread, ticketId) {
   if (msg) stickyMessages.set(ticketId, msg.id);
 }
 
+async function listPanelsEmbed(guildId) {
+  const res = await query('SELECT * FROM ticket_panels WHERE guild_id = $1 ORDER BY id', [guildId]);
+  const embed = new EmbedBuilder().setColor('#d6c2ee')
+    .setTitle('<a:tickets:1523139713278672996> Ticket Panels');
+
+  if (!res.rows.length) {
+    embed.setDescription('No ticket panels found.');
+    return embed;
+  }
+
+  for (const p of res.rows) {
+    const typesRes = await query('SELECT * FROM ticket_types WHERE panel_id = $1 ORDER BY id', [p.id]);
+    const typeLines = typesRes.rows.length
+      ? typesRes.rows.map(t => `${t.emoji || ''} \`${t.name}\``).join('\n')
+      : '*No types added yet.*';
+    embed.addFields({
+      name: `ID \`${p.id}\` — ${p.title} (<#${p.channel_id}>)`,
+      value: typeLines,
+    });
+  }
+  return embed;
+}
+
+async function repostPanelCore(client, guildId, panelId) {
+  const panelRes = await query('SELECT * FROM ticket_panels WHERE id=$1 AND guild_id=$2', [panelId, guildId]);
+  if (!panelRes.rows.length) return '❌ Panel not found.';
+
+  const newMsg = await renderPanel(client, panelRes.rows[0]);
+  if (!newMsg) return '❌ Could not find the panel\'s channel — has it been deleted?';
+
+  return `✅ Panel \`${panelId}\` reposted in <#${panelRes.rows[0].channel_id}>.`;
+}
+
+async function removePanelCore(client, guildId, panelId) {
+  const panelRes = await query('SELECT * FROM ticket_panels WHERE id=$1 AND guild_id=$2', [panelId, guildId]);
+  if (!panelRes.rows.length) return '❌ Panel not found.';
+  const panel = panelRes.rows[0];
+
+  if (panel.channel_id && panel.message_id) {
+    const ch = await client.channels.fetch(panel.channel_id).catch(() => null);
+    if (ch) {
+      const msg = await ch.messages.fetch(panel.message_id).catch(() => null);
+      if (msg) await msg.delete().catch(() => {});
+    }
+  }
+
+  await query('DELETE FROM ticket_types WHERE panel_id=$1', [panelId]);
+  await query('DELETE FROM ticket_panels WHERE id=$1', [panelId]);
+
+  return `✅ Panel \`${panelId}\` — **${panel.title}** removed.`;
+}
+
 async function renderPanel(client, panel) {
   const embed = new EmbedBuilder().setColor(panel.color).setTitle(panel.title).setDescription(panel.description);
   let components = [];
@@ -549,23 +601,7 @@ module.exports = {
     // ── /ticket panels ────────────────────────────────────────────────────
     if (sub === 'panels') {
       await interaction.deferReply({ ephemeral: true });
-      const res = await query('SELECT * FROM ticket_panels WHERE guild_id = $1 ORDER BY id', [interaction.guild.id]);
-      if (!res.rows.length) return interaction.editReply('No ticket panels found.');
-
-      const embed = new EmbedBuilder().setColor('#d6c2ee')
-        .setTitle('<a:tickets:1523139713278672996> Ticket Panels');
-
-      for (const p of res.rows) {
-        const typesRes = await query('SELECT * FROM ticket_types WHERE panel_id = $1 ORDER BY id', [p.id]);
-        const typeLines = typesRes.rows.length
-          ? typesRes.rows.map(t => `${t.emoji || ''} \`${t.name}\``).join('\n')
-          : '*No types added yet.*';
-        embed.addFields({
-          name: `ID \`${p.id}\` — ${p.title} (<#${p.channel_id}>)`,
-          value: typeLines,
-        });
-      }
-
+      const embed = await listPanelsEmbed(interaction.guildId);
       return interaction.editReply({ embeds: [embed] });
     }
 
@@ -591,13 +627,8 @@ module.exports = {
       await interaction.deferReply({ ephemeral: true });
 
       const panelId = interaction.options.getString('panel_id');
-      const panelRes = await query('SELECT * FROM ticket_panels WHERE id=$1 AND guild_id=$2', [panelId, interaction.guild.id]);
-      if (!panelRes.rows.length) return interaction.editReply('❌ Panel not found.');
-
-      const newMsg = await renderPanel(interaction.client, panelRes.rows[0]);
-      if (!newMsg) return interaction.editReply('❌ Could not find the panel\'s channel — has it been deleted?');
-
-      return interaction.editReply(`✅ Panel \`${panelId}\` reposted in <#${panelRes.rows[0].channel_id}>.`);
+      const result = await repostPanelCore(interaction.client, interaction.guildId, panelId);
+      return interaction.editReply(result);
     }
 
     if (sub === 'removepanel') {
@@ -607,24 +638,8 @@ module.exports = {
       await interaction.deferReply({ ephemeral: true });
 
       const panelId = interaction.options.getString('panel_id');
-      const panelRes = await query('SELECT * FROM ticket_panels WHERE id=$1 AND guild_id=$2', [panelId, interaction.guild.id]);
-      if (!panelRes.rows.length) return interaction.editReply('❌ Panel not found.');
-      const panel = panelRes.rows[0];
-
-      // Delete panel message from channel
-      if (panel.channel_id && panel.message_id) {
-        const ch = (await interaction.client.channels.fetch(panel.channel_id).catch(() => null));
-        if (ch) {
-          const msg = await ch.messages.fetch(panel.message_id).catch(() => null);
-          if (msg) await msg.delete().catch(() => {});
-        }
-      }
-
-      // Delete types and panel from DB
-      await query('DELETE FROM ticket_types WHERE panel_id=$1', [panelId]);
-      await query('DELETE FROM ticket_panels WHERE id=$1', [panelId]);
-
-      return interaction.editReply(`✅ Panel \`${panelId}\` — **${panel.title}** removed.`);
+      const result = await removePanelCore(interaction.client, interaction.guildId, panelId);
+      return interaction.editReply(result);
     }
 
     // ── /ticket add ───────────────────────────────────────────────────────
@@ -963,3 +978,7 @@ module.exports = {
     } catch (e) { /* ignore */ }
   },
 };
+
+module.exports.listPanelsEmbed = listPanelsEmbed;
+module.exports.repostPanelCore = repostPanelCore;
+module.exports.removePanelCore = removePanelCore;

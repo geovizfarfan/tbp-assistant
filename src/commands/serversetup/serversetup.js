@@ -75,7 +75,7 @@ const CATEGORIES = {
   panels: {
     label: 'Panels & Embeds',
     emoji: '🧩',
-    description: 'Ping panels and custom embeds — buttons below. Role panels and ticket panels involve adding items one at a time (roles, ticket types), which is an ongoing management flow rather than a single setup step — use `/rolepanel` and `/ticket panel` directly for those.',
+    description: 'Ping panels, custom embeds, and listing/reposting/removing ticket panels — buttons below. Creating a panel and adding ticket types involves several fields entered one at a time, which is an ongoing management flow rather than a single setup step — use `/ticket panel`, `/ticket addtype`, and `/rolepanel` directly for those.',
     items: [],
   },
   sticky: {
@@ -102,7 +102,7 @@ function buildHomeEmbed(guild) {
     '📋 **Settings Summary** — a live snapshot of everything configured so far',
     '🎁 **Game & Perks Settings** — giveaway bonus/required roles, wheel role bonuses, raffle management',
     '💳 **Payments, Sellers & Shop** — approve sellers, shop channel setup',
-    '🧩 **Panels & Embeds** — ping panels, custom embeds',
+    '🧩 **Panels & Embeds** — ping panels, custom embeds, ticket panel list/repost/remove',
     '📌 **Sticky Notes** — the message pinned to the bottom of a channel',
     '⚔️ **Rumble Setup** — RR currency, Grind panel, role achievement channel, full season management',
   ];
@@ -433,6 +433,14 @@ function buildPanelsButtons2() {
   );
 }
 
+function buildPanelsButtons3() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_panels:ticketpanellist').setLabel('List Ticket Panels').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_panels:ticketpanelrepost').setLabel('Repost Ticket Panel').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_panels:ticketpanelremove').setLabel('Remove Ticket Panel').setStyle(ButtonStyle.Danger),
+  );
+}
+
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -539,7 +547,7 @@ module.exports = {
     if (key === 'panels') {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
-        components: [buildPanelsButtons(), buildPanelsButtons2(), buildBackButton()],
+        components: [buildPanelsButtons(), buildPanelsButtons2(), buildPanelsButtons3(), buildBackButton()],
       });
     }
 
@@ -1025,6 +1033,22 @@ module.exports = {
     const messageId = interaction.fields.getTextInputValue('message_id').trim();
     const { deleteEmbedCore } = require('../embed/embed');
     const result = await deleteEmbedCore(interaction, interaction.channel, messageId);
+    return interaction.editReply(result);
+  },
+
+  async handleTicketPanelRepostModal(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    const panelId = interaction.fields.getTextInputValue('panel_id').trim();
+    const { repostPanelCore } = require('../ticket/ticket');
+    const result = await repostPanelCore(interaction.client, interaction.guildId, panelId);
+    return interaction.editReply(result);
+  },
+
+  async handleTicketPanelRemoveModal(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    const panelId = interaction.fields.getTextInputValue('panel_id').trim();
+    const { removePanelCore } = require('../ticket/ticket');
+    const result = await removePanelCore(interaction.client, interaction.guildId, panelId);
     return interaction.editReply(result);
   },
 
@@ -1619,7 +1643,7 @@ module.exports = {
       if (!total) {
         return interaction.editReply({
           embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('No custom embeds tracked yet — only ones posted after the tracking update will show up here.')],
-          components: [buildPanelsButtons(), buildPanelsButtons2(), buildBackButton()],
+          components: [buildPanelsButtons(), buildPanelsButtons2(), buildPanelsButtons3(), buildBackButton()],
         });
       }
       const res = await query('SELECT * FROM custom_embeds WHERE guild_id = $1 ORDER BY created_at DESC LIMIT 15', [interaction.guildId]);
@@ -1627,7 +1651,7 @@ module.exports = {
       return interaction.editReply({
         embeds: [new EmbedBuilder().setColor('#d6c2ee').setTitle('📋 Recent Custom Embeds').setDescription(lines)
           .setFooter({ text: `Showing latest 15 of ${total} • use /embed list for more pages` })],
-        components: [buildPanelsButtons(), buildPanelsButtons2(), buildBackButton()],
+        components: [buildPanelsButtons(), buildPanelsButtons2(), buildPanelsButtons3(), buildBackButton()],
       });
     }
 
@@ -1642,6 +1666,30 @@ module.exports = {
       const modal = new ModalBuilder().setCustomId('serversetup_embeddeletemodal').setTitle('Delete Embed');
       const msgIdInput = new TextInputBuilder().setCustomId('message_id').setLabel('Message ID of the embed to delete').setStyle(TextInputStyle.Short).setRequired(true);
       modal.addComponents(new ActionRowBuilder().addComponents(msgIdInput));
+      return interaction.showModal(modal);
+    }
+
+    if (action === 'ticketpanellist') {
+      await interaction.deferUpdate();
+      const { listPanelsEmbed } = require('../ticket/ticket');
+      const embed = await listPanelsEmbed(interaction.guildId);
+      return interaction.editReply({
+        embeds: [embed],
+        components: [buildPanelsButtons(), buildPanelsButtons2(), buildPanelsButtons3(), buildBackButton()],
+      });
+    }
+
+    if (action === 'ticketpanelrepost') {
+      const modal = new ModalBuilder().setCustomId('serversetup_ticketpanelrepostmodal').setTitle('Repost Ticket Panel');
+      const idInput = new TextInputBuilder().setCustomId('panel_id').setLabel('Panel ID (see List Ticket Panels)').setStyle(TextInputStyle.Short).setRequired(true);
+      modal.addComponents(new ActionRowBuilder().addComponents(idInput));
+      return interaction.showModal(modal);
+    }
+
+    if (action === 'ticketpanelremove') {
+      const modal = new ModalBuilder().setCustomId('serversetup_ticketpanelremovemodal').setTitle('Remove Ticket Panel');
+      const idInput = new TextInputBuilder().setCustomId('panel_id').setLabel('Panel ID (see List Ticket Panels)').setStyle(TextInputStyle.Short).setRequired(true);
+      modal.addComponents(new ActionRowBuilder().addComponents(idInput));
       return interaction.showModal(modal);
     }
 
@@ -1724,7 +1772,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Ping panel removed from <#${channel.id}>.`)],
-      components: [buildPanelsButtons(), buildPanelsButtons2(), buildBackButton()],
+      components: [buildPanelsButtons(), buildPanelsButtons2(), buildPanelsButtons3(), buildBackButton()],
     });
   },
 
