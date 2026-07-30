@@ -28,7 +28,7 @@ const CATEGORIES = {
   settings: {
     label: 'Other Settings',
     emoji: '⚙️',
-    description: 'General server-wide behavior plus GoosDate reminders — buttons below. Verify setup stays standalone (`/verify setup`) since it involves 2 channels, a role, and long rules text — too much for one form. Shop and Staff setup live under their own categories.',
+    description: 'General server-wide behavior, GoosDate reminders, and full leveling management — buttons below. Verify setup stays standalone (`/verify setup`) since it involves 2 channels, a role, and long rules text — too much for one form. Shop and Staff setup live under their own categories.',
     items: [],
   },
   roles: {
@@ -95,7 +95,7 @@ const CATEGORIES = {
 function buildHomeEmbed(guild) {
   const summaries = [
     '📺 **Server Channel Set** — schedule board, winners, tickets, staff notifications, boosts, transcripts, game board, private rooms',
-    '⚙️ **Other Settings** — timezone, claim time, welcome message, leveling, GoosDate reminders, bulk role removal',
+    '⚙️ **Other Settings** — timezone, claim time, welcome message, GoosDate reminders, bulk role removal, full leveling management',
     '🎭 **Server Role Set** — mod, admin, and game-ping roles',
     '🚀 **Server Booster Set** — manage boosters and payments',
     '👥 **Staff & Payroll** — staff roster, pay requirements per role, daily goals',
@@ -255,6 +255,27 @@ function buildRoleAchievementChannelPicker() {
   const menu = new ChannelSelectMenuBuilder()
     .setCustomId('serversetup_roleachievementchan')
     .setPlaceholder('Pick the achievement announcement channel');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildLevelSetUserPicker() {
+  const menu = new UserSelectMenuBuilder()
+    .setCustomId('serversetup_levelsetuser')
+    .setPlaceholder('Pick the member');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildLevelExcludeAddPicker() {
+  const menu = new ChannelSelectMenuBuilder()
+    .setCustomId('serversetup_levelexcludeaddchan')
+    .setPlaceholder('Pick the channel to exclude');
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildLevelExcludeRemovePicker() {
+  const menu = new ChannelSelectMenuBuilder()
+    .setCustomId('serversetup_levelexcluderemovechan')
+    .setPlaceholder('Pick the channel to re-enable');
   return new ActionRowBuilder().addComponents(menu);
 }
 
@@ -469,7 +490,7 @@ module.exports = {
     if (key === 'settings') {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
-        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
       });
     }
 
@@ -912,12 +933,12 @@ module.exports = {
       if (!res.rows.length) {
         return interaction.editReply({
           embeds: [new EmbedBuilder().setColor('#ff4444').setDescription('❌ GoosDate hasn\'t been set up yet — use GoosDate Setup first.')],
-          components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+          components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
         });
       }
       return interaction.editReply({
         embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ GoosDate reminders are now **${enabled ? 'ON' : 'OFF'}**.`)],
-        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
       });
     }
   },
@@ -1131,6 +1152,65 @@ module.exports = {
     return interaction.editReply(result.text);
   },
 
+  async handleLevelSetUserPicked(interaction) {
+    const user = interaction.users.first();
+    const modal = new ModalBuilder().setCustomId(`serversetup_levelsetmodal:${user.id}`).setTitle(`Set Level — ${user.username}`.slice(0, 45));
+    const levelInput = new TextInputBuilder().setCustomId('level').setLabel('Level to set').setStyle(TextInputStyle.Short).setRequired(true);
+    modal.addComponents(new ActionRowBuilder().addComponents(levelInput));
+    return interaction.showModal(modal);
+  },
+
+  async handleLevelSetModal(interaction) {
+    const [, userId] = interaction.customId.split(':');
+    await interaction.deferReply({ ephemeral: true });
+
+    const level = parseInt(interaction.fields.getTextInputValue('level'), 10);
+    if (isNaN(level) || level < 0) return interaction.editReply('❌ Level must be a non-negative number.');
+
+    const { xpForLevel } = require('../../utils/levelSystem');
+    const totalXp = xpForLevel(level);
+
+    const user = await interaction.client.users.fetch(userId).catch(() => null);
+    if (!user) return interaction.editReply('❌ Couldn\'t find that user anymore.');
+
+    await query(`
+      INSERT INTO levels (guild_id, user_id, username, xp, level)
+      VALUES ($1,$2,$3,$4,$5)
+      ON CONFLICT (guild_id, user_id) DO UPDATE SET xp = $4, level = $5, username = $3
+    `, [interaction.guildId, user.id, user.username, totalXp, level]);
+
+    return interaction.editReply(`✅ Set <@${user.id}> to **Level ${level}**.`);
+  },
+
+  async handleLevelResetConfirm(interaction) {
+    await interaction.deferUpdate();
+    const res = await query('DELETE FROM levels WHERE guild_id = $1', [interaction.guildId]);
+    return interaction.editReply({
+      embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Reset complete — cleared level/XP data for **${res.rowCount}** member${res.rowCount === 1 ? '' : 's'} on this server.`)],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
+    });
+  },
+
+  async handleLevelExcludeAddPicked(interaction) {
+    const channel = interaction.channels.first();
+    await interaction.deferUpdate();
+    await query('INSERT INTO level_excluded_channels (guild_id, channel_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [interaction.guildId, channel.id]);
+    return interaction.editReply({
+      embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ <#${channel.id}> no longer earns XP.`)],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
+    });
+  },
+
+  async handleLevelExcludeRemovePicked(interaction) {
+    const channel = interaction.channels.first();
+    await interaction.deferUpdate();
+    await query('DELETE FROM level_excluded_channels WHERE guild_id = $1 AND channel_id = $2', [interaction.guildId, channel.id]);
+    return interaction.editReply({
+      embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ <#${channel.id}> earns XP again.`)],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
+    });
+  },
+
   async handleBulkRemoveRolePicked(interaction) {
     const role = interaction.roles.first();
     await interaction.deferUpdate();
@@ -1188,7 +1268,7 @@ module.exports = {
         `✅ Removed ${role} from **${removed}** member${removed === 1 ? '' : 's'}.` +
         (failed ? `\n❌ Failed on ${failed} (likely a role hierarchy issue).` : '')
       )],
-      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
     });
   },
 
@@ -1326,7 +1406,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ GoosDate reminders will post in <#${channelId}> and ping <@&${role.id}>.`)],
-      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
     });
   },
 
@@ -1717,6 +1797,50 @@ module.exports = {
       return interaction.showModal(modal);
     }
 
+    if (action === 'levelsetmember') {
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the member whose level you want to set:')],
+        components: [buildLevelSetUserPicker(), buildBackButton()],
+      });
+    }
+
+    if (action === 'levelreset') {
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('serversetup_levelresetconfirm').setLabel('Yes, wipe every level on this server').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('serversetup_nav:settings').setLabel('Cancel').setStyle(ButtonStyle.Secondary),
+      );
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#e74c3c').setDescription('⚠️ This wipes **every member\'s** level and XP on this server. This can\'t be undone. Are you sure?')],
+        components: [row],
+      });
+    }
+
+    if (action === 'levelexcludeadd') {
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the channel to exclude from earning XP:')],
+        components: [buildLevelExcludeAddPicker(), buildBackButton()],
+      });
+    }
+
+    if (action === 'levelexcluderemove') {
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the channel to re-enable XP for:')],
+        components: [buildLevelExcludeRemovePicker(), buildBackButton()],
+      });
+    }
+
+    if (action === 'levelexcludelist') {
+      await interaction.deferUpdate();
+      const res = await query('SELECT channel_id FROM level_excluded_channels WHERE guild_id = $1', [interaction.guildId]);
+      const desc = res.rows.length
+        ? `Excluded channels:\n${res.rows.map(r => `<#${r.channel_id}>`).join('\n')}`
+        : 'No channels are excluded — every channel earns XP.';
+      return interaction.editReply({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription(desc)],
+        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
+      });
+    }
+
     if (action === 'rafflelist') {
       await interaction.deferUpdate();
       const res = await query(
@@ -1807,7 +1931,7 @@ module.exports = {
       `, [interaction.guildId, enabled]);
       return interaction.editReply({
         embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Level system is now **${enabled ? 'ON' : 'OFF'}**.`)],
-        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+        components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
       });
     }
 
@@ -1850,7 +1974,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Timezone set to **${timezone}**.`)],
-      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
     });
   },
 
@@ -1887,7 +2011,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Ban log channel set to <#${channel.id}>.`)],
-      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
     });
   },
 
@@ -1902,7 +2026,7 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Level-up announcements will post in <#${channel.id}>.`)],
-      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildBackButton()],
+      components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
     });
   },
 
@@ -2041,6 +2165,16 @@ function buildSettingsButtons3() {
     new ButtonBuilder().setCustomId('serversetup_extras:goosdateon').setLabel('GoosDate ON').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('serversetup_extras:goosdateoff').setLabel('GoosDate OFF').setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId('serversetup_extras:goosdatestatus').setLabel('GoosDate Status').setStyle(ButtonStyle.Secondary),
+  );
+}
+
+function buildSettingsButtons4() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_gset:levelsetmember').setLabel('Set Member Level').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('serversetup_gset:levelreset').setLabel('Reset All Levels').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('serversetup_gset:levelexcludeadd').setLabel('Exclude Channel').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_gset:levelexcluderemove').setLabel('Un-exclude Channel').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_gset:levelexcludelist').setLabel('List Excluded').setStyle(ButtonStyle.Secondary),
   );
 }
 
