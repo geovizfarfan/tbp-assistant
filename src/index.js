@@ -715,6 +715,15 @@ client.on('messageReactionRemove', async (reaction, user) => {
   catch (e) { console.error('[RolePanel] remove:', e.message); }
 });
 
+// Giveaway required-role enforcement — blocks entry the moment someone
+// reacts if they're missing a required role, instead of only at draw time
+client.on('messageReactionAdd', async (reaction, user) => {
+  try {
+    const { handleGiveawayReactionAdd } = require('./commands/giveaway/giveaway');
+    await handleGiveawayReactionAdd(reaction, user);
+  } catch (e) { console.error('[Giveaway] required-role check:', e.message); }
+});
+
 // Member verification
 client.on('messageReactionAdd', async (reaction, user) => {
   try {

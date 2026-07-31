@@ -769,3 +769,34 @@ async function listLiveGiveaways(interaction) {
   }
   await interaction.editReply({ embeds: [embed] });
 }
+
+// Enforces required roles the moment someone reacts, instead of only at draw
+// time — removes the reaction and DMs them so it's clear why they can't enter.
+async function handleGiveawayReactionAdd(reaction, user) {
+  if (user.bot) return;
+  if (reaction.partial) await reaction.fetch().catch(() => null);
+  if (reaction.message.partial) await reaction.message.fetch().catch(() => null);
+  if (!reaction.message.guild) return;
+
+  const gwRes = await query(
+    `SELECT * FROM giveaway_events WHERE guild_id=$1 AND message_id=$2 AND status='active'`,
+    [reaction.message.guild.id, reaction.message.id]
+  );
+  const gw = gwRes.rows[0];
+  if (!gw || !gw.required_role_ids?.length) return;
+
+  const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);
+  if (!member) return;
+
+  const missing = gw.required_role_ids.filter(rid => !member.roles.cache.has(rid));
+  if (!missing.length) return; // qualifies, leave the reaction alone
+
+  await reaction.users.remove(user.id).catch(() => {});
+
+  const missingLines = missing.map(rid => reaction.message.guild.roles.cache.get(rid)?.name || 'a required role').join(', ');
+  await user.send({
+    content: `${e('wrong')} You can't enter the giveaway for **${gw.prize}** in **${reaction.message.guild.name}** — you're missing: ${missingLines}.`,
+  }).catch(() => {}); // DMs closed — fail silently, the removed reaction still makes it clear
+}
+
+module.exports.handleGiveawayReactionAdd = handleGiveawayReactionAdd;
