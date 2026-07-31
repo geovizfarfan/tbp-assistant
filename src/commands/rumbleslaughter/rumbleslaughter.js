@@ -25,7 +25,7 @@ module.exports = {
         { name: 'Ping only (no embed)', value: 'ping' },
       ))
       .addBooleanOption(o => o.setName('announce').setDescription('Post a confirmation embed when a role is assigned (default: True)'))
-      .addBooleanOption(o => o.setName('auto_battle').setDescription('Does the next battle start automatically, or does someone need to run /rumbleslaughter? (default: False)')))
+      .addBooleanOption(o => o.setName('auto_battle').setDescription('Does the next battle auto-start, or does someone run /rumbleslaughter? (default: False)')))
     .addSubcommandGroup(group => group
       .setName('reward')
       .setDescription('One-time rewards for the next game')
