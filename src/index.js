@@ -917,7 +917,7 @@ Thank you <@${newMember.id}> for helping us keep the magic alive! <a:BunnyLove:1
 // Wheel Roles auto-signup — checks role-collection campaigns independently of
 // boost detection, since that listener has an early return that would block it
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
-  if (typeof wheelModule.checkAutoSignupCampaigns !== 'function') return; // Wheel Roles not yet built
+  if (typeof wheelModule.checkAutoSignupCampaigns !== 'function') return;
   try { await wheelModule.checkAutoSignupCampaigns(client, oldMember, newMember); }
   catch (e) { console.error('[WheelRoles] auto-signup error:', e.message); }
 });
