@@ -185,15 +185,72 @@ module.exports = {
       .addStringOption(o => o.setName('entries').setDescription('Comma-separated: @usera, @userb, @userc').setRequired(true))
       .addStringOption(o => o.setName('prizes').setDescription('Comma-separated prize list').setRequired(true))
       .addStringOption(buildPaletteOption)
+    )
+    .addSubcommandGroup(group => group
+      .setName('roles')
+      .setDescription('Wheel Roles campaigns — collect entries from members with certain roles')
+      .addSubcommand(sub => sub
+        .setName('create')
+        .setDescription('Create a new Wheel Roles campaign')
+        .addStringOption(o => o.setName('name').setDescription('Campaign name').setRequired(true))
+        .addStringOption(o => o.setName('season').setDescription('Pull qualifying roles from a season\'s winner roles').setAutocomplete(true))
+        .addStringOption(o => o.setName('roles').setDescription('Or type @ to mention roles manually (skip if using season)'))
+        .addBooleanOption(o => o.setName('auto_signup').setDescription('Auto-enter members who have any of these roles (default: True)'))
+        .addBooleanOption(o => o.setName('extra_entries').setDescription('Stack an extra entry per additional qualifying role (default: False)')))
+      .addSubcommand(sub => sub
+        .setName('list')
+        .setDescription('List all campaigns, or view one campaign\'s entries')
+        .addStringOption(o => o.setName('name').setDescription('Campaign name (blank = list all)').setAutocomplete(true)))
+      .addSubcommand(sub => sub
+        .setName('spin')
+        .setDescription('Spin the wheel using a campaign\'s current entries')
+        .addStringOption(o => o.setName('name').setDescription('Campaign name').setRequired(true).setAutocomplete(true))
+        .addStringOption(buildPaletteOption))
+      .addSubcommand(sub => sub
+        .setName('end')
+        .setDescription('End a campaign — stops new auto-signups, keeps entries for spinning')
+        .addStringOption(o => o.setName('name').setDescription('Campaign name').setRequired(true).setAutocomplete(true)))
+      .addSubcommand(sub => sub
+        .setName('delete')
+        .setDescription('Delete a campaign and all its entries permanently')
+        .addStringOption(o => o.setName('name').setDescription('Campaign name').setRequired(true).setAutocomplete(true)))
     ),
+
+  async autocomplete(interaction) {
+    const focused = interaction.options.getFocused(true);
+    if (focused.name === 'name') {
+      const res = await query(
+        `SELECT name FROM wheel_role_campaigns WHERE guild_id=$1 AND name ILIKE $2 ORDER BY created_at DESC LIMIT 25`,
+        [interaction.guild.id, `%${focused.value}%`]
+      );
+      return interaction.respond(res.rows.map(r => ({ name: r.name, value: r.name })));
+    }
+    if (focused.name === 'season') {
+      const res = await query(
+        `SELECT name FROM rr_seasons WHERE guild_id=$1 AND status='active' AND name ILIKE $2 ORDER BY started_at DESC LIMIT 25`,
+        [interaction.guild.id, `%${focused.value}%`]
+      );
+      return interaction.respond(res.rows.map(r => ({ name: r.name, value: r.name })));
+    }
+    return interaction.respond([]);
+  },
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
+    const group = interaction.options.getSubcommandGroup(false);
 
-    if (['role-bonus-add', 'role-bonus-list', 'role-bonus-remove'].includes(sub) &&
+    if ((['role-bonus-add', 'role-bonus-list', 'role-bonus-remove'].includes(sub) || group === 'roles') &&
         !interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
         interaction.user.id !== process.env.OWNER_ID) {
       return interaction.reply({ content: `${e('wrong')} Admin only.`, ephemeral: true });
+    }
+
+    if (group === 'roles') {
+      if (sub === 'create') return campaignCreate(interaction);
+      if (sub === 'list') return campaignList(interaction);
+      if (sub === 'spin') return campaignSpin(interaction);
+      if (sub === 'end') return campaignEnd(interaction);
+      if (sub === 'delete') return campaignDelete(interaction);
     }
 
     if (sub === 'members') return spinMembers(interaction);
@@ -432,6 +489,187 @@ async function spinBoosted(interaction) {
   await interaction.editReply({ embeds: [embed], files: [attachment] });
 }
 
+async function campaignCreate(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  const name = interaction.options.getString('name');
+  const seasonName = interaction.options.getString('season');
+  const rolesRaw = interaction.options.getString('roles');
+  const autoSignup = interaction.options.getBoolean('auto_signup') ?? true;
+  const extraEntries = interaction.options.getBoolean('extra_entries') ?? false;
+
+  if (!seasonName && !rolesRaw) {
+    return interaction.editReply(`${e('wrong')} Pick a \`season\` to pull roles from, or type \`roles\` manually.`);
+  }
+
+  let roleIds = [];
+  if (seasonName) {
+    const seasonRes = await query(`SELECT id FROM rr_seasons WHERE guild_id=$1 AND name=$2 AND status='active'`, [interaction.guildId, seasonName]);
+    const season = seasonRes.rows[0];
+    if (!season) return interaction.editReply(`${e('wrong')} No active season named **${seasonName}**.`);
+
+    const roleRes = await query(
+      `SELECT DISTINCT rc.winner_role_id FROM rr_season_channels sc JOIN rr_channel_config rc ON rc.channel_id = sc.channel_id
+       WHERE sc.season_id = $1 AND rc.winner_role_id IS NOT NULL
+       UNION
+       SELECT DISTINCT rs.winner_role_id FROM rr_season_channels sc JOIN rumble_slaughter_config rs ON rs.channel_id = sc.channel_id
+       WHERE sc.season_id = $1 AND rs.winner_role_id IS NOT NULL`,
+      [season.id]
+    );
+    roleIds = roleRes.rows.map(r => r.winner_role_id);
+    if (!roleIds.length) return interaction.editReply(`${e('wrong')} **${seasonName}** has no channels with a winner role configured yet.`);
+  } else {
+    roleIds = [...rolesRaw.matchAll(/<@&(\d+)>/g)].map(m => m[1]);
+    if (!roleIds.length) return interaction.editReply(`${e('wrong')} Couldn't find any role mentions — type @ to mention roles.`);
+  }
+
+  const existing = await query(`SELECT id FROM wheel_role_campaigns WHERE guild_id=$1 AND name=$2 AND status='active'`, [interaction.guildId, name]);
+  if (existing.rows.length) return interaction.editReply(`${e('wrong')} A campaign named **${name}** already exists.`);
+
+  await query(
+    `INSERT INTO wheel_role_campaigns (guild_id, name, role_ids, auto_signup, extra_entries_allowed, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6)`,
+    [interaction.guildId, name, roleIds, autoSignup, extraEntries, interaction.user.id]
+  );
+
+  const roleLines = roleIds.map(id => `<@&${id}>`).join(', ');
+  return interaction.editReply(
+    `${e('checkmark')} Campaign **${name}** created${seasonName ? ` from season **${seasonName}**` : ''} — qualifying roles: ${roleLines}\n` +
+    `Auto-signup: **${autoSignup ? 'On' : 'Off'}** — Extra entries per extra role: **${extraEntries ? 'On' : 'Off'}**\n` +
+    (autoSignup ? 'Members with any of these roles will be entered automatically going forward.' : 'Auto-signup is off — entries only happen through linked Rumble seasons.')
+  );
+}
+
+async function campaignList(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+  const name = interaction.options.getString('name');
+
+  if (!name) {
+    const res = await query(
+      `SELECT c.*, COUNT(e.id) AS entry_count
+       FROM wheel_role_campaigns c LEFT JOIN wheel_role_campaign_entries e ON e.campaign_id = c.id
+       WHERE c.guild_id=$1 GROUP BY c.id ORDER BY c.created_at DESC`,
+      [interaction.guildId]
+    );
+    if (!res.rows.length) return interaction.editReply('No Wheel Roles campaigns yet. Create one with `/wheel roles create`.');
+
+    const lines = res.rows.map(c => `**${c.name}** ${c.status === 'active' ? '🟢' : '⚪'} — ${c.entry_count} entrant(s) — auto-signup: ${c.auto_signup ? 'on' : 'off'}`).join('\n');
+    return interaction.editReply({ embeds: [baseEmbed(e('diamond') + ' Wheel Roles Campaigns', COLORS.tbppurple, interaction.guild?.name)
+      .setDescription(lines)] });
+  }
+
+  const campRes = await query(`SELECT * FROM wheel_role_campaigns WHERE guild_id=$1 AND name=$2`, [interaction.guildId, name]);
+  const camp = campRes.rows[0];
+  if (!camp) return interaction.editReply(`${e('wrong')} No campaign named **${name}**.`);
+
+  const entRes = await query(
+    `SELECT * FROM wheel_role_campaign_entries WHERE campaign_id=$1 ORDER BY quantity DESC, entered_at ASC LIMIT 25`,
+    [camp.id]
+  );
+  const roleLines = camp.role_ids.map(id => `<@&${id}>`).join(', ');
+  const entryLines = entRes.rows.length
+    ? entRes.rows.map(en => `<@${en.user_id}> — ${en.quantity} entr${en.quantity === 1 ? 'y' : 'ies'}${en.currently_qualified ? '' : ' *(no longer qualified)*'}`).join('\n')
+    : 'No entries yet.';
+
+  return interaction.editReply({ embeds: [baseEmbed(`${e('diamond')} Campaign: ${camp.name}`, COLORS.tbppurple, interaction.guild?.name)
+    .setDescription(`Status: **${camp.status}** — Auto-signup: **${camp.auto_signup ? 'On' : 'Off'}** — Extra entries: **${camp.extra_entries_allowed ? 'On' : 'Off'}**\nQualifying roles: ${roleLines}`)
+    .addFields({ name: `Entrants (showing up to 25)`, value: entryLines })] });
+}
+
+async function campaignSpin(interaction) {
+  const name = interaction.options.getString('name');
+  const paletteKey = interaction.options.getString('palette');
+  const colors = paletteKey ? getPaletteColors(paletteKey) : DEFAULT_COLORS;
+
+  await interaction.deferReply();
+
+  const campRes = await query(`SELECT * FROM wheel_role_campaigns WHERE guild_id=$1 AND name=$2`, [interaction.guildId, name]);
+  const camp = campRes.rows[0];
+  if (!camp) return interaction.editReply(`${e('wrong')} No campaign named **${name}**.`);
+
+  const entRes = await query(`SELECT * FROM wheel_role_campaign_entries WHERE campaign_id=$1 AND currently_qualified=true`, [camp.id]);
+  if (!entRes.rows.length) return interaction.editReply(`${e('wrong')} **${name}** has no qualified entrants to spin for.`);
+
+  const entryObjects = [];
+  for (const en of entRes.rows) {
+    const member = await interaction.guild.members.fetch(en.user_id).catch(() => null);
+    const displayName = member ? member.user.username : `<@${en.user_id}>`;
+    for (let i = 0; i < en.quantity; i++) entryObjects.push({ text: displayName, userId: en.user_id });
+  }
+  const textEntries = entryObjects.map(o => o.text);
+
+  let result;
+  try {
+    result = await spinWheel(textEntries, colors);
+  } catch (err) {
+    console.error('[Wheel] Campaign spin failed:', err.message);
+    return interaction.editReply({ content: `${e('wrong')} Wheel spin failed: ${err.message}` });
+  }
+
+  const winner = entryObjects[result.winnerIndex];
+  const embedColor = (paletteKey && WHEEL_PALETTES[paletteKey]?.embedColor) || (colors && colors[0]) || COLORS.tbppurple;
+  const attachment = new AttachmentBuilder(result.buffer, { name: 'wheel.gif' });
+  const embed = baseEmbed(`${e('diamond')} Wheel Spin — ${camp.name}`, embedColor, interaction.guild?.name)
+    .setImage('attachment://wheel.gif')
+    .addFields({ name: e('trophies') + ' Winner', value: winner.userId ? `<@${winner.userId}>` : winner.text, inline: false })
+    .setFooter({ text: `${entRes.rows.length} qualified entrant(s), ${entryObjects.length} total entries` });
+
+  return interaction.editReply({ embeds: [embed], files: [attachment] });
+}
+
+async function campaignEnd(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+  const name = interaction.options.getString('name');
+  const res = await query(`UPDATE wheel_role_campaigns SET status='ended' WHERE guild_id=$1 AND name=$2 RETURNING id`, [interaction.guildId, name]);
+  if (!res.rows.length) return interaction.editReply(`${e('wrong')} No campaign named **${name}**.`);
+  return interaction.editReply(`${e('checkmark')} **${name}** ended — auto-signups stopped, existing entries kept for spinning.`);
+}
+
+async function campaignDelete(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+  const name = interaction.options.getString('name');
+  const res = await query(`DELETE FROM wheel_role_campaigns WHERE guild_id=$1 AND name=$2 RETURNING id`, [interaction.guildId, name]);
+  if (!res.rows.length) return interaction.editReply(`${e('wrong')} No campaign named **${name}**.`);
+  return interaction.editReply(`${e('checkmark')} **${name}** and all its entries deleted.`);
+}
+
+// Called from index.js on guildMemberUpdate — checks role changes against
+// every active auto-signup campaign in that guild and updates entries.
+async function checkAutoSignupCampaigns(client, oldMember, newMember) {
+  // Skip entirely if roles didn't actually change (nickname/boost/etc updates
+  // also fire guildMemberUpdate) — avoids a DB round-trip on every unrelated update.
+  const oldIds = oldMember.roles.cache;
+  const newIds = newMember.roles.cache;
+  if (oldIds.size === newIds.size && oldIds.every((_, id) => newIds.has(id))) return;
+
+  const campRes = await query(
+    `SELECT * FROM wheel_role_campaigns WHERE guild_id=$1 AND status='active' AND auto_signup=true`,
+    [newMember.guild.id]
+  );
+  if (!campRes.rows.length) return;
+
+  for (const camp of campRes.rows) {
+    const matchedRoles = camp.role_ids.filter(rid => newMember.roles.cache.has(rid));
+    const qualifies = matchedRoles.length > 0;
+    const quantity = camp.extra_entries_allowed ? Math.max(matchedRoles.length, 1) : 1;
+
+    if (qualifies) {
+      await query(
+        `INSERT INTO wheel_role_campaign_entries (campaign_id, user_id, quantity, currently_qualified, last_qualified_at)
+         VALUES ($1,$2,$3,true,NOW())
+         ON CONFLICT (campaign_id, user_id) DO UPDATE SET
+           quantity = $3, currently_qualified = true, last_qualified_at = NOW()`,
+        [camp.id, newMember.id, quantity]
+      ).catch(() => {});
+    } else {
+      await query(
+        `UPDATE wheel_role_campaign_entries SET currently_qualified=false WHERE campaign_id=$1 AND user_id=$2`,
+        [camp.id, newMember.id]
+      ).catch(() => {});
+    }
+  }
+}
+
 async function roleBonusAdd(interaction) {
   const role = interaction.options.getRole('role');
   const bonus = interaction.options.getInteger('bonus');
@@ -593,3 +831,5 @@ async function spinCombo(interaction) {
     }
   }
 }
+
+module.exports.checkAutoSignupCampaigns = checkAutoSignupCampaigns;
