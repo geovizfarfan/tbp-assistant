@@ -904,3 +904,28 @@ CREATE TABLE IF NOT EXISTS payments (
   paid_notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ticket raffles: admin-granted tickets (e.g. after a real-money or currency
+-- purchase handled outside the bot), weighted random draw for a winner.
+CREATE TABLE IF NOT EXISTS ticket_raffles (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  prize TEXT,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','drawn','cancelled')),
+  winner_id TEXT,
+  winner_tickets INT,
+  total_tickets INT,
+  created_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  drawn_at TIMESTAMPTZ,
+  UNIQUE (guild_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS ticket_raffle_entries (
+  id SERIAL PRIMARY KEY,
+  raffle_id INTEGER NOT NULL REFERENCES ticket_raffles(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  tickets INT NOT NULL DEFAULT 0,
+  UNIQUE (raffle_id, user_id)
+);
