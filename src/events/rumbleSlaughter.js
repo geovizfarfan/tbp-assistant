@@ -94,8 +94,9 @@ async function handleMessage(message, client) {
 }
 
 async function handleArenaOpen(message, embed) {
-  // Host is a direct mention: "<@123456789> opened the arena."
-  const match = embed.description?.match(/^<@!?(\d+)>\s+opened the arena/i);
+  // Host is a direct mention at the start of the description — Play & Regret
+  // uses randomized flavor text after it, so don't require specific wording.
+  const match = embed.description?.match(/^\*{0,3}<@!?(\d+)>/);
   if (!match) {
     console.log('[RumbleSlaughter] Could not parse host mention from arena-open message:', embed.description?.slice(0, 80));
     return;
@@ -147,8 +148,10 @@ async function handleArenaOpen(message, embed) {
 async function handleChampion(message, embed) {
   if (await alreadyProcessed(message.id)) return;
 
-  // Winner is a direct mention: "<@123456789> wins..."
-  const match = embed.description?.match(/^<@!?(\d+)>\s+wins/i);
+  // Winner is a direct mention at the start of the description — Play &
+  // Regret uses randomized flavor text after it (e.g. "did that and will
+  // absolutely bring it up forever"), so don't require specific wording.
+  const match = embed.description?.match(/^\*{0,3}<@!?(\d+)>/);
   if (!match) {
     console.log('[RumbleSlaughter] Could not parse winner mention from champion message:', embed.description?.slice(0, 80));
     return;
