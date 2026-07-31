@@ -521,6 +521,7 @@ async function campaignCreate(interaction) {
 
   let roleIds = [];
   let qualifySeasonIds = null;
+  let sourceSeasonIds = null;
   let qualifyMode = 'any_role';
 
   if (seasonName) {
@@ -532,6 +533,8 @@ async function campaignCreate(interaction) {
       if (!seasonRes.rows.length) return interaction.editReply(`${e('wrong')} No active season named **${sName}**.`);
       seasons.push({ id: seasonRes.rows[0].id, name: sName });
     }
+
+    sourceSeasonIds = seasons.map(s => s.id);
 
     const allRoleIds = new Set();
     for (const season of seasons) {
@@ -561,9 +564,9 @@ async function campaignCreate(interaction) {
   if (existing.rows.length) return interaction.editReply(`${e('wrong')} A campaign named **${name}** already exists.`);
 
   await query(
-    `INSERT INTO wheel_role_campaigns (guild_id, name, role_ids, auto_signup, extra_entries_allowed, created_by, qualify_mode, qualify_season_ids)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-    [interaction.guildId, name, roleIds, autoSignup, extraEntries, interaction.user.id, qualifyMode, qualifySeasonIds]
+    `INSERT INTO wheel_role_campaigns (guild_id, name, role_ids, auto_signup, extra_entries_allowed, created_by, qualify_mode, qualify_season_ids, source_season_ids)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [interaction.guildId, name, roleIds, autoSignup, extraEntries, interaction.user.id, qualifyMode, qualifySeasonIds, sourceSeasonIds]
   );
 
   const roleLines = roleIds.map(id => `<@&${id}>`).join(', ');

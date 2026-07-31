@@ -105,9 +105,21 @@ async function endSeasonCore(interaction, seasonName) {
   await query('UPDATE rr_seasons SET status = $1, ended_at = NOW() WHERE id = $2', ['ended', season.id]);
   await query('DELETE FROM rr_achievements WHERE season_id = $1', [season.id]);
 
+  // Auto-end any Wheel Roles campaign built from this season — stops new
+  // signups but keeps existing entries around for spinning, same as running
+  // /wheel roles end manually.
+  const linkedCampaigns = await query(
+    `UPDATE wheel_role_campaigns SET status='ended' WHERE guild_id=$1 AND status='active' AND $2 = ANY(source_season_ids) RETURNING name`,
+    [interaction.guildId, season.id]
+  ).catch(() => ({ rows: [] }));
+
+  const campaignNote = linkedCampaigns.rows.length
+    ? `\n<:rumble:1522372419338375299> Also ended linked Wheel Roles campaign${linkedCampaigns.rows.length > 1 ? 's' : ''}: ${linkedCampaigns.rows.map(c => `**${c.name}**`).join(', ')}.`
+    : '';
+
   const embed = new EmbedBuilder().setColor('#5b209a')
     .setTitle('<:rumble:1522372419338375299> Season Ended!')
-    .setDescription(`**${season.name}** ended.\n<:member:1512912827424309278> **${removed}** roles removed.\n<a:again:1522458630795034694> This season's achievements reset — other active seasons are unaffected.`)
+    .setDescription(`**${season.name}** ended.\n<:member:1512912827424309278> **${removed}** roles removed.\n<a:again:1522458630795034694> This season's achievements reset — other active seasons are unaffected.${campaignNote}`)
     .setTimestamp().setFooter({ text: interaction.guild.name });
 
   const adminLog = await getLogChannel(interaction.client, interaction.guildId, 'admin');

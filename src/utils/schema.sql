@@ -442,6 +442,9 @@ ALTER TABLE wheel_role_campaigns ADD COLUMN IF NOT EXISTS qualify_mode TEXT NOT 
 ALTER TABLE wheel_role_campaigns ADD COLUMN IF NOT EXISTS qualify_season_ids INTEGER[];
 ALTER TABLE wheel_role_campaigns ADD COLUMN IF NOT EXISTS palette TEXT;
 ALTER TABLE wheel_role_campaigns ADD COLUMN IF NOT EXISTS host_id TEXT;
+-- Which season(s) this campaign was built from, regardless of qualifying
+-- mode — used so ending a season can auto-end any campaign linked to it.
+ALTER TABLE wheel_role_campaigns ADD COLUMN IF NOT EXISTS source_season_ids INTEGER[];
 
 CREATE TABLE IF NOT EXISTS wheel_role_campaign_entries (
   id SERIAL PRIMARY KEY,
