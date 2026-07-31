@@ -53,7 +53,7 @@ function buildArenaEmbed(cfg, { hostId, hostName, entryFee, era, guildName, chan
 }
 
 // Same idea for the champion embed — always rebuilt fresh from current config.
-function buildChampionEmbed(cfg, member, { pot, guildName, channelName }) {
+function buildChampionEmbed(cfg, member, { pot, guildName, channelName, totalServerWins }) {
   const descLines = [];
   descLines.push(`<@${member.id}> has been crowned champion and awarded <@&${cfg.winner_role_id}>!`);
   if (pot) descLines.push(`<a:moneybag:1522373120147849226> **Pot Won:** ${pot} <a:SINS:1522338148380704910> (sins)`);
@@ -68,7 +68,7 @@ function buildChampionEmbed(cfg, member, { pot, guildName, channelName }) {
     .setTitle(cfg.battle_title || '💀 Rumble Slaughter — Champion!')
     .setDescription(descLines.join('\n'))
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-    .setFooter({ text: `${guildName} • Rumble Slaughter Champion` })
+    .setFooter({ text: `VELOURA has tracked ${Number(totalServerWins || 0)} Rumble Slaughter wins globally.` })
     .setTimestamp();
   if (cfg.image_url) embed.setImage(cfg.image_url);
   return embed;
@@ -182,6 +182,17 @@ async function handleChampion(message, embed) {
   if (added === null) return;
   console.log(`[RumbleSlaughter] Assigned winner role to ${member.user.username}`);
 
+  // Track wins unconditionally, same pattern as Rumble Royale's rr_stats —
+  // this happens regardless of announce settings below.
+  await query(`
+    INSERT INTO rs_stats (guild_id, channel_id, user_id, username, wins, games)
+    VALUES ($1,$2,$3,$4,1,1)
+    ON CONFLICT (guild_id, user_id)
+    DO UPDATE SET wins = rs_stats.wins + 1, games = rs_stats.games + 1, username = $4
+  `, [message.guild.id, message.channel.id, member.id, member.user.username]).catch(err => {
+    console.error('[RumbleSlaughter] stats tracking error:', err.message);
+  });
+
   if (!cfg.announce) return;
 
   const pings = buildPings(cfg);
@@ -194,8 +205,11 @@ async function handleChampion(message, embed) {
     return;
   }
 
+  const totalWinsRes = await query('SELECT SUM(wins) as total FROM rs_stats WHERE guild_id = $1', [message.guild.id]).catch(() => null);
+  const totalServerWins = totalWinsRes?.rows[0]?.total || 0;
+
   const roleEmbed = buildChampionEmbed(cfg, member, {
-    pot, guildName: message.guild.name, channelName: message.channel.name,
+    pot, guildName: message.guild.name, channelName: message.channel.name, totalServerWins,
   });
 
   const sentMsg = await message.channel.send({ embeds: [roleEmbed] }).catch(() => null);
