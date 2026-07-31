@@ -460,7 +460,8 @@ async function finishGiveaway(client, giveawayId) {
 const activeGiveawayTimers = new Map();
 
 function scheduleGiveawayEnd(client, giveawayId, ms) {
-  const handle = setTimeout(() => {
+  const { safeSetTimeout } = require('../../utils/safeTimeout');
+  const handle = safeSetTimeout(() => {
     activeGiveawayTimers.delete(giveawayId);
     finishGiveaway(client, giveawayId).catch(err => console.error('[Giveaway] finish error:', err.message));
   }, ms);

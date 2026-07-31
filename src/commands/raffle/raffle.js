@@ -142,7 +142,8 @@ async function startRaffle(interaction) {
 
   const msUntilEnd = endsAt.getTime() - Date.now();
   if (msUntilEnd > 0) {
-    setTimeout(() => autoEndRaffle(interaction.client, raffleId, interaction.guildId, interaction.channelId, msg.id), msUntilEnd);
+    const { safeSetTimeout } = require('../../utils/safeTimeout');
+    safeSetTimeout(() => autoEndRaffle(interaction.client, raffleId, interaction.guildId, interaction.channelId, msg.id), msUntilEnd);
   } else {
     // Already expired during setup, end immediately
     await autoEndRaffle(interaction.client, raffleId, interaction.guildId, interaction.channelId, msg.id);

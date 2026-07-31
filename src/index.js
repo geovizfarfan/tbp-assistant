@@ -80,7 +80,8 @@ async function restoreRaffles(client) {
       } else {
         // Reschedule
         const { autoEndRaffle } = require('./commands/raffle/raffle.js');
-        if (autoEndRaffle) setTimeout(() => autoEndRaffle(client, raffle.id, raffle.guild_id, raffle.channel_id, raffle.message_id), msLeft);
+        const { safeSetTimeout } = require('./utils/safeTimeout');
+        if (autoEndRaffle) safeSetTimeout(() => autoEndRaffle(client, raffle.id, raffle.guild_id, raffle.channel_id, raffle.message_id), msLeft);
         console.log(`[Raffles] Raffle #${raffle.id} rescheduled, ends in ${Math.round(msLeft/60000)}min`);
       }
     }

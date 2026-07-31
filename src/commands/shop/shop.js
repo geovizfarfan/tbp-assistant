@@ -6,6 +6,7 @@ const {
 const { query } = require('../../utils/database');
 const { getGuildCurrencyConfig, adjustGuildBalance, getGuildBalance } = require('../../utils/currency');
 const { xpForLevel, getUserLevel } = require('../../utils/levelSystem');
+const { safeSetTimeout } = require('../../utils/safeTimeout');
 
 const TYPE_LABELS = { role: '<:role:1524456992683593979> Role', reaction: '<a:purplesparkle:1512912828489793626> Auto Reaction', custom: '<a:gift:1512915751458050268> Custom', nickname: '<:role:1524456992683593979> Nickname', nickname_remove: '<:role:1524456992683593979> Nickname Remover', levelup: '<a:trophies:1512912823062364281> Level Up' };
 const WRONG = '<:wrong:1512916350375301160>';
@@ -117,7 +118,7 @@ async function renderAndPost(client, guildId) {
 
 // ── Expiry schedulers (run from the moment an item is USED) ────────────────
 function scheduleRoleRemoval(guild, userId, roleId, ms, purchaseId) {
-  setTimeout(async () => {
+  safeSetTimeout(async () => {
     try {
       const member = await guild.members.fetch(userId).catch(() => null);
       if (member) await member.roles.remove(roleId).catch(() => {});
@@ -127,13 +128,13 @@ function scheduleRoleRemoval(guild, userId, roleId, ms, purchaseId) {
 }
 
 function scheduleReactionExpiry(purchaseId, ms) {
-  setTimeout(async () => {
+  safeSetTimeout(async () => {
     await query('UPDATE shop_purchases SET expired = true WHERE id = $1', [purchaseId]).catch(() => {});
   }, ms);
 }
 
 function scheduleNicknameRevert(guild, targetId, originalNickname, ms, purchaseId) {
-  setTimeout(async () => {
+  safeSetTimeout(async () => {
     try {
       const member = await guild.members.fetch(targetId).catch(() => null);
       if (member) await member.setNickname(originalNickname || null).catch(() => {});
