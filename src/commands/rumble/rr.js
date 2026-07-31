@@ -34,7 +34,7 @@ module.exports = {
       .addAttachmentOption(o => o.setName('image').setDescription('Upload image for battle announcement'))
       .addStringOption(o => o.setName('image_url').setDescription('Or paste image URL'))
       .addStringOption(o => o.setName('embed_color').setDescription('Embed color hex'))
-      .addStringOption(o => o.setName('reaction_emoji').setDescription('Emoji to auto-react to winner messages'))
+      .addStringOption(o => o.setName('reaction_emoji').setDescription('Emoji to auto-react to winner messages. Type "clear" to remove it.'))
       .addStringOption(o => o.setName('battle_title').setDescription('Custom title for battle announcement'))
       .addStringOption(o => o.setName('description').setDescription('Custom description (use \\n for new lines)'))
       .addBooleanOption(o => o.setName('announce').setDescription('Post announcements at all for this channel (default: True)')))
@@ -107,7 +107,9 @@ module.exports = {
       const imageAttach  = interaction.options.getAttachment('image');
       const imageUrl     = imageAttach?.url || interaction.options.getString('image_url');
       const color        = interaction.options.getString('embed_color');
-      const reactionEmoji = interaction.options.getString('reaction_emoji');
+      const reactionEmojiRaw = interaction.options.getString('reaction_emoji');
+      const clearReaction = reactionEmojiRaw && ['clear', 'none'].includes(reactionEmojiRaw.toLowerCase());
+      const reactionEmoji = clearReaction ? null : reactionEmojiRaw;
       const battleTitle  = interaction.options.getString('battle_title');
       const description  = interaction.options.getString('description')?.replace(/\\n/g, '\n');
       const announce     = interaction.options.getBoolean('announce');
@@ -130,7 +132,7 @@ module.exports = {
       const newAnnounceStyle = announceStyle ?? ex?.announce_style ?? 'embed';
       const newImage       = imageUrl ?? ex?.battle_image;
       const newColor       = color ?? ex?.embed_color ?? '#d6c2ee';
-      const newReaction    = reactionEmoji ?? ex?.reaction_emoji;
+      const newReaction    = clearReaction ? null : (reactionEmoji ?? ex?.reaction_emoji);
       const newTitle       = battleTitle ?? ex?.battle_title;
       const newDesc        = description ?? ex?.battle_description;
       const newAnnounce    = announce ?? ex?.announce ?? true;
@@ -192,7 +194,7 @@ module.exports = {
           if (nextChannel !== null && nextChannel?.id !== ex.next_channel_id) changes.push({ name: '<a:rumblesword:1522372420894330921> Next Room', value: newNextChannel ? `<#${newNextChannel}>` : '—', inline: true });
           if (imageUrl && imageUrl !== ex.battle_image) changes.push({ name: '<a:Fire:1522374930681823433> Image', value: '✓ Updated', inline: true });
           if (color && color !== ex.embed_color) changes.push({ name: '🎨 Color', value: newColor, inline: true });
-          if (reactionEmoji && reactionEmoji !== ex.reaction_emoji) changes.push({ name: '✨ Reaction', value: newReaction || '—', inline: true });
+          if ((reactionEmoji && reactionEmoji !== ex.reaction_emoji) || (clearReaction && ex.reaction_emoji)) changes.push({ name: '✨ Reaction', value: newReaction || '—', inline: true });
           if (battleTitle && battleTitle !== ex.battle_title) changes.push({ name: '📝 Battle Title', value: newTitle || '—', inline: true });
           if (description && description !== ex.battle_description) changes.push({ name: '📄 Description', value: newDesc ? newDesc.slice(0,50)+'...' : '—', inline: true });
           if (announceStyle && announceStyle !== (ex.announce_style || 'embed')) changes.push({ name: '📣 Announce Style', value: newAnnounceStyle === 'ping' ? 'Ping Only' : 'Embed', inline: true });

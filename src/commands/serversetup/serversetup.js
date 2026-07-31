@@ -840,87 +840,6 @@ module.exports = {
       });
     }
 
-    if (action === 'roleachievement') {
-      return interaction.update({
-        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the channel for "collected all roles" announcements:')],
-        components: [buildRoleAchievementChannelPicker(), buildBackButton()],
-      });
-    }
-
-    if (action === 'seasonlist') {
-      await interaction.deferUpdate();
-      const res = await query(
-        `SELECT s.*, COUNT(DISTINCT sc.channel_id) AS channel_count
-         FROM rr_seasons s LEFT JOIN rr_season_channels sc ON sc.season_id = s.id
-         WHERE s.guild_id = $1 AND s.status = 'active'
-         GROUP BY s.id ORDER BY s.started_at ASC`,
-        [interaction.guildId]
-      );
-      const embed = new EmbedBuilder().setColor('#d6c2ee').setTitle('⚔️ Active Seasons');
-      if (!res.rows.length) {
-        embed.setDescription('No active seasons. Use the "Start Season" button below to start one.');
-      } else {
-        const lines = res.rows.map(s => `**${s.name}** — ${s.channel_count} channel(s) — started <t:${Math.floor(new Date(s.started_at).getTime()/1000)}:R>`).join('\n');
-        embed.setDescription(lines);
-      }
-      return interaction.editReply({
-        embeds: [embed],
-        components: [buildRumbleButtons(), buildRumbleButtons2(), buildRumbleButtons3(), buildBackButton()],
-      });
-    }
-
-    if (action === 'seasonstart') {
-      const modal = new ModalBuilder().setCustomId('serversetup_seasonstartmodal').setTitle('Start Season');
-      const nameInput = new TextInputBuilder().setCustomId('name').setLabel('Season name').setStyle(TextInputStyle.Short).setRequired(true);
-      const campaignInput = new TextInputBuilder().setCustomId('wheel_campaign').setLabel('Wheel Roles campaign (optional)').setStyle(TextInputStyle.Short).setRequired(false);
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(nameInput),
-        new ActionRowBuilder().addComponents(campaignInput),
-      );
-      return interaction.showModal(modal);
-    }
-
-    if (action === 'seasoninfo') {
-      const row = await buildSeasonSelectMenu(interaction.guildId, 'serversetup_seasoninfopick', 'Pick a season for details');
-      return interaction.update({
-        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick a season to view details:')],
-        components: [row, buildBackButton()],
-      });
-    }
-
-    if (action === 'seasonend') {
-      const row = await buildSeasonSelectMenu(interaction.guildId, 'serversetup_seasonendpick', 'Pick a season to end');
-      return interaction.update({
-        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick a season to end (this removes all its winner roles):')],
-        components: [row, buildBackButton()],
-      });
-    }
-
-    if (action === 'seasonaddchan') {
-      const row = await buildSeasonSelectMenu(interaction.guildId, 'serversetup_seasonaddchanpick', 'Pick a season');
-      return interaction.update({
-        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick which season to add a channel to:')],
-        components: [row, buildBackButton()],
-      });
-    }
-
-    if (action === 'seasonremovechan') {
-      const row = await buildSeasonSelectMenu(interaction.guildId, 'serversetup_seasonremovechanpick', 'Pick a season');
-      return interaction.update({
-        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick which season to remove a channel from:')],
-        components: [row, buildBackButton()],
-      });
-    }
-
-    if (action === 'seasonlink') {
-      const row = await buildSeasonSelectMenu(interaction.guildId, 'serversetup_seasonlinkpick', 'Pick a season');
-      return interaction.update({
-        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick which season to link (or unlink) a Wheel Roles campaign for:')],
-        components: [row, buildBackButton()],
-      });
-    }
-
-
     if (action === 'goosdatestatus') {
       const { status } = require('../goosdate/goosdate');
       return status(interaction);
@@ -1778,6 +1697,86 @@ module.exports = {
 
   async handleSettingsButton(interaction) {
     const [, action] = interaction.customId.split(':');
+
+    if (action === 'roleachievement') {
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the channel for "collected all roles" announcements:')],
+        components: [buildRoleAchievementChannelPicker(), buildBackButton()],
+      });
+    }
+
+    if (action === 'seasonlist') {
+      await interaction.deferUpdate();
+      const res = await query(
+        `SELECT s.*, COUNT(DISTINCT sc.channel_id) AS channel_count
+         FROM rr_seasons s LEFT JOIN rr_season_channels sc ON sc.season_id = s.id
+         WHERE s.guild_id = $1 AND s.status = 'active'
+         GROUP BY s.id ORDER BY s.started_at ASC`,
+        [interaction.guildId]
+      );
+      const embed = new EmbedBuilder().setColor('#d6c2ee').setTitle('⚔️ Active Seasons');
+      if (!res.rows.length) {
+        embed.setDescription('No active seasons. Use the "Start Season" button below to start one.');
+      } else {
+        const lines = res.rows.map(s => `**${s.name}** — ${s.channel_count} channel(s) — started <t:${Math.floor(new Date(s.started_at).getTime()/1000)}:R>`).join('\n');
+        embed.setDescription(lines);
+      }
+      return interaction.editReply({
+        embeds: [embed],
+        components: [buildRumbleButtons(), buildRumbleButtons2(), buildRumbleButtons3(), buildBackButton()],
+      });
+    }
+
+    if (action === 'seasonstart') {
+      const modal = new ModalBuilder().setCustomId('serversetup_seasonstartmodal').setTitle('Start Season');
+      const nameInput = new TextInputBuilder().setCustomId('name').setLabel('Season name').setStyle(TextInputStyle.Short).setRequired(true);
+      const campaignInput = new TextInputBuilder().setCustomId('wheel_campaign').setLabel('Wheel Roles campaign (optional)').setStyle(TextInputStyle.Short).setRequired(false);
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(nameInput),
+        new ActionRowBuilder().addComponents(campaignInput),
+      );
+      return interaction.showModal(modal);
+    }
+
+    if (action === 'seasoninfo') {
+      const row = await buildSeasonSelectMenu(interaction.guildId, 'serversetup_seasoninfopick', 'Pick a season for details');
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick a season to view details:')],
+        components: [row, buildBackButton()],
+      });
+    }
+
+    if (action === 'seasonend') {
+      const row = await buildSeasonSelectMenu(interaction.guildId, 'serversetup_seasonendpick', 'Pick a season to end');
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick a season to end (this removes all its winner roles):')],
+        components: [row, buildBackButton()],
+      });
+    }
+
+    if (action === 'seasonaddchan') {
+      const row = await buildSeasonSelectMenu(interaction.guildId, 'serversetup_seasonaddchanpick', 'Pick a season');
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick which season to add a channel to:')],
+        components: [row, buildBackButton()],
+      });
+    }
+
+    if (action === 'seasonremovechan') {
+      const row = await buildSeasonSelectMenu(interaction.guildId, 'serversetup_seasonremovechanpick', 'Pick a season');
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick which season to remove a channel from:')],
+        components: [row, buildBackButton()],
+      });
+    }
+
+    if (action === 'seasonlink') {
+      const row = await buildSeasonSelectMenu(interaction.guildId, 'serversetup_seasonlinkpick', 'Pick a season');
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick which season to link (or unlink) a Wheel Roles campaign for:')],
+        components: [row, buildBackButton()],
+      });
+    }
 
     if (action === 'timezone') {
       return interaction.update({
