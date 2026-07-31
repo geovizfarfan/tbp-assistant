@@ -560,6 +560,7 @@ ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_message_id TEX
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_embed_json TEXT;
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_ping_content TEXT;
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_type TEXT;
+ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS auto_battle BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_host_id TEXT;
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_winner_id TEXT;
 ALTER TABLE rumble_slaughter_config ADD COLUMN IF NOT EXISTS last_entry_fee TEXT;

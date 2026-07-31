@@ -24,7 +24,8 @@ module.exports = {
         { name: 'Full embed', value: 'embed' },
         { name: 'Ping only (no embed)', value: 'ping' },
       ))
-      .addBooleanOption(o => o.setName('announce').setDescription('Post a confirmation embed when a role is assigned (default: True)')))
+      .addBooleanOption(o => o.setName('announce').setDescription('Post a confirmation embed when a role is assigned (default: True)'))
+      .addBooleanOption(o => o.setName('auto_battle').setDescription('Does the next battle start automatically, or does someone need to run /rumbleslaughter? (default: False)')))
     .addSubcommandGroup(group => group
       .setName('reward')
       .setDescription('One-time rewards for the next game')
@@ -77,10 +78,11 @@ module.exports = {
       const reactionEmoji = (reactionEmojiRaw && ['clear', 'none'].includes(reactionEmojiRaw.toLowerCase())) ? '' : reactionEmojiRaw;
       const announceStyle = interaction.options.getString('announce_style');
       const announce = interaction.options.getBoolean('announce');
+      const autoBattle = interaction.options.getBoolean('auto_battle');
 
       await query(`
-        INSERT INTO rumble_slaughter_config (channel_id, guild_id, winner_role_id, ping_role_id, ping_role2_id, ping_role3_id, next_channel_id, battle_title, description, image_url, embed_color, reaction_emoji, announce_style, announce)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,COALESCE($14, true))
+        INSERT INTO rumble_slaughter_config (channel_id, guild_id, winner_role_id, ping_role_id, ping_role2_id, ping_role3_id, next_channel_id, battle_title, description, image_url, embed_color, reaction_emoji, announce_style, announce, auto_battle)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,COALESCE($14, true),COALESCE($15, false))
         ON CONFLICT (channel_id) DO UPDATE SET
           winner_role_id = COALESCE($3, rumble_slaughter_config.winner_role_id),
           ping_role_id = COALESCE($4, rumble_slaughter_config.ping_role_id),
@@ -93,8 +95,9 @@ module.exports = {
           embed_color = COALESCE($11, rumble_slaughter_config.embed_color),
           reaction_emoji = COALESCE($12, rumble_slaughter_config.reaction_emoji),
           announce_style = COALESCE($13, rumble_slaughter_config.announce_style),
-          announce = COALESCE($14, rumble_slaughter_config.announce)
-      `, [channel.id, interaction.guildId, winnerRole?.id || null, pingRole?.id || null, pingRole2?.id || null, pingRole3?.id || null, nextChannel?.id || null, battleTitle, description, imageUrl, embedColor, reactionEmoji, announceStyle, announce]);
+          announce = COALESCE($14, rumble_slaughter_config.announce),
+          auto_battle = COALESCE($15, rumble_slaughter_config.auto_battle)
+      `, [channel.id, interaction.guildId, winnerRole?.id || null, pingRole?.id || null, pingRole2?.id || null, pingRole3?.id || null, nextChannel?.id || null, battleTitle, description, imageUrl, embedColor, reactionEmoji, announceStyle, announce, autoBattle]);
 
       // Live-update the currently-posted announcement, if there is one, so
       // edits don't have to wait for the next game to show up.

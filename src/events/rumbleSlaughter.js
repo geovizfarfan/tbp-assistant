@@ -53,19 +53,20 @@ function buildArenaEmbed(cfg, { hostId, hostName, entryFee, era, guildName, chan
 }
 
 // Same idea for the champion embed — always rebuilt fresh from current config.
-function buildChampionEmbed(cfg, member, { pot, guildName, channelName, totalServerWins }) {
-  const descLines = [];
-  descLines.push(`<@${member.id}> has been crowned champion and awarded <@&${cfg.winner_role_id}>!`);
-  if (pot) descLines.push(`<a:moneybag:1522373120147849226> **Pot Won:** ${pot} <a:SINS:1522338148380704910> (sins)`);
-  if (cfg.other_reward) descLines.push(`<a:gift:1512915751458050268> **Bonus Reward:** ${cfg.other_reward}`);
-  if (cfg.host_description) descLines.push(cfg.host_description);
-  if (cfg.description) descLines.push(cfg.description);
-  if (cfg.next_channel_id) descLines.push(`<a:rumblesword:1522372420894330921> **Next Game:** <#${cfg.next_channel_id}>`);
+function buildChampionEmbed(cfg, member, { pot, guildName, channelName, totalServerWins, memberWins }) {
+  const descLines = [
+    `<@${member.id}> has won Rumble Slaughter! <a:confetti:1512912825935335484>`,
+    pot ? `<a:moneybag:1522373120147849226> **Pot Won:** ${pot} <a:SINS:1522338148380704910> (sins)` : null,
+    cfg.other_reward ? `<a:gift:1512915751458050268> **Bonus Reward:** ${cfg.other_reward}` : null,
+  ].filter(Boolean);
+
+  if (cfg.winner_role_id) descLines.push(`<a:trophies:1512912823062364281> **Winner Role:** <@&${cfg.winner_role_id}>`);
+  descLines.push(`<a:rumblesword:1522372420894330921> **Server Rumble Wins:** ${memberWins}`);
+  if (cfg.next_channel_id) descLines.push(`\n**Next Channel:** <#${cfg.next_channel_id}>`);
 
   const embed = new EmbedBuilder()
     .setColor(cfg.embed_color || '#d6c2ee')
-    .setAuthor({ name: (channelName || '').slice(0, 256) })
-    .setTitle(cfg.battle_title || '💀 Rumble Slaughter — Champion!')
+    .setTitle('💀 <a:trophies:1512912823062364281> CHAMPION!')
     .setDescription(descLines.join('\n'))
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
     .setFooter({ text: `VELOURA has tracked ${Number(totalServerWins || 0)} Rumble Slaughter wins globally.` })
@@ -184,14 +185,17 @@ async function handleChampion(message, embed) {
 
   // Track wins unconditionally, same pattern as Rumble Royale's rr_stats —
   // this happens regardless of announce settings below.
-  await query(`
+  const statsRes = await query(`
     INSERT INTO rs_stats (guild_id, channel_id, user_id, username, wins, games)
     VALUES ($1,$2,$3,$4,1,1)
     ON CONFLICT (guild_id, user_id)
     DO UPDATE SET wins = rs_stats.wins + 1, games = rs_stats.games + 1, username = $4
+    RETURNING wins
   `, [message.guild.id, message.channel.id, member.id, member.user.username]).catch(err => {
     console.error('[RumbleSlaughter] stats tracking error:', err.message);
+    return null;
   });
+  const memberWins = statsRes?.rows[0]?.wins || 1;
 
   if (!cfg.announce) return;
 
@@ -209,10 +213,19 @@ async function handleChampion(message, embed) {
   const totalServerWins = totalWinsRes?.rows[0]?.total || 0;
 
   const roleEmbed = buildChampionEmbed(cfg, member, {
-    pot, guildName: message.guild.name, channelName: message.channel.name, totalServerWins,
+    pot, guildName: message.guild.name, channelName: message.channel.name, totalServerWins, memberWins,
   });
 
   const sentMsg = await message.channel.send({ embeds: [roleEmbed] }).catch(() => null);
+
+  // Same "battle finished" follow-up as Rumble Royale, adapted for whether
+  // the next battle starts on its own or needs someone to run the command.
+  if (cfg.auto_battle) {
+    await message.channel.send('Battle Finished! New auto battle will start soon!').catch(() => {});
+  } else {
+    const hostPing = cfg.last_host_id ? `<@${cfg.last_host_id}>` : `<@${member.id}>`;
+    await message.channel.send(`${hostPing} Battle Finished! You can start a new \`/rumbleslaughter\` now!`).catch(() => {});
+  }
 
   if (sentMsg) {
     await query(`
