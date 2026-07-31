@@ -19,7 +19,7 @@ module.exports = {
       .addAttachmentOption(o => o.setName('image').setDescription('Upload image shown on the arena-open and champion announcements'))
       .addStringOption(o => o.setName('image_url').setDescription('Or paste image URL'))
       .addStringOption(o => o.setName('embed_color').setDescription('Embed color hex, e.g. #d6c2ee'))
-      .addStringOption(o => o.setName('reaction_emoji').setDescription('Emoji to auto-react to chat messages from the winner role (separate from the announcement). Type "clear" to remove it.'))
+      .addStringOption(o => o.setName('reaction_emoji').setDescription('Emoji to auto-react to winner-role chat messages. Type "clear" to remove.'))
       .addStringOption(o => o.setName('announce_style').setDescription('Announcement format').addChoices(
         { name: 'Full embed', value: 'embed' },
         { name: 'Ping only (no embed)', value: 'ping' },
