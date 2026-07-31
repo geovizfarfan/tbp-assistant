@@ -5,6 +5,7 @@ const {
 const { e } = require('../../utils/appEmojis');
 const { query } = require('../../utils/database');
 const { adjustBalance, getBalance } = require('../../utils/playAndRegretDb');
+const { adjustGuildBalance, getGuildBalance, getGuildCurrencyConfig } = require('../../utils/currency');
 const { baseEmbed, tsF, tsR, COLORS } = require('../../utils/embeds');
 const { getPrizeImage, getPrizeLabel } = require('../../utils/prizeImages');
 const { refreshScheduleBoard, removeFromBoard } = require('../../utils/scheduleBoard');
@@ -13,6 +14,7 @@ const PRIZE_CHOICES = [
   { label: 'Discord Profile Accessory', value: 'accessory',   emoji: '💎' },
   { label: 'Discord Nitro',             value: 'nitro',       emoji: '✨' },
   { label: 'Partner Carry',             value: 'carry',       emoji: '🤝' },
+  { label: 'Server Currency',           value: 'server_currency', emoji: '💰' },
   { label: 'Goos',                      value: 'goos',        emoji: '👻' },
   { label: 'Sins',                      value: 'sins',        emoji: '💀' },
   { label: 'Gift Card',                 value: 'gift_card',   emoji: '🎁' },
@@ -34,6 +36,7 @@ module.exports = {
           { name: 'Discord Nitro Basic',        value: 'nitro_basic' },
           { name: 'Discord Nitro',              value: 'nitro_premium'},
           { name: 'Partner Carry',              value: 'carry'       },
+          { name: 'Server Currency',            value: 'server_currency' },
           { name: 'Goos',                       value: 'goos'        },
           { name: 'Sins',                       value: 'sins'        },
           { name: 'Gift Card',                  value: 'gift_card'   },
@@ -97,7 +100,26 @@ async function startRaffle(interaction) {
     sinsReserved = true;
   }
 
-  const prizeLabel   = getPrizeLabel(prizeKey, customName);
+  // Server Currency prizes: the owner can mint prizes for free (bot awards it
+  // fresh), but anyone else funds it from their own balance, same as Sins above.
+  let hostFunded = false;
+  let serverCurrencyName = null;
+  if (prizeKey === 'server_currency' && amount) {
+    const isOwner = interaction.user.id === process.env.OWNER_ID;
+    const cfg = await getGuildCurrencyConfig(interaction.guildId);
+    serverCurrencyName = cfg.currencyName;
+
+    if (!isOwner) {
+      const hostBalance = await getGuildBalance(interaction.guildId, interaction.user.id);
+      if (hostBalance === null || Number(hostBalance) < amount) {
+        return interaction.editReply(`${e('wrong')} You don't have enough ${serverCurrencyName} to fund this raffle (need ${amount.toLocaleString()}, you have ${Number(hostBalance || 0).toLocaleString()}). Raffles are paid from your own balance.`);
+      }
+      await adjustGuildBalance(interaction.guildId, interaction.user.id, interaction.user.username, -amount);
+      hostFunded = true;
+    }
+  }
+
+  const prizeLabel   = prizeKey === 'server_currency' && serverCurrencyName ? serverCurrencyName : getPrizeLabel(prizeKey, customName);
   const displayPrize = amount ? `${amount} ${prizeLabel}` : prizeLabel;
   const imageData    = await getPrizeImage(interaction.guildId, prizeKey);
 
@@ -128,10 +150,11 @@ async function startRaffle(interaction) {
   const msg = await interaction.channel.send(msgPayload);
 
   const res = await query(
-    `INSERT INTO raffles (guild_id, channel_id, message_id, host_id, prize, prize_amount, currency, ends_at, prize_key)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+    `INSERT INTO raffles (guild_id, channel_id, message_id, host_id, prize, prize_amount, currency, ends_at, prize_key, host_funded)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
     [interaction.guildId, interaction.channelId, msg.id, interaction.user.id, prizeLabel, amount,
-     ['goos','sins'].includes(prizeKey) ? prizeKey.toUpperCase() : prizeKey, endsAt, prizeKey]
+     prizeKey === 'server_currency' ? 'SERVER_CURRENCY' : (['goos','sins'].includes(prizeKey) ? prizeKey.toUpperCase() : prizeKey),
+     endsAt, prizeKey, sinsReserved || hostFunded]
   );
   const raffleId = res.rows[0].id;
 
@@ -163,25 +186,34 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
 
     if (!entries.length) {
       await query(`UPDATE raffles SET status='ended', ended_at=$1 WHERE id=$2`, [now, raffleId]);
-      // Refund the host if Sins were reserved for this raffle and nobody entered
+      // Refund the host if funds were reserved for this raffle and nobody entered
+      let refundNote = '';
       if (raffle.currency === 'SINS' && raffle.prize_amount) {
         const hostUser = await client.users.fetch(raffle.host_id).catch(() => null);
         await adjustBalance(raffle.host_id, hostUser?.username || 'Unknown', Number(raffle.prize_amount)).catch(() => {});
+        refundNote = ' Reserved Sins have been refunded to the host.';
+      } else if (raffle.currency === 'SERVER_CURRENCY' && raffle.prize_amount && raffle.host_funded) {
+        const hostUser = await client.users.fetch(raffle.host_id).catch(() => null);
+        await adjustGuildBalance(guildId, raffle.host_id, hostUser?.username || 'Unknown', Number(raffle.prize_amount)).catch(() => {});
+        refundNote = ` Reserved ${raffle.prize} have been refunded to the host.`;
       }
-      await channel.send({ embeds: [baseEmbed(`${e('raffle')} RAFFLE ENDED`, COLORS.grey, guild.name).setDescription('No entries — no winner.' + (raffle.currency === 'SINS' && raffle.prize_amount ? ' Reserved Sins have been refunded to the host.' : ''))] });
+      await channel.send({ embeds: [baseEmbed(`${e('raffle')} RAFFLE ENDED`, COLORS.grey, guild.name).setDescription('No entries — no winner.' + refundNote)] });
       return;
     }
 
     const winner = entries[Math.floor(Math.random() * entries.length)];
     const hostWonOwnRaffle = raffle.host_id === winner.user_id;
 
-    // Auto-award Sins immediately if this raffle's prize is a Sins amount
+    // Auto-award the prize immediately if it's a currency amount (Sins or
+    // this server's unified currency)
     const isSinsRaffle = raffle.currency === 'SINS' && raffle.prize_amount;
-    let sinsAwarded = false;
+    const isServerCurrencyRaffle = raffle.currency === 'SERVER_CURRENCY' && raffle.prize_amount;
+    let currencyAwarded = false;
+
     if (isSinsRaffle && !hostWonOwnRaffle) {
       try {
         await adjustBalance(winner.user_id, winner.username, raffle.prize_amount);
-        sinsAwarded = true;
+        currencyAwarded = true;
         console.log(`[Raffle] Auto-awarded ${raffle.prize_amount} Sins to ${winner.username}`);
       } catch (err) {
         console.error('[Raffle] Sins award failed:', err.message);
@@ -190,10 +222,25 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
       // Host won their own raffle — refund the reserved Sins rather than a no-op transfer
       const hostUser = await client.users.fetch(raffle.host_id).catch(() => null);
       await adjustBalance(raffle.host_id, hostUser?.username || 'Unknown', Number(raffle.prize_amount)).catch(() => {});
-      sinsAwarded = true;
+      currencyAwarded = true;
+    } else if (isServerCurrencyRaffle && !hostWonOwnRaffle) {
+      try {
+        await adjustGuildBalance(guildId, winner.user_id, winner.username, raffle.prize_amount);
+        currencyAwarded = true;
+        console.log(`[Raffle] Auto-awarded ${raffle.prize_amount} ${raffle.prize} to ${winner.username}`);
+      } catch (err) {
+        console.error('[Raffle] Server currency award failed:', err.message);
+      }
+    } else if (isServerCurrencyRaffle && hostWonOwnRaffle) {
+      // Host won their own raffle — refund the reserved amount if they funded it themselves
+      if (raffle.host_funded) {
+        const hostUser = await client.users.fetch(raffle.host_id).catch(() => null);
+        await adjustGuildBalance(guildId, raffle.host_id, hostUser?.username || 'Unknown', Number(raffle.prize_amount)).catch(() => {});
+      }
+      currencyAwarded = true;
     }
 
-    await query(`UPDATE raffles SET status='ended', ended_at=$1, winner_id=$2, payout_status=$3 WHERE id=$4`, [now, winner.user_id, hostWonOwnRaffle ? 'n/a' : (sinsAwarded ? 'paid' : 'pending'), raffleId]);
+    await query(`UPDATE raffles SET status='ended', ended_at=$1, winner_id=$2, payout_status=$3 WHERE id=$4`, [now, winner.user_id, hostWonOwnRaffle ? 'n/a' : (currencyAwarded ? 'paid' : 'pending'), raffleId]);
 
     await query(
       `INSERT INTO member_wins (guild_id, user_id, username, type, ref_id, prize, prize_amount, currency, host_id, won_at)
@@ -313,10 +360,13 @@ async function cancelRaffleCore(interaction, id, reason) {
 
   await query(`UPDATE raffles SET status='cancelled', ended_at=NOW() WHERE id=$1`, [id]);
 
-  // Refund the host if Sins were reserved for this raffle
+  // Refund the host if funds were reserved for this raffle
   if (raffle.currency === 'SINS' && raffle.prize_amount) {
     const hostUser = await interaction.client.users.fetch(raffle.host_id).catch(() => null);
     await adjustBalance(raffle.host_id, hostUser?.username || 'Unknown', Number(raffle.prize_amount)).catch(() => {});
+  } else if (raffle.currency === 'SERVER_CURRENCY' && raffle.prize_amount && raffle.host_funded) {
+    const hostUser = await interaction.client.users.fetch(raffle.host_id).catch(() => null);
+    await adjustGuildBalance(interaction.guildId, raffle.host_id, hostUser?.username || 'Unknown', Number(raffle.prize_amount)).catch(() => {});
   }
 
   // Edit original raffle message if possible

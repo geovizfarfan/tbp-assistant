@@ -188,4 +188,19 @@ async function spinWheel(entries, colors, opts = {}) {
   return { buffer, winner, winnerIndex };
 }
 
-module.exports = { spinWheel, buildWheelSVG, getWinnerIndex };
+// A single static frame (no spin animation) — used for the live-updating
+// wheel preview on a posted Wheel Roles campaign, showing current entrants.
+async function buildStaticWheelPreview(entries, colors, size = 450) {
+  if (!Array.isArray(entries) || entries.length < 1) {
+    throw new Error('Wheel needs at least 1 entry.');
+  }
+  if (!Array.isArray(colors) || colors.length < 1) {
+    throw new Error('Wheel needs at least 1 color.');
+  }
+  const displayEntries = entries.length === 1 ? [...entries, ''] : entries; // buildWheelSVG divides by slice count; pad a lone entry
+  const svg = buildWheelSVG(displayEntries, colors, size, 0);
+  const buffer = await sharp(Buffer.from(svg)).png().toBuffer();
+  return buffer;
+}
+
+module.exports = { spinWheel, buildWheelSVG, getWinnerIndex, buildStaticWheelPreview };

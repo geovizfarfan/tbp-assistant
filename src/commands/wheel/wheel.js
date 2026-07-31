@@ -220,7 +220,8 @@ module.exports = {
         .setName('post')
         .setDescription('Post a message members can react to, to enter a campaign directly')
         .addStringOption(o => o.setName('name').setDescription('Campaign name').setRequired(true).setAutocomplete(true))
-        .addChannelOption(o => o.setName('channel').setDescription('Channel to post in').setRequired(true)))
+        .addChannelOption(o => o.setName('channel').setDescription('Channel to post in').setRequired(true))
+        .addStringOption(buildPaletteOption))
     ),
 
   async autocomplete(interaction) {
@@ -678,25 +679,42 @@ async function campaignPost(interaction) {
   await interaction.deferReply({ ephemeral: true });
   const name = interaction.options.getString('name');
   const channel = interaction.options.getChannel('channel');
+  const paletteKey = interaction.options.getString('palette');
 
   const campRes = await query(`SELECT * FROM wheel_role_campaigns WHERE guild_id=$1 AND name=$2 AND status='active'`, [interaction.guildId, name]);
   const camp = campRes.rows[0];
   if (!camp) return interaction.editReply(`${e('wrong')} No active campaign named **${name}**.`);
 
-  const roleLines = camp.role_ids.map(id => `<@&${id}>`).join(', ');
-  const qualifyLine = camp.qualify_mode === 'full_season'
-    ? `You must have **ALL** of these roles to qualify: ${roleLines}`
-    : `You need at least ONE of these roles to qualify: ${roleLines}`;
+  const roleLines = camp.role_ids.map(id => `<@&${id}>`).join('\n');
+  const qualifyWord = camp.qualify_mode === 'full_season' ? 'ALL' : 'at least ONE';
 
-  const embed = baseEmbed(`${e('diamond')} ${camp.name}`, COLORS.tbppurple, interaction.guild?.name)
-    .setDescription(`React with 🎉 to enter!\n${qualifyLine}`);
+  const embed = new EmbedBuilder()
+    .setColor('#d6c2ee')
+    .setTitle(`<a:purplesparkle:1512912828489793626> ${camp.name}`)
+    .setDescription(`React with <a:color_wheel:1532822238120644627> to enter! You must have **${qualifyWord}** of these roles to qualify: \n${roleLines}`)
+    .setFooter({ text: `Hosted by: ${interaction.user.username}` })
+    .setTimestamp();
 
-  const msg = await channel.send({ embeds: [embed] });
-  await msg.react('🎉').catch(() => {});
+  const { buildStaticWheelPreview } = require('../../utils/wheelRenderer');
+  const { getPaletteColors } = require('../../utils/wheelPalettes');
+  const colors = getPaletteColors(paletteKey) || DEFAULT_COLORS;
+  const previewBuffer = await buildStaticWheelPreview(['No entries yet'], colors).catch(() => null);
 
-  await query(`UPDATE wheel_role_campaigns SET entry_channel_id=$1, entry_message_id=$2 WHERE id=$3`, [channel.id, msg.id, camp.id]);
+  const files = [];
+  if (previewBuffer) {
+    files.push(new AttachmentBuilder(previewBuffer, { name: 'wheel_preview.png' }));
+    embed.setImage('attachment://wheel_preview.png');
+  }
 
-  return interaction.editReply(`${e('checkmark')} Posted **${name}** in <#${channel.id}> — members can react with 🎉 to enter.`);
+  const msg = await channel.send({ embeds: [embed], files });
+  await msg.react('color_wheel:1532822238120644627').catch(() => msg.react('🎉').catch(() => {}));
+
+  await query(
+    `UPDATE wheel_role_campaigns SET entry_channel_id=$1, entry_message_id=$2, palette=$3, host_id=$4 WHERE id=$5`,
+    [channel.id, msg.id, paletteKey || null, interaction.user.id, camp.id]
+  );
+
+  return interaction.editReply(`${e('checkmark')} Posted **${name}** in <#${channel.id}> with a live wheel preview.`);
 }
 
 // Reaction-to-enter for a posted campaign — validates the reactor and either
@@ -704,7 +722,7 @@ async function campaignPost(interaction) {
 // notice (not a DM, per how the giveaway version works).
 async function handleCampaignReactionAdd(reaction, user) {
   if (user.bot) return;
-  if (reaction.emoji.name !== '🎉') return;
+  if (reaction.emoji.name !== 'color_wheel') return;
   if (reaction.partial) await reaction.fetch().catch(() => null);
   if (reaction.message.partial) await reaction.message.fetch().catch(() => null);
   if (!reaction.message.guild) return;
@@ -729,6 +747,8 @@ async function handleCampaignReactionAdd(reaction, user) {
          quantity = $3, currently_qualified = true, last_qualified_at = NOW()`,
       [camp.id, user.id, quantity]
     ).catch(() => {});
+
+    await updateCampaignWheelPreview(reaction.message, camp);
     return;
   }
 
@@ -737,6 +757,36 @@ async function handleCampaignReactionAdd(reaction, user) {
     content: `${e('wrong')} <@${user.id}> you don't qualify for **${camp.name}** yet — check the roles listed above.`,
   }).catch(() => null);
   if (notice) setTimeout(() => notice.delete().catch(() => {}), 8000);
+}
+
+// Re-renders the wheel with everyone currently entered and edits the posted
+// message's image to match — called after every successful entry.
+async function updateCampaignWheelPreview(message, camp) {
+  try {
+    const entRes = await query(
+      `SELECT user_id, quantity FROM wheel_role_campaign_entries WHERE campaign_id=$1 AND currently_qualified=true`,
+      [camp.id]
+    );
+    if (!entRes.rows.length) return;
+
+    const names = [];
+    for (const en of entRes.rows) {
+      const member = await message.guild.members.fetch(en.user_id).catch(() => null);
+      const label = member ? member.user.username : en.user_id;
+      for (let i = 0; i < en.quantity; i++) names.push(label);
+    }
+
+    const { buildStaticWheelPreview } = require('../../utils/wheelRenderer');
+    const { getPaletteColors } = require('../../utils/wheelPalettes');
+    const colors = getPaletteColors(camp.palette) || DEFAULT_COLORS;
+    const buffer = await buildStaticWheelPreview(names, colors);
+
+    const attachment = new AttachmentBuilder(buffer, { name: 'wheel_preview.png' });
+    const embed = EmbedBuilder.from(message.embeds[0]).setImage('attachment://wheel_preview.png');
+    await message.edit({ embeds: [embed], files: [attachment] });
+  } catch (err) {
+    console.error('[WheelRoles] preview update error:', err.message);
+  }
 }
 
 // Called from index.js on guildMemberUpdate — checks role changes against

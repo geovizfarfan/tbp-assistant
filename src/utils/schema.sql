@@ -121,8 +121,10 @@ CREATE TABLE IF NOT EXISTS raffles (
   payout_status TEXT DEFAULT 'pending' CHECK (payout_status IN ('pending','paid','not_claimed','n/a')),
   payout_confirmed_at TIMESTAMPTZ,
   payout_confirmed_by TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  host_funded BOOLEAN NOT NULL DEFAULT FALSE
 );
+ALTER TABLE raffles ADD COLUMN IF NOT EXISTS host_funded BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- Raffle entries
 CREATE TABLE IF NOT EXISTS raffle_entries (
@@ -438,6 +440,8 @@ CREATE TABLE IF NOT EXISTS wheel_role_campaigns (
 -- of all those roles, for display purposes).
 ALTER TABLE wheel_role_campaigns ADD COLUMN IF NOT EXISTS qualify_mode TEXT NOT NULL DEFAULT 'any_role';
 ALTER TABLE wheel_role_campaigns ADD COLUMN IF NOT EXISTS qualify_season_ids INTEGER[];
+ALTER TABLE wheel_role_campaigns ADD COLUMN IF NOT EXISTS palette TEXT;
+ALTER TABLE wheel_role_campaigns ADD COLUMN IF NOT EXISTS host_id TEXT;
 
 CREATE TABLE IF NOT EXISTS wheel_role_campaign_entries (
   id SERIAL PRIMARY KEY,

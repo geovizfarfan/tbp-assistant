@@ -19,6 +19,22 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
     const guild   = await client.guilds.fetch(guildId);
     const channel = await guild.channels.fetch(channelId);
 
+    // Self-healing: if a previous removeFromBoard call ever failed silently
+    // (message already gone, transient API error, etc), this catches any
+    // board messages left behind for games/raffles that are no longer active.
+    const staleGames = await query(`SELECT id, board_message_id FROM game_logs WHERE guild_id=$1 AND status != 'active' AND board_message_id IS NOT NULL`, [guildId]);
+    for (const g of staleGames.rows) {
+      const msg = await channel.messages.fetch(g.board_message_id).catch(() => null);
+      if (msg) await msg.delete().catch(err => console.error(`[ScheduleBoard] Failed to clean up stale game #${g.id}:`, err.message));
+      await query(`UPDATE game_logs SET board_message_id=NULL WHERE id=$1`, [g.id]).catch(() => {});
+    }
+    const staleRaffles = await query(`SELECT id, board_message_id FROM raffles WHERE guild_id=$1 AND status != 'active' AND board_message_id IS NOT NULL`, [guildId]);
+    for (const r of staleRaffles.rows) {
+      const msg = await channel.messages.fetch(r.board_message_id).catch(() => null);
+      if (msg) await msg.delete().catch(err => console.error(`[ScheduleBoard] Failed to clean up stale raffle #${r.id}:`, err.message));
+      await query(`UPDATE raffles SET board_message_id=NULL WHERE id=$1`, [r.id]).catch(() => {});
+    }
+
     // Get active games
     const gamesRes = await query(`SELECT * FROM game_logs WHERE guild_id=$1 AND status='active' ORDER BY started_at ASC`, [guildId]);
     const rafflesRes = await query(`SELECT * FROM raffles WHERE guild_id=$1 AND status='active' ORDER BY created_at ASC`, [guildId]);
@@ -120,15 +136,28 @@ async function removeFromBoard(client, guildId, boardMessageId) {
       channelId = configRes.rows[0].schedule_channel_id;
     } else {
       const boardRes = await query(`SELECT channel_id FROM game_schedule_board WHERE guild_id=$1`, [guildId]);
-      if (!boardRes.rows.length) return;
+      if (!boardRes.rows.length) {
+        console.error(`[ScheduleBoard] removeFromBoard: no schedule channel configured for guild ${guildId}`);
+        return;
+      }
       channelId = boardRes.rows[0].channel_id;
     }
     if (!channelId) return;
     const guild   = await client.guilds.fetch(guildId);
-    const channel = await guild.channels.fetch(channelId);
-    const msg = await channel.messages.fetch(boardMessageId);
+    const channel = await guild.channels.fetch(channelId).catch(() => null);
+    if (!channel) {
+      console.error(`[ScheduleBoard] removeFromBoard: schedule channel ${channelId} not found in guild ${guildId}`);
+      return;
+    }
+    const msg = await channel.messages.fetch(boardMessageId).catch(() => null);
+    if (!msg) {
+      // Already gone (manually deleted, etc) — nothing more to do.
+      return;
+    }
     await msg.delete();
-  } catch {}
+  } catch (err) {
+    console.error(`[ScheduleBoard] removeFromBoard failed for message ${boardMessageId} in guild ${guildId}:`, err.message);
+  }
 }
 
 module.exports = { refreshScheduleBoard, removeFromBoard };
