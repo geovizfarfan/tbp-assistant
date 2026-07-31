@@ -7,13 +7,28 @@ CREATE TABLE IF NOT EXISTS staff (
   role TEXT NOT NULL CHECK (role IN ('owner','admin','staff','host')),
   joined_staff_at TIMESTAMPTZ DEFAULT NOW(),
   active BOOLEAN DEFAULT TRUE,
-  pay_currency TEXT DEFAULT 'MEE6' CHECK (pay_currency IN ('MEE6','SINS','OOS')),
+  pay_currency TEXT DEFAULT 'Coins',
   last_paid_at TIMESTAMPTZ,
   next_pay_due_at TIMESTAMPTZ,
   pay_amount INTEGER DEFAULT 0,
   added_by TEXT,
   notes TEXT
 );
+-- pay_currency used to be locked to the old MEE6/SINS/OOS legacy codes, which
+-- silently blocked every insert once the unified currency system started
+-- passing real currency names (e.g. "Coins", a server's custom name). Drop
+-- that constraint so pay_currency can hold whatever the server actually uses.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE table_name = 'staff' AND constraint_type = 'CHECK'
+      AND constraint_name = 'staff_pay_currency_check'
+  ) THEN
+    ALTER TABLE staff DROP CONSTRAINT staff_pay_currency_check;
+  END IF;
+END $$;
+ALTER TABLE staff ALTER COLUMN pay_currency SET DEFAULT 'Coins';
 
 CREATE TABLE IF NOT EXISTS staff_payments (
   id SERIAL PRIMARY KEY,
