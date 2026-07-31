@@ -662,11 +662,33 @@ async function campaignSpin(interaction) {
   return interaction.editReply({ embeds: [embed], files: [attachment] });
 }
 
+// Edits a campaign's posted entry message to visually show it's ended and
+// clears its reactions — shared by the standalone /wheel roles end command
+// and the auto-end that fires when a linked season ends.
+async function markCampaignMessageEnded(client, camp) {
+  if (!camp.entry_channel_id || !camp.entry_message_id) return;
+  try {
+    const channel = await client.channels.fetch(camp.entry_channel_id).catch(() => null);
+    const message = channel ? await channel.messages.fetch(camp.entry_message_id).catch(() => null) : null;
+    if (!message || !message.embeds[0]) return;
+
+    const oldEmbed = message.embeds[0];
+    const endedEmbed = EmbedBuilder.from(oldEmbed)
+      .setColor('#808080')
+      .setDescription(`${e('wrong')} **This campaign has ended — entries are closed.**\n\n${oldEmbed.description}`);
+    await message.edit({ embeds: [endedEmbed] });
+    await message.reactions.removeAll().catch(() => {});
+  } catch (err) {
+    console.error('[WheelRoles] Failed to mark campaign message ended:', err.message);
+  }
+}
+
 async function campaignEnd(interaction) {
   await interaction.deferReply({ ephemeral: true });
   const name = interaction.options.getString('name');
-  const res = await query(`UPDATE wheel_role_campaigns SET status='ended' WHERE guild_id=$1 AND name=$2 RETURNING id`, [interaction.guildId, name]);
+  const res = await query(`UPDATE wheel_role_campaigns SET status='ended' WHERE guild_id=$1 AND name=$2 RETURNING id, entry_channel_id, entry_message_id`, [interaction.guildId, name]);
   if (!res.rows.length) return interaction.editReply(`${e('wrong')} No campaign named **${name}**.`);
+  await markCampaignMessageEnded(interaction.client, res.rows[0]);
   return interaction.editReply(`${e('checkmark')} **${name}** ended — auto-signups stopped, existing entries kept for spinning.`);
 }
 
@@ -1064,3 +1086,4 @@ async function spinCombo(interaction) {
 module.exports.checkAutoSignupCampaigns = checkAutoSignupCampaigns;
 module.exports.handleCampaignReactionAdd = handleCampaignReactionAdd;
 module.exports.handleCampaignReactionRemove = handleCampaignReactionRemove;
+module.exports.markCampaignMessageEnded = markCampaignMessageEnded;

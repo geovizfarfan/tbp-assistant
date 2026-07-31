@@ -109,9 +109,15 @@ async function endSeasonCore(interaction, seasonName) {
   // signups but keeps existing entries around for spinning, same as running
   // /wheel roles end manually.
   const linkedCampaigns = await query(
-    `UPDATE wheel_role_campaigns SET status='ended' WHERE guild_id=$1 AND status='active' AND $2 = ANY(source_season_ids) RETURNING name`,
+    `UPDATE wheel_role_campaigns SET status='ended' WHERE guild_id=$1 AND status='active' AND $2 = ANY(source_season_ids) RETURNING name, entry_channel_id, entry_message_id`,
     [interaction.guildId, season.id]
   ).catch(() => ({ rows: [] }));
+
+  // Reflect the ended state on each campaign's posted message, if it has one.
+  const { markCampaignMessageEnded } = require('../wheel/wheel');
+  for (const camp of linkedCampaigns.rows) {
+    await markCampaignMessageEnded(interaction.client, camp);
+  }
 
   const campaignNote = linkedCampaigns.rows.length
     ? `\n<:rumble:1522372419338375299> Also ended linked Wheel Roles campaign${linkedCampaigns.rows.length > 1 ? 's' : ''}: ${linkedCampaigns.rows.map(c => `**${c.name}**`).join(', ')}.`
