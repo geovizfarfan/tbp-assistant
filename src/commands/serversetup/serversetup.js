@@ -747,7 +747,7 @@ module.exports = {
     if (!user) return interaction.editReply('❌ Could not find that user.');
 
     const currRes = await query('SELECT currency_name FROM guild_config WHERE guild_id=$1', [interaction.guildId]);
-    const currency = currRes.rows[0]?.currency_name || 'Crowns';
+    const currency = currRes.rows[0]?.currency_name || 'Coins';
 
     const nextDue = new Date();
     nextDue.setDate(nextDue.getDate() + 30);
@@ -831,7 +831,7 @@ module.exports = {
     if (!user) return interaction.editReply('❌ Could not find that user.');
 
     const currRes = await query('SELECT currency_name FROM guild_config WHERE guild_id=$1', [interaction.guildId]);
-    const currency = currRes.rows[0]?.currency_name || 'Crowns';
+    const currency = currRes.rows[0]?.currency_name || 'Coins';
 
     const nextDue = new Date();
     nextDue.setDate(nextDue.getDate() + 30);

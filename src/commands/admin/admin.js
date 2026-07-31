@@ -281,7 +281,7 @@ async function paySummary(interaction) {
 
   // Staff totals
   const staffRes = await query(`SELECT * FROM staff WHERE guild_id=$1 AND active=true ORDER BY role`, [interaction.guildId]);
-  let totalCrowns = 0, totalSins = 0, totalGoos = 0;
+  const staffTotals = {};
   const staffLines = [];
 
   for (const s of staffRes.rows) {
@@ -291,42 +291,43 @@ async function paySummary(interaction) {
     const gamesHosted = parseInt(gamesRes.rows[0].count);
     const gameBonus   = gamesHosted * bonusPerGame;
     const totalPay    = (s.pay_amount || 0) + gameBonus;
-    if (s.pay_currency === 'Crowns') totalCrowns += totalPay;
-    if (s.pay_currency === 'Sins')   totalSins   += totalPay;
-    if (s.pay_currency === 'Goos')   totalGoos   += totalPay;
+    staffTotals[s.pay_currency] = (staffTotals[s.pay_currency] || 0) + totalPay;
     const overdue = s.next_pay_due_at && new Date(s.next_pay_due_at) < new Date();
     staffLines.push(`${overdue ? e('atention') : e('checkmark')} ${s.username} — **${totalPay} ${s.pay_currency}** (base: ${s.pay_amount || 0} + ${gamesHosted} games × ${bonusPerGame})`);
   }
 
   // Booster totals
   const boosterRes = await query(`SELECT * FROM boosters WHERE guild_id=$1 AND active=true ORDER BY boost_tier`, [interaction.guildId]);
-  let boosterCrowns = 0, boosterSins = 0, boosterGoos = 0;
+  const boosterTotals = {};
   const boosterLines = [];
 
   for (const b of boosterRes.rows) {
     const overdue = b.next_pay_due_at && new Date(b.next_pay_due_at) < new Date();
     const tierEmoji = { basic: e('purplesparkle'), standard: e('heart'), premium: e('diamond') }[b.boost_tier] || e('purplesparkle');
-    if (b.currency === 'Crowns') boosterCrowns += b.amount_owed;
-    if (b.currency === 'Sins')   boosterSins   += b.amount_owed;
-    if (b.currency === 'Goos')   boosterGoos   += b.amount_owed;
+    boosterTotals[b.currency] = (boosterTotals[b.currency] || 0) + Number(b.amount_owed || 0);
     boosterLines.push(`${tierEmoji} ${b.username} — **${b.amount_owed} ${b.currency}** ${overdue ? e('atention') + ' OVERDUE' : ''}`);
   }
 
   const embed = baseEmbed(`${e('payday')} Pay Summary`, COLORS.tbppurple, interaction.guild?.name);
 
+  const formatTotals = (totals) => Object.entries(totals).map(([currency, total]) => `${currency}: ${total}`).join(' | ') || 'N/A';
+  const grandTotals = {};
+  for (const [currency, total] of Object.entries(staffTotals)) grandTotals[currency] = (grandTotals[currency] || 0) + total;
+  for (const [currency, total] of Object.entries(boosterTotals)) grandTotals[currency] = (grandTotals[currency] || 0) + total;
+
   const staffChunks = chunkLines(staffLines);
   staffChunks.forEach((chunk, i) => {
     embed.addFields({ name: `${e('members')} Staff Owed${staffChunks.length > 1 ? ` (${i+1}/${staffChunks.length})` : ''}`, value: chunk, inline: false });
   });
-  embed.addFields({ name: `${e('purplesparkle')} Staff Total`, value: `Crowns: ${totalCrowns} | Sins: ${totalSins} | Goos: ${totalGoos}`, inline: false });
+  embed.addFields({ name: `${e('purplesparkle')} Staff Total`, value: formatTotals(staffTotals), inline: false });
 
   const boosterChunks = chunkLines(boosterLines);
   boosterChunks.forEach((chunk, i) => {
     embed.addFields({ name: `${e('diamond')} Boosters Owed${boosterChunks.length > 1 ? ` (${i+1}/${boosterChunks.length})` : ''}`, value: chunk, inline: false });
   });
   embed.addFields(
-    { name: `${e('purplesparkle')} Booster Total`, value: `Crowns: ${boosterCrowns} | Sins: ${boosterSins} | Goos: ${boosterGoos}`, inline: false },
-    { name: `${e('payout')} Grand Total`, value: `Crowns: ${totalCrowns + boosterCrowns} | Sins: ${totalSins + boosterSins} | Goos: ${totalGoos + boosterGoos}`, inline: false },
+    { name: `${e('purplesparkle')} Booster Total`, value: formatTotals(boosterTotals), inline: false },
+    { name: `${e('payout')} Grand Total`, value: formatTotals(grandTotals), inline: false },
   );
 
   await interaction.editReply({ embeds: [embed] });

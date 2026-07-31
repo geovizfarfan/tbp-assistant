@@ -299,7 +299,7 @@ CREATE TABLE IF NOT EXISTS boosters (
   username TEXT NOT NULL,
   boost_tier TEXT DEFAULT 'basic' CHECK (boost_tier IN ('basic','standard','premium')),
   amount_owed INTEGER DEFAULT 0,
-  currency TEXT DEFAULT 'Crowns',
+  currency TEXT DEFAULT 'Coins',
   last_paid_at TIMESTAMPTZ,
   next_pay_due_at TIMESTAMPTZ,
   active BOOLEAN DEFAULT TRUE,
@@ -324,13 +324,13 @@ CREATE TABLE IF NOT EXISTS guild_config (
   game_ping_role_id TEXT,
   ban_log_channel_id TEXT,
   currency_use_sins BOOLEAN DEFAULT FALSE,
-  currency_name TEXT DEFAULT 'Crowns',
+  currency_name TEXT DEFAULT 'Coins',
   currency_emoji TEXT,
   auto_pay_enabled BOOLEAN DEFAULT FALSE,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS currency_use_sins BOOLEAN DEFAULT FALSE;
-ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS currency_name TEXT DEFAULT 'Crowns';
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS currency_name TEXT DEFAULT 'Coins';
 ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS currency_emoji TEXT;
 ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS auto_pay_enabled BOOLEAN DEFAULT FALSE;
 

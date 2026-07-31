@@ -6,7 +6,7 @@ async function getGuildCurrencyConfig(guildId) {
   const cfg = res.rows[0];
   return {
     useSins: cfg?.currency_use_sins || false,
-    currencyName: cfg?.currency_use_sins ? 'Sins' : (cfg?.currency_name || 'Crowns'),
+    currencyName: cfg?.currency_use_sins ? 'Sins' : (cfg?.currency_name || 'Coins'),
     currencyEmoji: cfg?.currency_emoji || (cfg?.currency_use_sins ? '<a:SINS:1522338148380704910>' : null),
     autoPayEnabled: cfg?.auto_pay_enabled || false,
   };

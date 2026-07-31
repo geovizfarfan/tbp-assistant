@@ -12,39 +12,9 @@ const ROLE_LABELS = {
 };
 
 module.exports = {
-  hidden: true, // reachable via /server-setup - not a standalone slash command
   data: new SlashCommandBuilder()
     .setName('staff')
     .setDescription('Staff management')
-    .addSubcommand(sub => sub
-      .setName('add')
-      .setDescription('Add a staff member')
-      .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
-      .addStringOption(o => o.setName('role').setDescription('Role').setRequired(true)
-        .addChoices(
-          { name: 'Owner', value: 'owner' },
-          { name: 'Admin', value: 'admin' },
-          { name: 'Mod',   value: 'staff' },
-          { name: 'Host',         value: 'host'        },
-          { name: 'Rumble Host', value: 'rumble_host' },
-        ))
-      .addStringOption(o => o.setName('currency').setDescription('Pay currency').setRequired(false)
-        .addChoices(
-          { name: 'Crowns (MEE6)',        value: 'Crowns' },
-          { name: 'Sins (Play & Regret)', value: 'Sins'   },
-          { name: 'Goos (Ghosty)',        value: 'Goos'   },
-        ))
-      .addIntegerOption(o => o.setName('pay').setDescription('Pay amount per period').setRequired(false))
-    )
-    .addSubcommand(sub => sub
-      .setName('remove')
-      .setDescription('Remove a staff member')
-      .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
-    )
-    .addSubcommand(sub => sub
-      .setName('list')
-      .setDescription('List all staff')
-    )
     .addSubcommand(sub => sub
       .setName('report')
       .setDescription('Full staff report')
@@ -54,55 +24,98 @@ module.exports = {
       .setName('payhistory')
       .setDescription('View past payments for a staff member')
       .addUserOption(o => o.setName('user').setDescription('Staff member').setRequired(true))
+    )
+    .addSubcommand(sub => sub
+      .setName('requirements')
+      .setDescription('Set staff pay requirements — per role, or Default for anyone without an override')
+      .addStringOption(o => o.setName('role').setDescription('Staff role').setRequired(true)
+        .addChoices(
+          { name: 'Default (fallback for any role without its own)', value: 'default' },
+          { name: 'Owner',       value: 'owner'       },
+          { name: 'Admin',       value: 'admin'       },
+          { name: 'Mod',         value: 'staff'       },
+          { name: 'Host',        value: 'host'        },
+          { name: 'Rumble Host', value: 'rumble_host' },
+        ))
+      .addIntegerOption(o => o.setName('min_games').setDescription('Min games per period').setRequired(false))
+      .addIntegerOption(o => o.setName('min_auto_games').setDescription('Min auto-games per period').setRequired(false))
+      .addIntegerOption(o => o.setName('min_raffles').setDescription('Min raffles per period').setRequired(false))
+      .addIntegerOption(o => o.setName('min_giveaways').setDescription('Min giveaways per period').setRequired(false))
+      .addIntegerOption(o => o.setName('bonus_per_game').setDescription('Bonus currency per game hosted').setRequired(false))
+    )
+    .addSubcommand(sub => sub
+      .setName('daily-goals')
+      .setDescription('Set daily goals per staff role')
+      .addStringOption(o => o.setName('role').setDescription('Staff role').setRequired(true)
+        .addChoices(
+          { name: 'Owner',       value: 'owner'       },
+          { name: 'Admin',       value: 'admin'       },
+          { name: 'Mod',         value: 'staff'       },
+          { name: 'Host',        value: 'host'        },
+          { name: 'Rumble Host', value: 'rumble_host' },
+        ))
+      .addIntegerOption(o => o.setName('games').setDescription('Daily games goal').setRequired(false))
+      .addIntegerOption(o => o.setName('autogames').setDescription('Daily auto-games goal').setRequired(false))
+      .addIntegerOption(o => o.setName('payouts').setDescription('Daily payouts goal').setRequired(false))
     ),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
-    if (sub === 'add')    await addStaff(interaction);
-    if (sub === 'remove') await removeStaff(interaction);
-    if (sub === 'list')   await listStaff(interaction);
     if (sub === 'report') await staffReport(interaction);
     if (sub === 'payhistory') await payHistory(interaction);
+    if (sub === 'requirements') await setRequirements(interaction);
+    if (sub === 'daily-goals') await setDailyGoals(interaction);
   },
   listStaff,
   staffReport,
   payHistory,
 };
 
-async function addStaff(interaction) {
-  const user     = interaction.options.getUser('user');
-  const role     = interaction.options.getString('role');
-  const currency = interaction.options.getString('currency') || 'Crowns';
-  const pay      = interaction.options.getInteger('pay') || 0;
-
+async function setRequirements(interaction) {
   await interaction.deferReply({ ephemeral: true });
-
-  const nextDue = new Date();
-  nextDue.setDate(nextDue.getDate() + 30);
-
+  const role = interaction.options.getString('role');
+  const fields = {
+    min_games_hosted:      interaction.options.getInteger('min_games'),
+    min_rumble:            interaction.options.getInteger('min_auto_games'),
+    min_raffles_hosted:    interaction.options.getInteger('min_raffles'),
+    min_giveaways_hosted:  interaction.options.getInteger('min_giveaways'),
+    bonus_per_game:        interaction.options.getInteger('bonus_per_game'),
+  };
+  if (Object.values(fields).every(v => v === null)) {
+    return interaction.editReply({ content: e('wrong') + ' Please provide at least one field.' });
+  }
   await query(
-    `INSERT INTO staff (user_id, username, role, pay_currency, pay_amount, next_pay_due_at, added_by, guild_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-     ON CONFLICT (user_id) DO UPDATE SET role=$3, pay_currency=$4, pay_amount=$5, active=true, guild_id=$8`,
-    [user.id, user.username, role, currency, pay, nextDue, interaction.user.id, interaction.guildId]
+    `INSERT INTO pay_requirements (guild_id, role, min_games_hosted, min_rumble, min_raffles_hosted, min_giveaways_hosted, bonus_per_game)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     ON CONFLICT (guild_id, role) DO UPDATE SET
+       min_games_hosted     = COALESCE($3, pay_requirements.min_games_hosted),
+       min_rumble           = COALESCE($4, pay_requirements.min_rumble),
+       min_raffles_hosted   = COALESCE($5, pay_requirements.min_raffles_hosted),
+       min_giveaways_hosted = COALESCE($6, pay_requirements.min_giveaways_hosted),
+       bonus_per_game       = COALESCE($7, pay_requirements.bonus_per_game),
+       updated_at = NOW()`,
+    [interaction.guildId, role, fields.min_games_hosted, fields.min_rumble, fields.min_raffles_hosted, fields.min_giveaways_hosted, fields.bonus_per_game]
   );
-
-  const embed = baseEmbed(`${e('checkmark')} Staff Added`, COLORS.softgreen, interaction.guild?.name)
-    .addFields(
-      { name: `${e('members')} User`,                value: `<@${user.id}>`, inline: true },
-      { name: `${e('trophies')} Role`,               value: ROLE_LABELS[role] || role, inline: true },
-      { name: `${e('payday')} Pay`,                  value: `${pay} ${currency}`, inline: true },
-      { name: `${e('calender')} Next Due`,           value: tsF(nextDue), inline: true },
-      { name: `+ Added by`,                          value: `<@${interaction.user.id}>`, inline: true },
-    );
-  await interaction.editReply({ embeds: [embed] });
+  const roleLabels = { default: 'Default', owner: 'Owner', admin: 'Admin', staff: 'Mod', host: 'Host', rumble_host: 'Rumble Host' };
+  await interaction.editReply({ content: e('checkmark') + ' Pay requirements updated for **' + (roleLabels[role] || role) + '**.' });
 }
 
-async function removeStaff(interaction) {
-  const user = interaction.options.getUser('user');
+async function setDailyGoals(interaction) {
   await interaction.deferReply({ ephemeral: true });
-  await query(`UPDATE staff SET active=false WHERE user_id=$1`, [user.id]);
-  await interaction.editReply({ content: `${e('checkmark')} <@${user.id}> removed from staff.` });
+  const role      = interaction.options.getString('role');
+  const games     = interaction.options.getInteger('games');
+  const autogames = interaction.options.getInteger('autogames');
+  const payouts   = interaction.options.getInteger('payouts');
+  if (games === null && autogames === null && payouts === null) {
+    return interaction.editReply({ content: e('wrong') + ' Please provide at least one goal.' });
+  }
+  await query(
+    `INSERT INTO daily_goals (guild_id, role, games, autogames, payouts) VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (guild_id, role) DO UPDATE SET games=COALESCE($3,daily_goals.games), autogames=COALESCE($4,daily_goals.autogames), payouts=COALESCE($5,daily_goals.payouts), updated_at=NOW()`,
+    [interaction.guildId, role, games, autogames, payouts]
+  );
+  const roleLabels = { owner:'Owner', admin:'Admin', staff:'Mod', host:'Host', rumble_host:'Rumble Host' };
+  await interaction.editReply({ content: e('checkmark') + ' Daily goals set for **' + (roleLabels[role]||role) + '**.' });
 }
 
 async function listStaff(interaction) {
@@ -137,7 +150,7 @@ async function staffReport(interaction, userOverride) {
   if (!staffRes.rows.length) return interaction.editReply({ content: `${e('wrong')} User not in staff database.` });
   const staff = staffRes.rows[0];
 
-  const eligibility = await checkEligibility(interaction.guildId, user.id);
+  const eligibility = await checkEligibility(interaction.guildId, user.id, staff.role);
 
   const embed = baseEmbed(`📋 Staff Report — ${user.username}`, COLORS.lightpurple, interaction.guild?.name)
     .setThumbnail(user.displayAvatarURL())

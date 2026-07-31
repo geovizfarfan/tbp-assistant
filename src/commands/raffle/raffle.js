@@ -15,7 +15,6 @@ const PRIZE_CHOICES = [
   { label: 'Partner Carry',             value: 'carry',       emoji: '🤝' },
   { label: 'Goos',                      value: 'goos',        emoji: '👻' },
   { label: 'Sins',                      value: 'sins',        emoji: '💀' },
-  { label: 'Crowns',                    value: 'crowns',      emoji: '👑' },
   { label: 'Gift Card',                 value: 'gift_card',   emoji: '🎁' },
   { label: 'Sticker Pack',              value: 'sticker',     emoji: '🎀' },
   { label: 'Other Gift (specify below)',value: 'gift',        emoji: '🎀' },
@@ -37,7 +36,6 @@ module.exports = {
           { name: 'Partner Carry',              value: 'carry'       },
           { name: 'Goos',                       value: 'goos'        },
           { name: 'Sins',                       value: 'sins'        },
-          { name: 'Crowns',                     value: 'crowns'      },
           { name: 'Gift Card',                  value: 'gift_card'   },
           { name: 'Sticker Pack',               value: 'sticker'     },
           { name: 'Other Gift',                 value: 'gift'        },
@@ -133,7 +131,7 @@ async function startRaffle(interaction) {
     `INSERT INTO raffles (guild_id, channel_id, message_id, host_id, prize, prize_amount, currency, ends_at, prize_key)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
     [interaction.guildId, interaction.channelId, msg.id, interaction.user.id, prizeLabel, amount,
-     ['goos','sins','crowns'].includes(prizeKey) ? prizeKey.toUpperCase() : prizeKey, endsAt, prizeKey]
+     ['goos','sins'].includes(prizeKey) ? prizeKey.toUpperCase() : prizeKey, endsAt, prizeKey]
   );
   const raffleId = res.rows[0].id;
 

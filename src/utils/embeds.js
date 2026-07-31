@@ -21,11 +21,6 @@ const COLORS = {
   lavender:     0xC8A8E9,
 };
 
-function currencyLabel(c) {
-  const map = { MEE6: 'Crowns', SINS: 'Sins', OOS: 'Goos', Crowns: 'Crowns', Sins: 'Sins', Goos: 'Goos' };
-  return map[c] || c;
-}
-
 function ts(date, format = 'F') {
   const unix = Math.floor(new Date(date).getTime() / 1000);
   return `<t:${unix}:${format}>`;
@@ -60,4 +55,4 @@ function eligibilityEmbed(staffUser, result, e, guildName = null) {
   return embed;
 }
 
-module.exports = { COLORS, currencyLabel, ts, tsR, tsF, baseEmbed, eligibilityEmbed };
+module.exports = { COLORS, ts, tsR, tsF, baseEmbed, eligibilityEmbed };
