@@ -767,13 +767,16 @@ async function updateCampaignWheelPreview(message, camp) {
       `SELECT user_id, quantity FROM wheel_role_campaign_entries WHERE campaign_id=$1 AND currently_qualified=true`,
       [camp.id]
     );
-    if (!entRes.rows.length) return;
 
     const names = [];
-    for (const en of entRes.rows) {
-      const member = await message.guild.members.fetch(en.user_id).catch(() => null);
-      const label = member ? member.user.username : en.user_id;
-      for (let i = 0; i < en.quantity; i++) names.push(label);
+    if (entRes.rows.length) {
+      for (const en of entRes.rows) {
+        const member = await message.guild.members.fetch(en.user_id).catch(() => null);
+        const label = member ? member.user.username : en.user_id;
+        for (let i = 0; i < en.quantity; i++) names.push(label);
+      }
+    } else {
+      names.push('No entries yet');
     }
 
     const { buildStaticWheelPreview } = require('../../utils/wheelRenderer');
@@ -787,6 +790,29 @@ async function updateCampaignWheelPreview(message, camp) {
   } catch (err) {
     console.error('[WheelRoles] preview update error:', err.message);
   }
+}
+
+// Un-reacting is a deliberate opt-out — removes the entry entirely rather
+// than just marking it unqualified (which is for losing a role instead).
+async function handleCampaignReactionRemove(reaction, user) {
+  if (user.bot) return;
+  if (reaction.emoji.name !== 'color_wheel') return;
+  if (reaction.partial) await reaction.fetch().catch(() => null);
+  if (reaction.message.partial) await reaction.message.fetch().catch(() => null);
+  if (!reaction.message.guild) return;
+
+  const campRes = await query(
+    `SELECT * FROM wheel_role_campaigns WHERE guild_id=$1 AND entry_message_id=$2 AND status='active'`,
+    [reaction.message.guild.id, reaction.message.id]
+  );
+  const camp = campRes.rows[0];
+  if (!camp) return;
+
+  const del = await query(
+    `DELETE FROM wheel_role_campaign_entries WHERE campaign_id=$1 AND user_id=$2 RETURNING id`,
+    [camp.id, user.id]
+  );
+  if (del.rows.length) await updateCampaignWheelPreview(reaction.message, camp);
 }
 
 // Called from index.js on guildMemberUpdate — checks role changes against
@@ -840,6 +866,13 @@ async function checkAutoSignupCampaigns(client, oldMember, newMember) {
   for (const camp of campRes.rows) {
     const { qualifies, quantity } = await checkCampaignQualification(camp, newMember);
 
+    const existingRes = await query(
+      `SELECT currently_qualified FROM wheel_role_campaign_entries WHERE campaign_id=$1 AND user_id=$2`,
+      [camp.id, newMember.id]
+    );
+    const wasQualified = existingRes.rows[0]?.currently_qualified ?? null; // null = no entry existed yet
+    const changed = qualifies !== wasQualified;
+
     if (qualifies) {
       await query(
         `INSERT INTO wheel_role_campaign_entries (campaign_id, user_id, quantity, currently_qualified, last_qualified_at)
@@ -848,11 +881,17 @@ async function checkAutoSignupCampaigns(client, oldMember, newMember) {
            quantity = $3, currently_qualified = true, last_qualified_at = NOW()`,
         [camp.id, newMember.id, quantity]
       ).catch(() => {});
-    } else {
+    } else if (wasQualified) {
       await query(
         `UPDATE wheel_role_campaign_entries SET currently_qualified=false WHERE campaign_id=$1 AND user_id=$2`,
         [camp.id, newMember.id]
       ).catch(() => {});
+    }
+
+    if (changed && camp.entry_channel_id && camp.entry_message_id) {
+      const channel = await client.channels.fetch(camp.entry_channel_id).catch(() => null);
+      const message = channel ? await channel.messages.fetch(camp.entry_message_id).catch(() => null) : null;
+      if (message) await updateCampaignWheelPreview(message, camp);
     }
   }
 }
@@ -1021,3 +1060,4 @@ async function spinCombo(interaction) {
 
 module.exports.checkAutoSignupCampaigns = checkAutoSignupCampaigns;
 module.exports.handleCampaignReactionAdd = handleCampaignReactionAdd;
+module.exports.handleCampaignReactionRemove = handleCampaignReactionRemove;

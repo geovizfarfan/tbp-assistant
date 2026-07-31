@@ -731,6 +731,12 @@ client.on('messageReactionAdd', async (reaction, user) => {
     await handleCampaignReactionAdd(reaction, user);
   } catch (e) { console.error('[WheelRoles] reaction entry check:', e.message); }
 });
+client.on('messageReactionRemove', async (reaction, user) => {
+  try {
+    const { handleCampaignReactionRemove } = require('./commands/wheel/wheel');
+    await handleCampaignReactionRemove(reaction, user);
+  } catch (e) { console.error('[WheelRoles] reaction removal check:', e.message); }
+});
 
 // Member verification
 client.on('messageReactionAdd', async (reaction, user) => {
