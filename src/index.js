@@ -299,6 +299,10 @@ client.on('interactionCreate', async (interaction) => {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleStaffUserPicked(interaction);
   }
+  if (interaction.isButton() && interaction.customId === 'serversetup_cleanupchannels') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleCleanupChannels(interaction);
+  }
   if (interaction.isButton() && interaction.customId.startsWith('serversetup_extras:')) {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleExtrasButton(interaction);
@@ -822,6 +826,43 @@ client.on('channelDelete', async (channel) => {
       WHERE guild_id=$1`, [gid, cid]);
     await query(`UPDATE grind_config SET panel_channel_id = NULLIF(panel_channel_id, $2) WHERE guild_id=$1`, [gid, cid]);
   } catch (e) { console.error('[ChannelDelete cleanup]', e.message); }
+});
+
+// Role deleted — clear every reference to it, same idea as channelDelete above.
+client.on('roleDelete', async (role) => {
+  try {
+    const { query } = require('./utils/database');
+    const gid = role.guild.id, rid = role.id;
+
+    await query('DELETE FROM giveaway_bonus_roles WHERE guild_id=$1 AND role_id=$2', [gid, rid]);
+    await query('DELETE FROM giveaway_required_roles WHERE guild_id=$1 AND role_id=$2', [gid, rid]);
+    await query('DELETE FROM wheel_role_bonuses WHERE guild_id=$1 AND role_id=$2', [gid, rid]);
+    await query('DELETE FROM role_panel_options WHERE guild_id=$1 AND role_id=$2', [gid, rid]);
+    await query('DELETE FROM pingpanel_sticky WHERE guild_id=$1 AND role_id=$2', [gid, rid]);
+
+    await query(`UPDATE guild_config SET
+        admin_role_id = NULLIF(admin_role_id, $2),
+        mod_role_id = NULLIF(mod_role_id, $2),
+        game_ping_role_id = NULLIF(game_ping_role_id, $2)
+      WHERE guild_id=$1`, [gid, rid]);
+    await query(`UPDATE verify_config SET verified_role_id = NULLIF(verified_role_id, $2) WHERE guild_id=$1`, [gid, rid]);
+    await query(`UPDATE ticket_config SET staff_role_id = NULLIF(staff_role_id, $2) WHERE guild_id=$1`, [gid, rid]);
+    await query(`UPDATE goosdate_config SET role_id = NULLIF(role_id, $2) WHERE guild_id=$1`, [gid, rid]);
+    await query(`UPDATE grind_config SET role_id = NULLIF(role_id, $2) WHERE guild_id=$1`, [gid, rid]);
+    await query(`UPDATE shop_items SET role_id = NULL WHERE guild_id=$1 AND role_id=$2`, [gid, rid]);
+    await query(`UPDATE rr_channel_config SET
+        winner_role_id = NULLIF(winner_role_id, $2),
+        ping_role1_id = NULLIF(ping_role1_id, $2),
+        ping_role2_id = NULLIF(ping_role2_id, $2),
+        ping_role3_id = NULLIF(ping_role3_id, $2)
+      WHERE guild_id=$1`, [gid, rid]);
+    await query(`UPDATE rumble_slaughter_config SET
+        winner_role_id = NULLIF(winner_role_id, $2),
+        ping_role_id = NULLIF(ping_role_id, $2),
+        ping_role2_id = NULLIF(ping_role2_id, $2),
+        ping_role3_id = NULLIF(ping_role3_id, $2)
+      WHERE guild_id=$1`, [gid, rid]);
+  } catch (e) { console.error('[RoleDelete cleanup]', e.message); }
 });
 
 // Ban log

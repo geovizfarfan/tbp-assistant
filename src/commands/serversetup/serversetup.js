@@ -466,6 +466,26 @@ module.exports = {
     });
   },
 
+  async handleCleanupChannels(interaction) {
+    await interaction.deferUpdate();
+    const { cleanupDeletedChannelRefs, cleanupDeletedRoleRefs } = require('../../utils/channelCleanup');
+    const clearedChannels = await cleanupDeletedChannelRefs(interaction.guild);
+    const clearedRoles = await cleanupDeletedRoleRefs(interaction.guild);
+    const cleared = clearedChannels + clearedRoles;
+
+    const { buildConfigEmbed } = require('../help/help');
+    const liveEmbed = await buildConfigEmbed(interaction.guild, interaction.client);
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('serversetup_cleanupchannels').setLabel('Clean Up Deleted Channels & Roles').setStyle(ButtonStyle.Danger),
+    );
+
+    return interaction.editReply({
+      content: cleared ? `✅ Cleared **${clearedChannels}** stale channel reference${clearedChannels === 1 ? '' : 's'} and **${clearedRoles}** stale role reference${clearedRoles === 1 ? '' : 's'}.` : '✅ Nothing to clean up — no stale channel or role references found.',
+      embeds: [liveEmbed],
+      components: [row, buildBackButton()],
+    });
+  },
+
   async handleButton(interaction) {
     const [, key] = interaction.customId.split(':');
 
@@ -482,9 +502,12 @@ module.exports = {
       await interaction.deferUpdate();
       const { buildConfigEmbed } = require('../help/help');
       const liveEmbed = await buildConfigEmbed(interaction.guild, interaction.client);
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('serversetup_cleanupchannels').setLabel('Clean Up Deleted Channels & Roles').setStyle(ButtonStyle.Danger),
+      );
       return interaction.editReply({
         embeds: [liveEmbed],
-        components: [buildBackButton()],
+        components: [row, buildBackButton()],
       });
     }
 
