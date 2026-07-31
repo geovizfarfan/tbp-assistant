@@ -724,6 +724,14 @@ client.on('messageReactionAdd', async (reaction, user) => {
   } catch (e) { console.error('[Giveaway] required-role check:', e.message); }
 });
 
+// Wheel Roles campaign reaction-to-enter (from /wheel roles post)
+client.on('messageReactionAdd', async (reaction, user) => {
+  try {
+    const { handleCampaignReactionAdd } = require('./commands/wheel/wheel');
+    await handleCampaignReactionAdd(reaction, user);
+  } catch (e) { console.error('[WheelRoles] reaction entry check:', e.message); }
+});
+
 // Member verification
 client.on('messageReactionAdd', async (reaction, user) => {
   try {

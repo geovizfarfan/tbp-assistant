@@ -794,9 +794,10 @@ async function handleGiveawayReactionAdd(reaction, user) {
   await reaction.users.remove(user.id).catch(() => {});
 
   const missingLines = missing.map(rid => reaction.message.guild.roles.cache.get(rid)?.name || 'a required role').join(', ');
-  await user.send({
-    content: `${e('wrong')} You can't enter the giveaway for **${gw.prize}** in **${reaction.message.guild.name}** — you're missing: ${missingLines}.`,
-  }).catch(() => {}); // DMs closed — fail silently, the removed reaction still makes it clear
+  const notice = await reaction.message.channel.send({
+    content: `${e('wrong')} <@${user.id}> you can't enter this giveaway — you're missing: ${missingLines}.`,
+  }).catch(() => null);
+  if (notice) setTimeout(() => notice.delete().catch(() => {}), 8000);
 }
 
 module.exports.handleGiveawayReactionAdd = handleGiveawayReactionAdd;

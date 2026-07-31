@@ -216,6 +216,11 @@ module.exports = {
         .setName('delete')
         .setDescription('Delete a campaign and all its entries permanently')
         .addStringOption(o => o.setName('name').setDescription('Campaign name').setRequired(true).setAutocomplete(true)))
+      .addSubcommand(sub => sub
+        .setName('post')
+        .setDescription('Post a message members can react to, to enter a campaign directly')
+        .addStringOption(o => o.setName('name').setDescription('Campaign name').setRequired(true).setAutocomplete(true))
+        .addChannelOption(o => o.setName('channel').setDescription('Channel to post in').setRequired(true)))
     ),
 
   async autocomplete(interaction) {
@@ -253,6 +258,7 @@ module.exports = {
       if (sub === 'spin') return campaignSpin(interaction);
       if (sub === 'end') return campaignEnd(interaction);
       if (sub === 'delete') return campaignDelete(interaction);
+      if (sub === 'post') return campaignPost(interaction);
     }
 
     if (sub === 'members') return spinMembers(interaction);
@@ -668,8 +674,106 @@ async function campaignDelete(interaction) {
   return interaction.editReply(`${e('checkmark')} **${name}** and all its entries deleted.`);
 }
 
+async function campaignPost(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+  const name = interaction.options.getString('name');
+  const channel = interaction.options.getChannel('channel');
+
+  const campRes = await query(`SELECT * FROM wheel_role_campaigns WHERE guild_id=$1 AND name=$2 AND status='active'`, [interaction.guildId, name]);
+  const camp = campRes.rows[0];
+  if (!camp) return interaction.editReply(`${e('wrong')} No active campaign named **${name}**.`);
+
+  const roleLines = camp.role_ids.map(id => `<@&${id}>`).join(', ');
+  const qualifyLine = camp.qualify_mode === 'full_season'
+    ? `You must have **ALL** of these roles to qualify: ${roleLines}`
+    : `You need at least ONE of these roles to qualify: ${roleLines}`;
+
+  const embed = baseEmbed(`${e('diamond')} ${camp.name}`, COLORS.tbppurple, interaction.guild?.name)
+    .setDescription(`React with 🎉 to enter!\n${qualifyLine}`);
+
+  const msg = await channel.send({ embeds: [embed] });
+  await msg.react('🎉').catch(() => {});
+
+  await query(`UPDATE wheel_role_campaigns SET entry_channel_id=$1, entry_message_id=$2 WHERE id=$3`, [channel.id, msg.id, camp.id]);
+
+  return interaction.editReply(`${e('checkmark')} Posted **${name}** in <#${channel.id}> — members can react with 🎉 to enter.`);
+}
+
+// Reaction-to-enter for a posted campaign — validates the reactor and either
+// registers their entry or removes the reaction with a temporary rejection
+// notice (not a DM, per how the giveaway version works).
+async function handleCampaignReactionAdd(reaction, user) {
+  if (user.bot) return;
+  if (reaction.emoji.name !== '🎉') return;
+  if (reaction.partial) await reaction.fetch().catch(() => null);
+  if (reaction.message.partial) await reaction.message.fetch().catch(() => null);
+  if (!reaction.message.guild) return;
+
+  const campRes = await query(
+    `SELECT * FROM wheel_role_campaigns WHERE guild_id=$1 AND entry_message_id=$2 AND status='active'`,
+    [reaction.message.guild.id, reaction.message.id]
+  );
+  const camp = campRes.rows[0];
+  if (!camp) return;
+
+  const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);
+  if (!member) return;
+
+  const { qualifies, quantity } = await checkCampaignQualification(camp, member);
+
+  if (qualifies) {
+    await query(
+      `INSERT INTO wheel_role_campaign_entries (campaign_id, user_id, quantity, currently_qualified, last_qualified_at)
+       VALUES ($1,$2,$3,true,NOW())
+       ON CONFLICT (campaign_id, user_id) DO UPDATE SET
+         quantity = $3, currently_qualified = true, last_qualified_at = NOW()`,
+      [camp.id, user.id, quantity]
+    ).catch(() => {});
+    return;
+  }
+
+  await reaction.users.remove(user.id).catch(() => {});
+  const notice = await reaction.message.channel.send({
+    content: `${e('wrong')} <@${user.id}> you don't qualify for **${camp.name}** yet — check the roles listed above.`,
+  }).catch(() => null);
+  if (notice) setTimeout(() => notice.delete().catch(() => {}), 8000);
+}
+
 // Called from index.js on guildMemberUpdate — checks role changes against
 // every active auto-signup campaign in that guild and updates entries.
+// Shared by auto-signup (guildMemberUpdate) and reaction-to-enter — returns
+// whether this member currently qualifies for the campaign, and how many
+// entries that's worth.
+async function checkCampaignQualification(camp, member) {
+  let qualifies = false;
+  let quantity = 1;
+
+  if (camp.qualify_mode === 'full_season') {
+    // Must hold EVERY winner role from at least one of the listed seasons.
+    for (const seasonId of camp.qualify_season_ids || []) {
+      const roleRes = await query(
+        `SELECT DISTINCT rc.winner_role_id FROM rr_season_channels sc JOIN rr_channel_config rc ON rc.channel_id = sc.channel_id
+         WHERE sc.season_id = $1 AND rc.winner_role_id IS NOT NULL
+         UNION
+         SELECT DISTINCT rs.winner_role_id FROM rr_season_channels sc JOIN rumble_slaughter_config rs ON rs.channel_id = sc.channel_id
+         WHERE sc.season_id = $1 AND rs.winner_role_id IS NOT NULL`,
+        [seasonId]
+      );
+      const seasonRoleIds = roleRes.rows.map(r => r.winner_role_id);
+      if (seasonRoleIds.length && seasonRoleIds.every(rid => member.roles.cache.has(rid))) {
+        qualifies = true;
+        break;
+      }
+    }
+  } else {
+    const matchedRoles = camp.role_ids.filter(rid => member.roles.cache.has(rid));
+    qualifies = matchedRoles.length > 0;
+    quantity = camp.extra_entries_allowed ? Math.max(matchedRoles.length, 1) : 1;
+  }
+
+  return { qualifies, quantity };
+}
+
 async function checkAutoSignupCampaigns(client, oldMember, newMember) {
   // Skip entirely if roles didn't actually change (nickname/boost/etc updates
   // also fire guildMemberUpdate) — avoids a DB round-trip on every unrelated update.
@@ -684,31 +788,7 @@ async function checkAutoSignupCampaigns(client, oldMember, newMember) {
   if (!campRes.rows.length) return;
 
   for (const camp of campRes.rows) {
-    let qualifies = false;
-    let quantity = 1;
-
-    if (camp.qualify_mode === 'full_season') {
-      // Must hold EVERY winner role from at least one of the listed seasons.
-      for (const seasonId of camp.qualify_season_ids || []) {
-        const roleRes = await query(
-          `SELECT DISTINCT rc.winner_role_id FROM rr_season_channels sc JOIN rr_channel_config rc ON rc.channel_id = sc.channel_id
-           WHERE sc.season_id = $1 AND rc.winner_role_id IS NOT NULL
-           UNION
-           SELECT DISTINCT rs.winner_role_id FROM rr_season_channels sc JOIN rumble_slaughter_config rs ON rs.channel_id = sc.channel_id
-           WHERE sc.season_id = $1 AND rs.winner_role_id IS NOT NULL`,
-          [seasonId]
-        );
-        const seasonRoleIds = roleRes.rows.map(r => r.winner_role_id);
-        if (seasonRoleIds.length && seasonRoleIds.every(rid => newMember.roles.cache.has(rid))) {
-          qualifies = true;
-          break;
-        }
-      }
-    } else {
-      const matchedRoles = camp.role_ids.filter(rid => newMember.roles.cache.has(rid));
-      qualifies = matchedRoles.length > 0;
-      quantity = camp.extra_entries_allowed ? Math.max(matchedRoles.length, 1) : 1;
-    }
+    const { qualifies, quantity } = await checkCampaignQualification(camp, newMember);
 
     if (qualifies) {
       await query(
@@ -890,3 +970,4 @@ async function spinCombo(interaction) {
 }
 
 module.exports.checkAutoSignupCampaigns = checkAutoSignupCampaigns;
+module.exports.handleCampaignReactionAdd = handleCampaignReactionAdd;
