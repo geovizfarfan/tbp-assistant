@@ -194,6 +194,8 @@ module.exports = {
         .setDescription('Create a new Wheel Roles campaign')
         .addStringOption(o => o.setName('name').setDescription('Campaign name').setRequired(true))
         .addStringOption(o => o.setName('season').setDescription('Pull qualifying roles from a season\'s winner roles').setAutocomplete(true))
+        .addBooleanOption(o => o.setName('require_all_season_roles').setDescription('Must have EVERY winner role from the season(s), not just one (default: False)'))
+        .addStringOption(o => o.setName('additional_seasons').setDescription('More seasons (comma-separated names) - qualifies by completing ANY one of them'))
         .addStringOption(o => o.setName('roles').setDescription('Or type @ to mention roles manually (skip if using season)'))
         .addBooleanOption(o => o.setName('auto_signup').setDescription('Auto-enter members who have any of these roles (default: True)'))
         .addBooleanOption(o => o.setName('extra_entries').setDescription('Stack an extra entry per additional qualifying role (default: False)')))
@@ -494,6 +496,8 @@ async function campaignCreate(interaction) {
 
   const name = interaction.options.getString('name');
   const seasonName = interaction.options.getString('season');
+  const requireAll = interaction.options.getBoolean('require_all_season_roles') ?? false;
+  const additionalSeasonsRaw = interaction.options.getString('additional_seasons');
   const rolesRaw = interaction.options.getString('roles');
   const autoSignup = interaction.options.getBoolean('auto_signup') ?? true;
   const extraEntries = interaction.options.getBoolean('extra_entries') ?? false;
@@ -501,23 +505,46 @@ async function campaignCreate(interaction) {
   if (!seasonName && !rolesRaw) {
     return interaction.editReply(`${e('wrong')} Pick a \`season\` to pull roles from, or type \`roles\` manually.`);
   }
+  if (additionalSeasonsRaw && !seasonName) {
+    return interaction.editReply(`${e('wrong')} \`additional_seasons\` needs a primary \`season\` picked too.`);
+  }
+  if (additionalSeasonsRaw && !requireAll) {
+    return interaction.editReply(`${e('wrong')} \`additional_seasons\` only applies when \`require_all_season_roles\` is True.`);
+  }
 
   let roleIds = [];
-  if (seasonName) {
-    const seasonRes = await query(`SELECT id FROM rr_seasons WHERE guild_id=$1 AND name=$2 AND status='active'`, [interaction.guildId, seasonName]);
-    const season = seasonRes.rows[0];
-    if (!season) return interaction.editReply(`${e('wrong')} No active season named **${seasonName}**.`);
+  let qualifySeasonIds = null;
+  let qualifyMode = 'any_role';
 
-    const roleRes = await query(
-      `SELECT DISTINCT rc.winner_role_id FROM rr_season_channels sc JOIN rr_channel_config rc ON rc.channel_id = sc.channel_id
-       WHERE sc.season_id = $1 AND rc.winner_role_id IS NOT NULL
-       UNION
-       SELECT DISTINCT rs.winner_role_id FROM rr_season_channels sc JOIN rumble_slaughter_config rs ON rs.channel_id = sc.channel_id
-       WHERE sc.season_id = $1 AND rs.winner_role_id IS NOT NULL`,
-      [season.id]
-    );
-    roleIds = roleRes.rows.map(r => r.winner_role_id);
-    if (!roleIds.length) return interaction.editReply(`${e('wrong')} **${seasonName}** has no channels with a winner role configured yet.`);
+  if (seasonName) {
+    const seasonNames = [seasonName, ...(additionalSeasonsRaw ? additionalSeasonsRaw.split(',').map(s => s.trim()).filter(Boolean) : [])];
+    const seasons = [];
+
+    for (const sName of seasonNames) {
+      const seasonRes = await query(`SELECT id FROM rr_seasons WHERE guild_id=$1 AND name=$2 AND status='active'`, [interaction.guildId, sName]);
+      if (!seasonRes.rows.length) return interaction.editReply(`${e('wrong')} No active season named **${sName}**.`);
+      seasons.push({ id: seasonRes.rows[0].id, name: sName });
+    }
+
+    const allRoleIds = new Set();
+    for (const season of seasons) {
+      const roleRes = await query(
+        `SELECT DISTINCT rc.winner_role_id FROM rr_season_channels sc JOIN rr_channel_config rc ON rc.channel_id = sc.channel_id
+         WHERE sc.season_id = $1 AND rc.winner_role_id IS NOT NULL
+         UNION
+         SELECT DISTINCT rs.winner_role_id FROM rr_season_channels sc JOIN rumble_slaughter_config rs ON rs.channel_id = sc.channel_id
+         WHERE sc.season_id = $1 AND rs.winner_role_id IS NOT NULL`,
+        [season.id]
+      );
+      if (!roleRes.rows.length) return interaction.editReply(`${e('wrong')} **${season.name}** has no channels with a winner role configured yet.`);
+      roleRes.rows.forEach(r => allRoleIds.add(r.winner_role_id));
+    }
+    roleIds = [...allRoleIds];
+
+    if (requireAll) {
+      qualifyMode = 'full_season';
+      qualifySeasonIds = seasons.map(s => s.id);
+    }
   } else {
     roleIds = [...rolesRaw.matchAll(/<@&(\d+)>/g)].map(m => m[1]);
     if (!roleIds.length) return interaction.editReply(`${e('wrong')} Couldn't find any role mentions — type @ to mention roles.`);
@@ -527,16 +554,21 @@ async function campaignCreate(interaction) {
   if (existing.rows.length) return interaction.editReply(`${e('wrong')} A campaign named **${name}** already exists.`);
 
   await query(
-    `INSERT INTO wheel_role_campaigns (guild_id, name, role_ids, auto_signup, extra_entries_allowed, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6)`,
-    [interaction.guildId, name, roleIds, autoSignup, extraEntries, interaction.user.id]
+    `INSERT INTO wheel_role_campaigns (guild_id, name, role_ids, auto_signup, extra_entries_allowed, created_by, qualify_mode, qualify_season_ids)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [interaction.guildId, name, roleIds, autoSignup, extraEntries, interaction.user.id, qualifyMode, qualifySeasonIds]
   );
 
   const roleLines = roleIds.map(id => `<@&${id}>`).join(', ');
+  const qualifyExplainer = qualifyMode === 'full_season'
+    ? `Must have **ALL** winner roles from ${qualifySeasonIds.length > 1 ? 'ANY ONE of the selected seasons' : 'this season'} to qualify.`
+    : 'Qualifies with any ONE of these roles.';
+
   return interaction.editReply(
-    `${e('checkmark')} Campaign **${name}** created${seasonName ? ` from season **${seasonName}**` : ''} — qualifying roles: ${roleLines}\n` +
+    `${e('checkmark')} Campaign **${name}** created${seasonName ? ` from season${qualifySeasonIds?.length > 1 ? 's' : ''} **${seasonName}${additionalSeasonsRaw ? `, ${additionalSeasonsRaw}` : ''}**` : ''} — roles involved: ${roleLines}\n` +
+    `${qualifyExplainer}\n` +
     `Auto-signup: **${autoSignup ? 'On' : 'Off'}** — Extra entries per extra role: **${extraEntries ? 'On' : 'Off'}**\n` +
-    (autoSignup ? 'Members with any of these roles will be entered automatically going forward.' : 'Auto-signup is off — entries only happen through linked Rumble seasons.')
+    (autoSignup ? 'Qualifying members will be entered automatically going forward.' : 'Auto-signup is off — entries only happen through linked Rumble seasons.')
   );
 }
 
@@ -567,12 +599,15 @@ async function campaignList(interaction) {
     [camp.id]
   );
   const roleLines = camp.role_ids.map(id => `<@&${id}>`).join(', ');
+  const qualifyLine = camp.qualify_mode === 'full_season'
+    ? `Must have **ALL** of these roles (from ${camp.qualify_season_ids?.length > 1 ? 'any one season' : 'the season'}) to qualify.`
+    : 'Qualifies with any ONE of these roles.';
   const entryLines = entRes.rows.length
     ? entRes.rows.map(en => `<@${en.user_id}> — ${en.quantity} entr${en.quantity === 1 ? 'y' : 'ies'}${en.currently_qualified ? '' : ' *(no longer qualified)*'}`).join('\n')
     : 'No entries yet.';
 
   return interaction.editReply({ embeds: [baseEmbed(`${e('diamond')} Campaign: ${camp.name}`, COLORS.tbppurple, interaction.guild?.name)
-    .setDescription(`Status: **${camp.status}** — Auto-signup: **${camp.auto_signup ? 'On' : 'Off'}** — Extra entries: **${camp.extra_entries_allowed ? 'On' : 'Off'}**\nQualifying roles: ${roleLines}`)
+    .setDescription(`Status: **${camp.status}** — Auto-signup: **${camp.auto_signup ? 'On' : 'Off'}** — Extra entries: **${camp.extra_entries_allowed ? 'On' : 'Off'}**\nRoles: ${roleLines}\n${qualifyLine}`)
     .addFields({ name: `Entrants (showing up to 25)`, value: entryLines })] });
 }
 
@@ -649,9 +684,31 @@ async function checkAutoSignupCampaigns(client, oldMember, newMember) {
   if (!campRes.rows.length) return;
 
   for (const camp of campRes.rows) {
-    const matchedRoles = camp.role_ids.filter(rid => newMember.roles.cache.has(rid));
-    const qualifies = matchedRoles.length > 0;
-    const quantity = camp.extra_entries_allowed ? Math.max(matchedRoles.length, 1) : 1;
+    let qualifies = false;
+    let quantity = 1;
+
+    if (camp.qualify_mode === 'full_season') {
+      // Must hold EVERY winner role from at least one of the listed seasons.
+      for (const seasonId of camp.qualify_season_ids || []) {
+        const roleRes = await query(
+          `SELECT DISTINCT rc.winner_role_id FROM rr_season_channels sc JOIN rr_channel_config rc ON rc.channel_id = sc.channel_id
+           WHERE sc.season_id = $1 AND rc.winner_role_id IS NOT NULL
+           UNION
+           SELECT DISTINCT rs.winner_role_id FROM rr_season_channels sc JOIN rumble_slaughter_config rs ON rs.channel_id = sc.channel_id
+           WHERE sc.season_id = $1 AND rs.winner_role_id IS NOT NULL`,
+          [seasonId]
+        );
+        const seasonRoleIds = roleRes.rows.map(r => r.winner_role_id);
+        if (seasonRoleIds.length && seasonRoleIds.every(rid => newMember.roles.cache.has(rid))) {
+          qualifies = true;
+          break;
+        }
+      }
+    } else {
+      const matchedRoles = camp.role_ids.filter(rid => newMember.roles.cache.has(rid));
+      qualifies = matchedRoles.length > 0;
+      quantity = camp.extra_entries_allowed ? Math.max(matchedRoles.length, 1) : 1;
+    }
 
     if (qualifies) {
       await query(

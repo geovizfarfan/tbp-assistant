@@ -417,6 +417,12 @@ CREATE TABLE IF NOT EXISTS wheel_role_campaigns (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (guild_id, name)
 );
+-- qualify_mode 'any_role' (default): qualifies with any one of role_ids.
+-- qualify_mode 'full_season': qualifies only by holding EVERY winner role
+-- from at least one of qualify_season_ids (role_ids still holds the union
+-- of all those roles, for display purposes).
+ALTER TABLE wheel_role_campaigns ADD COLUMN IF NOT EXISTS qualify_mode TEXT NOT NULL DEFAULT 'any_role';
+ALTER TABLE wheel_role_campaigns ADD COLUMN IF NOT EXISTS qualify_season_ids INTEGER[];
 
 CREATE TABLE IF NOT EXISTS wheel_role_campaign_entries (
   id SERIAL PRIMARY KEY,
