@@ -34,10 +34,24 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
       if (msg) await msg.delete().catch(err => console.error(`[ScheduleBoard] Failed to clean up stale raffle #${r.id}:`, err.message));
       await query(`UPDATE raffles SET board_message_id=NULL WHERE id=$1`, [r.id]).catch(() => {});
     }
+    const staleGiveaways = await query(`SELECT id, board_message_id FROM giveaway_events WHERE guild_id=$1 AND status != 'active' AND board_message_id IS NOT NULL`, [guildId]);
+    for (const g of staleGiveaways.rows) {
+      const msg = await channel.messages.fetch(g.board_message_id).catch(() => null);
+      if (msg) await msg.delete().catch(err => console.error(`[ScheduleBoard] Failed to clean up stale giveaway #${g.id}:`, err.message));
+      await query(`UPDATE giveaway_events SET board_message_id=NULL WHERE id=$1`, [g.id]).catch(() => {});
+    }
+    const staleCampaigns = await query(`SELECT id, board_message_id FROM wheel_role_campaigns WHERE guild_id=$1 AND status != 'active' AND board_message_id IS NOT NULL`, [guildId]);
+    for (const c of staleCampaigns.rows) {
+      const msg = await channel.messages.fetch(c.board_message_id).catch(() => null);
+      if (msg) await msg.delete().catch(err => console.error(`[ScheduleBoard] Failed to clean up stale campaign #${c.id}:`, err.message));
+      await query(`UPDATE wheel_role_campaigns SET board_message_id=NULL WHERE id=$1`, [c.id]).catch(() => {});
+    }
 
     // Get active games
     const gamesRes = await query(`SELECT * FROM game_logs WHERE guild_id=$1 AND status='active' ORDER BY started_at ASC`, [guildId]);
     const rafflesRes = await query(`SELECT * FROM raffles WHERE guild_id=$1 AND status='active' ORDER BY created_at ASC`, [guildId]);
+    const giveawaysRes = await query(`SELECT * FROM giveaway_events WHERE guild_id=$1 AND status='active' ORDER BY created_at ASC`, [guildId]);
+    const campaignsRes = await query(`SELECT * FROM wheel_role_campaigns WHERE guild_id=$1 AND status='active' AND entry_message_id IS NOT NULL ORDER BY created_at ASC`, [guildId]);
 
     // Post or update each game's individual message
     for (const game of gamesRes.rows) {
@@ -98,6 +112,62 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
       } else {
         const msg = await channel.send({ embeds: [raffleEmbed] });
         await query(`UPDATE raffles SET board_message_id=$1 WHERE id=$2`, [msg.id, raffle.id]);
+      }
+    }
+
+    // Post or update each giveaway's individual message
+    for (const gw of giveawaysRes.rows) {
+      const jumpLink = gw.message_id && gw.channel_id
+        ? `https://discord.com/channels/${gw.guild_id}/${gw.channel_id}/${gw.message_id}`
+        : null;
+      const gwEmbed = baseEmbed(`${e('gift')} ${gw.prize} Giveaway`, COLORS.pastelblue, guild.name)
+        .addFields(
+          { name: `${e('members')} Host`,    value: `<@${gw.host_id}>`, inline: true },
+          { name: `${e('RojasClock')} Ends`, value: tsR(gw.ends_at), inline: true },
+          { name: `${e('receipt')} ID`,        value: `#${gw.id}`, inline: true },
+        );
+      if (jumpLink) gwEmbed.setURL(jumpLink);
+
+      if (gw.board_message_id) {
+        try {
+          const msg = await channel.messages.fetch(gw.board_message_id);
+          await msg.edit({ embeds: [gwEmbed] });
+        } catch {
+          const msg = await channel.send({ embeds: [gwEmbed] });
+          await query(`UPDATE giveaway_events SET board_message_id=$1 WHERE id=$2`, [msg.id, gw.id]);
+        }
+      } else {
+        const msg = await channel.send({ embeds: [gwEmbed] });
+        await query(`UPDATE giveaway_events SET board_message_id=$1 WHERE id=$2`, [msg.id, gw.id]);
+      }
+    }
+
+    // Post or update each Wheel Roles campaign's individual message
+    for (const camp of campaignsRes.rows) {
+      const jumpLink = camp.entry_message_id && camp.entry_channel_id
+        ? `https://discord.com/channels/${camp.guild_id}/${camp.entry_channel_id}/${camp.entry_message_id}`
+        : null;
+      const entRes = await query(`SELECT COUNT(*) FROM wheel_role_campaign_entries WHERE campaign_id=$1 AND currently_qualified=true`, [camp.id]);
+      const entrantCount = entRes.rows[0].count;
+      const campEmbed = baseEmbed(`<a:color_wheel:1532822238120644627> ${camp.name}`, COLORS.lavender, guild.name)
+        .addFields(
+          { name: `${e('members')} Host`,      value: camp.host_id ? `<@${camp.host_id}>` : 'N/A', inline: true },
+          { name: `${e('member')} Entrants`,   value: `${entrantCount}`, inline: true },
+          { name: `${e('receipt')} ID`,        value: `#${camp.id}`, inline: true },
+        );
+      if (jumpLink) campEmbed.setURL(jumpLink);
+
+      if (camp.board_message_id) {
+        try {
+          const msg = await channel.messages.fetch(camp.board_message_id);
+          await msg.edit({ embeds: [campEmbed] });
+        } catch {
+          const msg = await channel.send({ embeds: [campEmbed] });
+          await query(`UPDATE wheel_role_campaigns SET board_message_id=$1 WHERE id=$2`, [msg.id, camp.id]);
+        }
+      } else {
+        const msg = await channel.send({ embeds: [campEmbed] });
+        await query(`UPDATE wheel_role_campaigns SET board_message_id=$1 WHERE id=$2`, [msg.id, camp.id]);
       }
     }
 

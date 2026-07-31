@@ -8,6 +8,7 @@ const { spinWheel } = require('../../utils/wheelRenderer');
 const { getPaletteColors, getPaletteChoices, WHEEL_PALETTES } = require('../../utils/wheelPalettes');
 const { query } = require('../../utils/database');
 const { adjustBalance, getBalance } = require('../../utils/playAndRegretDb');
+const { refreshScheduleBoard } = require('../../utils/scheduleBoard');
 
 
 // Temporary wheel session store for re-roll/remove
@@ -689,6 +690,7 @@ async function campaignEnd(interaction) {
   const res = await query(`UPDATE wheel_role_campaigns SET status='ended' WHERE guild_id=$1 AND name=$2 RETURNING id, entry_channel_id, entry_message_id`, [interaction.guildId, name]);
   if (!res.rows.length) return interaction.editReply(`${e('wrong')} No campaign named **${name}**.`);
   await markCampaignMessageEnded(interaction.client, res.rows[0]);
+  await refreshScheduleBoard(interaction.client, interaction.guildId).catch(() => {});
   return interaction.editReply(`${e('checkmark')} **${name}** ended — auto-signups stopped, existing entries kept for spinning.`);
 }
 
@@ -697,6 +699,7 @@ async function campaignDelete(interaction) {
   const name = interaction.options.getString('name');
   const res = await query(`DELETE FROM wheel_role_campaigns WHERE guild_id=$1 AND name=$2 RETURNING id`, [interaction.guildId, name]);
   if (!res.rows.length) return interaction.editReply(`${e('wrong')} No campaign named **${name}**.`);
+  await refreshScheduleBoard(interaction.client, interaction.guildId).catch(() => {});
   return interaction.editReply(`${e('checkmark')} **${name}** and all its entries deleted.`);
 }
 
@@ -738,6 +741,7 @@ async function campaignPost(interaction) {
     `UPDATE wheel_role_campaigns SET entry_channel_id=$1, entry_message_id=$2, palette=$3, host_id=$4 WHERE id=$5`,
     [channel.id, msg.id, paletteKey || null, interaction.user.id, camp.id]
   );
+  await refreshScheduleBoard(interaction.client, interaction.guildId).catch(() => {});
 
   return interaction.editReply(`${e('checkmark')} Posted **${name}** in <#${channel.id}> with a live wheel preview.`);
 }

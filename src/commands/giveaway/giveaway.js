@@ -5,6 +5,7 @@ const {
 const { e } = require('../../utils/appEmojis');
 const { query } = require('../../utils/database');
 const { baseEmbed, tsF, tsR, COLORS } = require('../../utils/embeds');
+const { refreshScheduleBoard } = require('../../utils/scheduleBoard');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -395,6 +396,7 @@ async function finishGiveaway(client, giveawayId) {
   const channel = await client.channels.fetch(gw.channel_id).catch(() => null);
   if (!channel) {
     await query('UPDATE giveaway_events SET status=$1, ended_at=NOW() WHERE id=$2', ['ended', giveawayId]);
+    await refreshScheduleBoard(client, gw.guild_id).catch(() => {});
     return;
   }
 
@@ -414,6 +416,7 @@ async function finishGiveaway(client, giveawayId) {
 
   await query('UPDATE giveaway_events SET status=$1, ended_at=NOW(), winner_ids=$2 WHERE id=$3',
     ['ended', winners, giveawayId]);
+  await refreshScheduleBoard(client, gw.guild_id).catch(() => {});
 
   // Record wins + payout reminders for each winner, same as /raffle does
   for (const winnerId of winners) {
@@ -626,6 +629,7 @@ async function cancelGiveaway(interaction) {
   }
 
   await query('UPDATE giveaway_events SET status=$1, ended_at=NOW() WHERE id=$2', ['cancelled', id]);
+  await refreshScheduleBoard(interaction.client, interaction.guildId).catch(() => {});
 
   const channel = await interaction.client.channels.fetch(gw.channel_id).catch(() => null);
   const message = channel ? await channel.messages.fetch(gw.message_id).catch(() => null) : null;

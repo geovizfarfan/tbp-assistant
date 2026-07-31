@@ -118,6 +118,10 @@ async function endSeasonCore(interaction, seasonName) {
   for (const camp of linkedCampaigns.rows) {
     await markCampaignMessageEnded(interaction.client, camp);
   }
+  if (linkedCampaigns.rows.length) {
+    const { refreshScheduleBoard } = require('../../utils/scheduleBoard');
+    await refreshScheduleBoard(interaction.client, interaction.guildId).catch(() => {});
+  }
 
   const campaignNote = linkedCampaigns.rows.length
     ? `\n<:rumble:1522372419338375299> Also ended linked Wheel Roles campaign${linkedCampaigns.rows.length > 1 ? 's' : ''}: ${linkedCampaigns.rows.map(c => `**${c.name}**`).join(', ')}.`

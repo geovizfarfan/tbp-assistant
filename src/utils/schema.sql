@@ -122,9 +122,11 @@ CREATE TABLE IF NOT EXISTS raffles (
   payout_confirmed_at TIMESTAMPTZ,
   payout_confirmed_by TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  host_funded BOOLEAN NOT NULL DEFAULT FALSE
+  host_funded BOOLEAN NOT NULL DEFAULT FALSE,
+  board_message_id TEXT
 );
 ALTER TABLE raffles ADD COLUMN IF NOT EXISTS host_funded BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE raffles ADD COLUMN IF NOT EXISTS board_message_id TEXT;
 
 -- Raffle entries
 CREATE TABLE IF NOT EXISTS raffle_entries (
@@ -191,9 +193,11 @@ CREATE TABLE IF NOT EXISTS giveaway_events (
   ended_at TIMESTAMPTZ,
   winner_ids TEXT[],
   status TEXT NOT NULL DEFAULT 'active',
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  board_message_id TEXT
 );
 ALTER TABLE giveaway_events ADD COLUMN IF NOT EXISTS required_role_ids TEXT[];
+ALTER TABLE giveaway_events ADD COLUMN IF NOT EXISTS board_message_id TEXT;
 
 -- Game logs
 CREATE TABLE IF NOT EXISTS game_logs (
@@ -212,10 +216,10 @@ CREATE TABLE IF NOT EXISTS game_logs (
   status TEXT DEFAULT 'active' CHECK (status IN ('active','ended','cancelled')),
   payout_status TEXT DEFAULT 'pending' CHECK (payout_status IN ('pending','paid','late','n/a')),
   payout_confirmed_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  board_message_id TEXT
 );
-
--- Payout reminders (active tracking)
+ALTER TABLE game_logs ADD COLUMN IF NOT EXISTS board_message_id TEXT;
 CREATE TABLE IF NOT EXISTS payout_reminders (
   id SERIAL PRIMARY KEY,
   type TEXT NOT NULL CHECK (type IN ('raffle','giveaway','game')),
@@ -445,6 +449,7 @@ ALTER TABLE wheel_role_campaigns ADD COLUMN IF NOT EXISTS host_id TEXT;
 -- Which season(s) this campaign was built from, regardless of qualifying
 -- mode — used so ending a season can auto-end any campaign linked to it.
 ALTER TABLE wheel_role_campaigns ADD COLUMN IF NOT EXISTS source_season_ids INTEGER[];
+ALTER TABLE wheel_role_campaigns ADD COLUMN IF NOT EXISTS board_message_id TEXT;
 
 CREATE TABLE IF NOT EXISTS wheel_role_campaign_entries (
   id SERIAL PRIMARY KEY,
