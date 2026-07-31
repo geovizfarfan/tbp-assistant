@@ -772,6 +772,58 @@ client.on('messageDelete', async (message) => {
   } catch (e) { /* ignore */ }
 });
 
+// Channel deleted — clear every reference to it so config summaries and
+// pickers don't show broken "unknown channel" entries afterward.
+client.on('channelDelete', async (channel) => {
+  try {
+    if (!channel.guildId) return;
+    const { query } = require('./utils/database');
+    const gid = channel.guildId, cid = channel.id;
+
+    // Rows keyed by channel — the whole row goes away with the channel.
+    await query('DELETE FROM rr_channel_config WHERE guild_id=$1 AND channel_id=$2', [gid, cid]);
+    await query('DELETE FROM rumble_slaughter_config WHERE guild_id=$1 AND channel_id=$2', [gid, cid]);
+    await query('DELETE FROM rr_season_channels WHERE guild_id=$1 AND channel_id=$2', [gid, cid]);
+    await query('DELETE FROM sticky_messages WHERE guild_id=$1 AND channel_id=$2', [gid, cid]);
+    await query('DELETE FROM custom_embeds WHERE guild_id=$1 AND channel_id=$2', [gid, cid]);
+    await query('DELETE FROM level_excluded_channels WHERE guild_id=$1 AND channel_id=$2', [gid, cid]);
+    await query('DELETE FROM pingpanel_sticky WHERE guild_id=$1 AND channel_id=$2', [gid, cid]);
+    await query('DELETE FROM role_panels WHERE guild_id=$1 AND channel_id=$2', [gid, cid]);
+    await query('DELETE FROM ticket_panels WHERE guild_id=$1 AND channel_id=$2', [gid, cid]);
+    await query('DELETE FROM game_schedule_board WHERE guild_id=$1 AND channel_id=$2', [gid, cid]);
+
+    // Single-value settings columns — just clear the reference, keep the row.
+    await query(`UPDATE guild_config SET
+        winner_channel_id = NULLIF(winner_channel_id, $2),
+        ticket_channel_id = NULLIF(ticket_channel_id, $2),
+        schedule_channel_id = NULLIF(schedule_channel_id, $2),
+        staff_notif_channel_id = NULLIF(staff_notif_channel_id, $2),
+        game_transcript_channel_id = NULLIF(game_transcript_channel_id, $2),
+        ban_log_channel_id = NULLIF(ban_log_channel_id, $2)
+      WHERE guild_id=$1`, [gid, cid]);
+    await query(`UPDATE ticket_config SET
+        category_id = NULLIF(category_id, $2),
+        transcript_channel_id = NULLIF(transcript_channel_id, $2),
+        staff_channel_id = NULLIF(staff_channel_id, $2)
+      WHERE guild_id=$1`, [gid, cid]);
+    await query(`UPDATE level_config SET levelup_channel_id = NULLIF(levelup_channel_id, $2) WHERE guild_id=$1`, [gid, cid]);
+    await query(`UPDATE rr_guild_config SET
+        log_channel_id = NULLIF(log_channel_id, $2),
+        achievement_log_channel_id = NULLIF(achievement_log_channel_id, $2)
+      WHERE guild_id=$1`, [gid, cid]);
+    await query(`UPDATE verify_config SET
+        rules_channel_id = NULLIF(rules_channel_id, $2),
+        captcha_channel_id = NULLIF(captcha_channel_id, $2),
+        welcome_channel_id = NULLIF(welcome_channel_id, $2)
+      WHERE guild_id=$1`, [gid, cid]);
+    await query(`UPDATE shop_config SET
+        shop_channel_id = NULLIF(shop_channel_id, $2),
+        fulfillment_channel_id = NULLIF(fulfillment_channel_id, $2)
+      WHERE guild_id=$1`, [gid, cid]);
+    await query(`UPDATE grind_config SET panel_channel_id = NULLIF(panel_channel_id, $2) WHERE guild_id=$1`, [gid, cid]);
+  } catch (e) { console.error('[ChannelDelete cleanup]', e.message); }
+});
+
 // Ban log
 client.on('guildBanAdd', async (ban) => {
   try { await banlogModule.handleBan(ban, client); }
