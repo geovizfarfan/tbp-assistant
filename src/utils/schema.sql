@@ -975,3 +975,17 @@ CREATE TABLE IF NOT EXISTS ticket_raffle_entries (
   tickets INT NOT NULL DEFAULT 0,
   UNIQUE (raffle_id, user_id)
 );
+
+-- Bug/issue reports via /report
+CREATE TABLE IF NOT EXISTS bug_reports (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  username TEXT NOT NULL,
+  category TEXT NOT NULL,
+  description TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','in_progress','resolved','wont_fix')),
+  report_message_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS report_channel_id TEXT;
