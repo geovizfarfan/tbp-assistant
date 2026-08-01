@@ -98,14 +98,14 @@ async function createTicketThread(interaction, client, id, isSingle, answers) {
   const openMsg = type?.open_message || panel?.open_message ||
     `Thank you for opening a ticket, <@${interaction.user.id}>! Our staff will be with you shortly. <a:purplesparkle:1512912828489793626>`;
 
-  await thread.send({ embeds: [
-    new EmbedBuilder().setColor(panel?.color || '#d6c2ee')
-      .setTitle(`<a:tickets:1523139713278672996> ${typeName} Ticket`)
-      .setDescription(openMsg)
-      .addFields({ name: '<a:InfoSticker:1523152442437664879> Your Information', value: answers.join('\n') || '—' })
-      .setFooter({ text: `Ticket #${ticketId}` })
-      .setTimestamp()
-  ]});
+  const ticketEmbed = new EmbedBuilder().setColor(panel?.color || '#d6c2ee')
+    .setTitle(`<a:tickets:1523139713278672996> ${typeName} Ticket`)
+    .setDescription(openMsg)
+    .setFooter({ text: `Ticket #${ticketId}` })
+    .setTimestamp();
+  if (answers.length) ticketEmbed.addFields({ name: '<a:InfoSticker:1523152442437664879> Your Information', value: answers.join('\n') });
+
+  await thread.send({ embeds: [ticketEmbed] });
 
   const actionMsg = await thread.send({ components: [buildActionRow(ticketId)] });
   stickyMessages.set(String(ticketId), actionMsg.id);
@@ -123,10 +123,10 @@ async function createTicketThread(interaction, client, id, isSingle, answers) {
           { name: '<a:RojasClock:1512912822613446787> Created At',    value: `<t:${Math.floor(Date.now()/1000)}:F>`, inline: true },
           { name: '<:staff:1523146914701512764> Staff In Ticket',     value: '0',                                    inline: true },
           { name: '<a:memberin:1523491508203032596> Staff Members',   value: 'None yet',                             inline: false },
-          { name: '<a:InfoSticker:1523152442437664879> Info',         value: answers.join('\n') || '—',             inline: false },
         )
         .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
         .setTimestamp();
+      if (answers.length) staffEmbed.addFields({ name: '<a:InfoSticker:1523152442437664879> Info', value: answers.join('\n'), inline: false });
 
       const joinRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
