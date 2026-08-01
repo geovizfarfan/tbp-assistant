@@ -3,6 +3,25 @@ const { e } = require('./appEmojis');
 const { baseEmbed, tsR, COLORS } = require('./embeds');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
+const ICONS = {
+  wheel:    '<a:color_wheel:1532822238120644627>',
+  giveaway: '<a:gift:1512915751458050268>',
+  rumble:   '<a:rumblesword:1522372420894330921>',
+  raffle:   '<:raffle:1512914674402853085>',
+  other:    '<:control:1532888892879929534>',
+};
+
+// "Auto" games run themselves without a live host present the whole time.
+const AUTO_GAME_PATTERN = /rumble|grind|regret|hangry|hunger|clash|raffle|giveaway|wheel/i;
+
+function getBoardIcon(name) {
+  if (/rumble/i.test(name)) return ICONS.rumble;
+  if (/wheel/i.test(name)) return ICONS.wheel;
+  if (/giveaway/i.test(name)) return ICONS.giveaway;
+  if (/raffle/i.test(name)) return ICONS.raffle;
+  return ICONS.other;
+}
+
 async function refreshScheduleBoard(client, guildId, pingRole = false) {
   try {
     // Get schedule channel
@@ -56,11 +75,11 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
     // Post or update each game's individual message
     for (const game of gamesRes.rows) {
       const prizeText = game.prize_amount ? `${game.prize_amount} ${game.currency}` : game.prize || 'No prize';
-      const isAuto    = /rumble|regret|dice attack|auto game|clash|hangry|hunger games|wheel/i.test(game.game_name);
-      const icon      = /raffle/i.test(game.game_name) ? e('raffle') : /giveaway/i.test(game.game_name) ? e('gift') : isAuto ? '<a:sword:1516443055157416069>' : e('controller');
+      const isAuto    = AUTO_GAME_PATTERN.test(game.game_name);
+      const icon      = getBoardIcon(game.game_name);
       const cleanName = game.game_name.replace(/<a?:[^:]+:\d+>/g, '').trim();
       const startLabel = new Date(game.started_at) > new Date() ? 'Starts' : 'Started';
-      const boardColor = isAuto ? COLORS.lavender : /raffle/i.test(game.game_name) ? COLORS.pastelblue : /giveaway/i.test(game.game_name) ? COLORS.pastelblue : COLORS.pastelyellow;
+      const boardColor = isAuto ? COLORS.lavender : COLORS.pastelyellow;
       const gameEmbed = baseEmbed(`${icon} ${cleanName}`, boardColor, guild.name)
         .addFields(
           { name: `${e('purplesparkle')} Prize`, value: prizeText, inline: true },
@@ -93,7 +112,7 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
       const jumpLink  = raffle.message_id && raffle.channel_id
         ? `https://discord.com/channels/${raffle.guild_id}/${raffle.channel_id}/${raffle.message_id}`
         : null;
-      const raffleEmbed = baseEmbed(`${e('raffle')} ${prizeText} Raffle`, COLORS.pastelblue, guild.name)
+      const raffleEmbed = baseEmbed(`${ICONS.raffle} ${prizeText} Raffle`, COLORS.lavender, guild.name)
         .addFields(
           { name: `${e('members')} Host`,    value: `<@${raffle.host_id}>`, inline: true },
           { name: `${e('RojasClock')} Ends`, value: tsR(raffle.ends_at), inline: true },
@@ -120,7 +139,7 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
       const jumpLink = gw.message_id && gw.channel_id
         ? `https://discord.com/channels/${gw.guild_id}/${gw.channel_id}/${gw.message_id}`
         : null;
-      const gwEmbed = baseEmbed(`${e('gift')} ${gw.prize} Giveaway`, COLORS.pastelblue, guild.name)
+      const gwEmbed = baseEmbed(`${ICONS.giveaway} ${gw.prize} Giveaway`, COLORS.lavender, guild.name)
         .addFields(
           { name: `${e('members')} Host`,    value: `<@${gw.host_id}>`, inline: true },
           { name: `${e('RojasClock')} Ends`, value: tsR(gw.ends_at), inline: true },
@@ -149,7 +168,7 @@ async function refreshScheduleBoard(client, guildId, pingRole = false) {
         : null;
       const entRes = await query(`SELECT COUNT(*) FROM wheel_role_campaign_entries WHERE campaign_id=$1 AND currently_qualified=true`, [camp.id]);
       const entrantCount = entRes.rows[0].count;
-      const campEmbed = baseEmbed(`<a:color_wheel:1532822238120644627> ${camp.name}`, COLORS.lavender, guild.name)
+      const campEmbed = baseEmbed(`${ICONS.wheel} ${camp.name}`, COLORS.lavender, guild.name)
         .addFields(
           { name: `${e('members')} Host`,      value: camp.host_id ? `<@${camp.host_id}>` : 'N/A', inline: true },
           { name: `${e('member')} Entrants`,   value: `${entrantCount}`, inline: true },

@@ -14,18 +14,25 @@ module.exports = {
 
     .addSubcommand(sub => sub
       .setName('leaderboard')
-      .setDescription('See the top members by level')),
+      .setDescription('See the top members by level'))
+
+    .addSubcommand(sub => sub
+      .setName('set')
+      .setDescription('Manually set a member\'s level (admin only)')
+      .addUserOption(o => o.setName('user').setDescription('Member').setRequired(true))
+      .addIntegerOption(o => o.setName('level').setDescription('Level to set them to').setRequired(true))),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const group = interaction.options.getSubcommandGroup(false);
     const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
 
-    if (group === 'exclude' || sub === 'set' || sub === 'config' || sub === 'reset') {
+    if (group === 'exclude' || sub === 'config' || sub === 'reset') {
       if (!isAdmin) return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
     }
+    if (sub === 'set' && !isAdmin) return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
 
-    await interaction.deferReply({ ephemeral: group === 'exclude' || sub === 'set' || sub === 'config' || sub === 'reset' });
+    await interaction.deferReply({ ephemeral: group === 'exclude' || sub === 'config' || sub === 'reset' });
 
     if (group === 'exclude') {
       if (sub === 'add') {
@@ -84,7 +91,7 @@ module.exports = {
         ON CONFLICT (guild_id, user_id) DO UPDATE SET xp = $4, level = $5, username = $3
       `, [interaction.guildId, user.id, user.username, totalXp, level]);
 
-      return interaction.editReply(`✅ Set <@${user.id}> to **Level ${level}**.`);
+      return interaction.editReply(`<:levelup:1532907741859807283> Set <@${user.id}> to **Level ${level}**.`);
     }
 
     if (sub === 'reset') {

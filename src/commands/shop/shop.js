@@ -8,7 +8,12 @@ const { getGuildCurrencyConfig, adjustGuildBalance, getGuildBalance } = require(
 const { xpForLevel, getUserLevel } = require('../../utils/levelSystem');
 const { safeSetTimeout } = require('../../utils/safeTimeout');
 
-const TYPE_LABELS = { role: '<:role:1524456992683593979> Role', reaction: '<a:purplesparkle:1512912828489793626> Auto Reaction', custom: '<a:gift:1512915751458050268> Custom', nickname: '<:role:1524456992683593979> Nickname', nickname_remove: '<:role:1524456992683593979> Nickname Remover', levelup: '<a:trophies:1512912823062364281> Level Up' };
+const TYPE_LABELS = { role: '<:role:1524456992683593979> Role', reaction: '<a:purplesparkle:1512912828489793626> Auto Reaction', custom: '<a:gift:1512915751458050268> Custom', nickname: '<:role:1524456992683593979> Nickname', nickname_remove: '<:role:1524456992683593979> Nickname Remover', levelup: '<:levelup:1532907741859807283> Level Up' };
+// Discord select menu descriptions render custom emoji codes as literal text
+// rather than the emoji itself, so strip them for that specific context.
+const TYPE_LABELS_PLAIN = Object.fromEntries(
+  Object.entries(TYPE_LABELS).map(([k, v]) => [k, v.replace(/<a?:[^:]+:\d+>\s*/g, '').trim()])
+);
 const WRONG = '<:wrong:1512916350375301160>';
 const CHECK = '<:checkmark:1512916161493205165>';
 
@@ -40,7 +45,7 @@ function buildShopEmbed(category, items, currency) {
 
   for (const item of items.slice(0, 25)) {
     embed.addFields({
-      name: `\`#${item.id}\` ${item.name} — ${Number(item.price).toLocaleString()} ${currency.emoji || ''} (${currency.name})`,
+      name: `\`#${item.id}\` ${item.name} — ${Number(item.price).toLocaleString()} ${currency.currencyEmoji || ''} (${currency.currencyName})`,
       value: `${TYPE_LABELS[item.type] || item.type}${item.description ? `\n${item.description}` : ''}${item.limit_per_user ? `\n<:vertical_line:1520457297476845741> Limit: ${item.limit_per_user} per user` : ''}${item.duration_hours ? `\n<:vertical_line:1520457297476845741> Lasts: ${formatDuration(item.duration_hours)}` : ''}`,
       inline: false,
     });
@@ -54,9 +59,9 @@ function buildShopSelect(items, currency) {
     .setCustomId('shop_select')
     .setPlaceholder('Choose an item to buy...')
     .addOptions(items.slice(0, 25).map(i => ({
-      label: `${i.name} — ${Number(i.price).toLocaleString()} ${currency.name}`.slice(0, 100),
+      label: `${i.name} — ${Number(i.price).toLocaleString()} ${currency.currencyName}`.slice(0, 100),
       value: String(i.id),
-      description: (i.description || TYPE_LABELS[i.type] || '').slice(0, 100),
+      description: ((i.description || TYPE_LABELS_PLAIN[i.type] || '').replace(/<a?:[^:]+:\d+>\s*/g, '')).slice(0, 100),
     })));
   return new ActionRowBuilder().addComponents(menu);
 }
@@ -159,8 +164,8 @@ async function buyItem(interaction, item) {
       .setColor('#d6c2ee')
       .setTitle(`<a:shop:1524457010714640464> Purchase Receipt`)
       .setDescription(
-        `You bought **${item.name}** for **${Number(item.price).toLocaleString()}** ${currency.emoji || ''} (${currency.name}).\n` +
-        `New balance: **${Number(newBalance).toLocaleString()}** ${currency.emoji || ''} (${currency.name})\n\n` +
+        `You bought **${item.name}** for **${Number(item.price).toLocaleString()}** ${currency.currencyEmoji || ''} (${currency.currencyName}).\n` +
+        `New balance: **${Number(newBalance).toLocaleString()}** ${currency.currencyEmoji || ''} (${currency.currencyName})\n\n` +
         `Run \`/shop use item_id:${item.id}\` whenever you're ready to activate it!`
       )
       .setFooter({ text: interaction.guild?.name || 'Shop' })
@@ -239,6 +244,15 @@ module.exports = {
       .addIntegerOption(o => o.setName('price').setDescription('New price in this server\'s currency'))
       .addStringOption(o => o.setName('description').setDescription('New description'))
       .addStringOption(o => o.setName('category').setDescription('New category'))
+      .addStringOption(o => o.setName('type').setDescription('New type - use this to fix a misconfigured item').addChoices(
+        { name: 'Role', value: 'role' },
+        { name: 'Auto Reaction', value: 'reaction' },
+        { name: 'Custom', value: 'custom' },
+        { name: 'Nickname', value: 'nickname' },
+        { name: 'Nickname Remover', value: 'nickname_remove' },
+        { name: 'Level Up', value: 'levelup' },
+      ))
+      .addIntegerOption(o => o.setName('levels').setDescription('Levels granted when used (only for Level Up type)'))
       .addRoleOption(o => o.setName('role').setDescription('New role (Role/Auto Reaction types)'))
       .addIntegerOption(o => o.setName('limit').setDescription('New max purchases per user (0 = unlimited)'))
       .addIntegerOption(o => o.setName('duration_amount').setDescription('New duration amount (0 = permanent)'))
@@ -350,7 +364,7 @@ module.exports = {
 
       const durLabel = formatDuration(duration);
       const currency = await getGuildCurrencyConfig(interaction.guild.id);
-      return interaction.editReply(`${CHECK} Added **${name}** (ID \`${res.rows[0].id}\`) to **${category}** — ${price.toLocaleString()} ${currency.emoji || ''} (${currency.name}), type: ${TYPE_LABELS[type]}${durLabel ? `, lasts ${durLabel} once used` : ''}${type === 'levelup' ? `, grants +${levels} level${levels === 1 ? '' : 's'}` : ''}.`);
+      return interaction.editReply(`${CHECK} Added **${name}** (ID \`${res.rows[0].id}\`) to **${category}** — ${price.toLocaleString()} ${currency.currencyEmoji || ''} (${currency.currencyName}), type: ${TYPE_LABELS[type]}${durLabel ? `, lasts ${durLabel} once used` : ''}${type === 'levelup' ? `, grants +${levels} level${levels === 1 ? '' : 's'}` : ''}.`);
     }
 
     if (sub === 'removeitem') {
@@ -377,6 +391,8 @@ module.exports = {
       const durationAmt  = interaction.options.getInteger('duration_amount');
       const durationUnit = interaction.options.getString('duration_unit') || 'hours';
       const activeOpt    = interaction.options.getBoolean('active');
+      const typeOpt       = interaction.options.getString('type');
+      const levelsOpt     = interaction.options.getInteger('levels');
 
       const newName        = name ?? item.name;
       const newPrice       = price !== null ? price : item.price;
@@ -388,13 +404,18 @@ module.exports = {
         ? (durationAmt === 0 ? null : (durationUnit === 'days' ? durationAmt * 24 : durationAmt))
         : item.duration_hours;
       const newActive      = activeOpt !== null ? activeOpt : item.active;
+      const newType        = typeOpt || item.type;
+      const newLevels      = levelsOpt !== null ? levelsOpt : item.levels_granted;
 
       if (newPrice < 0) return interaction.editReply(`${WRONG} Price can't be negative.`);
+      if (newType === 'levelup' && (!newLevels || newLevels < 1)) {
+        return interaction.editReply(`${WRONG} Level Up items need \`levels\` set to at least 1.`);
+      }
 
       await query(`
-        UPDATE shop_items SET name=$1, price=$2, description=$3, category=$4, role_id=$5, limit_per_user=$6, duration_hours=$7, active=$8
-        WHERE id=$9
-      `, [newName, newPrice, newDescription, newCategory, newRoleId, newLimit, newDuration, newActive, itemId]);
+        UPDATE shop_items SET name=$1, price=$2, description=$3, category=$4, role_id=$5, limit_per_user=$6, duration_hours=$7, active=$8, type=$9, levels_granted=$10
+        WHERE id=$11
+      `, [newName, newPrice, newDescription, newCategory, newRoleId, newLimit, newDuration, newActive, newType, newType === 'levelup' ? newLevels : null, itemId]);
 
       await renderAndPost(interaction.client, interaction.guild.id);
 
@@ -491,6 +512,7 @@ module.exports = {
       await query('UPDATE shop_purchases SET user_id = $1 WHERE id = $2', [recipient.id, purchaseRes.rows[0].id]);
 
       await interaction.editReply(`${CHECK} Gifted **${itemName}** to <@${recipient.id}>! It's now sitting unused in their inventory.`);
+      await interaction.channel.send({ content: `🎁 <@${interaction.user.id}> gifted **${itemName}** to <@${recipient.id}>!` }).catch(() => {});
 
       // Let the recipient know, best effort
       await recipient.send({
@@ -516,7 +538,7 @@ module.exports = {
       const embed = new EmbedBuilder().setColor('#d6c2ee').setTitle('Shop Items');
       for (const [cat, catItems] of byCategory) {
         const lines = catItems.map(i =>
-          `\`${i.id}\` **${i.name}** — ${Number(i.price).toLocaleString()} ${currency.emoji || ''} (${currency.name}) (${TYPE_LABELS[i.type]})${i.active ? '' : ' *(inactive)*'}${i.limit_per_user ? ` — limit ${i.limit_per_user}/user` : ' — unlimited'}${i.duration_hours ? ` — lasts ${formatDuration(i.duration_hours)}` : ''}`
+          `\`${i.id}\` **${i.name}** — ${Number(i.price).toLocaleString()} ${currency.currencyEmoji || ''} (${currency.currencyName}) (${TYPE_LABELS[i.type]})${i.active ? '' : ' *(inactive)*'}${i.limit_per_user ? ` — limit ${i.limit_per_user}/user` : ' — unlimited'}${i.duration_hours ? ` — lasts ${formatDuration(i.duration_hours)}` : ''}`
         ).join('\n');
         embed.addFields({ name: cat, value: lines });
       }
@@ -553,7 +575,7 @@ module.exports = {
     const balance = await getGuildBalance(interaction.guildId, interaction.user.id);
     const currency = await getGuildCurrencyConfig(interaction.guildId);
     if (balance === null || Number(balance) < Number(item.price)) {
-      return interaction.reply({ content: `${WRONG} You don't have enough ${currency.emoji || ''} ${currency.name} for **${item.name}** (need ${Number(item.price).toLocaleString()}, you have ${Number(balance || 0).toLocaleString()}).`, ephemeral: true });
+      return interaction.reply({ content: `${WRONG} You don't have enough ${currency.currencyEmoji || ''} ${currency.currencyName} for **${item.name}** (need ${Number(item.price).toLocaleString()}, you have ${Number(balance || 0).toLocaleString()}).`, ephemeral: true });
     }
 
     await interaction.deferReply({ ephemeral: true });
@@ -561,7 +583,7 @@ module.exports = {
 
     return interaction.editReply({ embeds: [new EmbedBuilder()
       .setColor('#2ecc71')
-      .setDescription(`${CHECK} You bought **${item.name}** for **${Number(item.price).toLocaleString()}** ${currency.emoji || ''} (${currency.name})!\nNew balance: **${Number(newBalance).toLocaleString()}** ${currency.emoji || ''} (${currency.name})\n\nRun \`/shop use item_id:${item.id}\` whenever you're ready to activate it! (A receipt was also sent to your DMs.)`)] });
+      .setDescription(`${CHECK} You bought **${item.name}** for **${Number(item.price).toLocaleString()}** ${currency.currencyEmoji || ''} (${currency.currencyName})!\nNew balance: **${Number(newBalance).toLocaleString()}** ${currency.currencyEmoji || ''} (${currency.currencyName})\n\nRun \`/shop use item_id:${item.id}\` whenever you're ready to activate it! (A receipt was also sent to your DMs.)`)] });
   },
 
   // ── Emoji modal submit (for using Auto Reaction items) ──────────────────
@@ -595,6 +617,7 @@ module.exports = {
       { name: 'Chosen Emoji', value: emoji, inline: true },
       ...(expiresAt ? [{ name: 'Expires', value: `<t:${Math.floor(expiresAt.getTime()/1000)}:R>`, inline: true }] : []),
     ]);
+    await interaction.channel.send({ content: `${CHECK} <@${interaction.user.id}> used **${row.name}**!` }).catch(() => {});
 
     return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#2ecc71')
       .setDescription(`${CHECK} Activated **${row.name}**! Veloura will now react to your messages with ${emoji}` +
@@ -643,6 +666,7 @@ module.exports = {
       { name: 'New Nickname', value: newNickname, inline: true },
       ...(expiresAt ? [{ name: 'Reverts', value: `<t:${Math.floor(expiresAt.getTime()/1000)}:R>`, inline: true }] : []),
     ]);
+    await interaction.channel.send({ content: `${CHECK} <@${interaction.user.id}> used **${row.name}**!` }).catch(() => {});
 
     return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#2ecc71')
       .setDescription(`${CHECK} You nicknamed <@${targetId}> to **${newNickname}**!` +
@@ -700,6 +724,7 @@ async function useItem(interaction) {
     if (expiresAt) scheduleRoleRemoval(interaction.guild, interaction.user.id, row.role_id, row.duration_hours * 60 * 60 * 1000, row.purchase_id);
 
     await logUsedItem(interaction, row, expiresAt ? [{ name: 'Expires', value: `<t:${Math.floor(expiresAt.getTime()/1000)}:R>`, inline: true }] : []);
+    await interaction.channel.send({ content: `${CHECK} <@${interaction.user.id}> used **${row.name}**!` }).catch(() => {});
 
     return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#2ecc71')
       .setDescription(`${CHECK} Activated **${row.name}**! You now have <@&${row.role_id}>.` +
@@ -711,6 +736,7 @@ async function useItem(interaction) {
     await interaction.deferReply({ ephemeral: true });
     await query('UPDATE shop_purchases SET used_at = NOW() WHERE id = $1', [row.purchase_id]);
     await logUsedItem(interaction, row, [], true);
+    await interaction.channel.send({ content: `${CHECK} <@${interaction.user.id}> used **${row.name}**!` }).catch(() => {});
     return interaction.editReply(`${CHECK} Used **${row.name}** — staff has been notified to fulfill your order.`);
   }
 
@@ -736,6 +762,7 @@ async function useItem(interaction) {
 
     await query('UPDATE shop_purchases SET used_at = NOW() WHERE id = $1', [row.purchase_id]);
     await logUsedItem(interaction, row);
+    await interaction.channel.send({ content: `${CHECK} <@${interaction.user.id}> used **${row.name}**!` }).catch(() => {});
 
     return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#2ecc71')
       .setDescription(`${CHECK} Used **${row.name}** — your nickname has been reset!`)] });
@@ -760,6 +787,7 @@ async function useItem(interaction) {
     await logUsedItem(interaction, row, [
       { name: 'Level', value: `${oldLevel} → ${newLevel}`, inline: true },
     ]);
+    await interaction.channel.send({ content: `<:levelup:1532907741859807283> <@${interaction.user.id}> used **${row.name}** and leveled up to **Level ${newLevel}**!` }).catch(() => {});
 
     return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#2ecc71')
       .setDescription(`${CHECK} Used **${row.name}** — you leveled up from **Level ${oldLevel}** to **Level ${newLevel}**! 🎉`)] });

@@ -45,6 +45,111 @@ function buildActionRow(ticketId, claimedBy = null) {
   );
 }
 
+// ── Shared ticket creation — called after modal submit, or directly when a
+// ticket type has no questions configured (skips the modal entirely) ───────
+async function createTicketThread(interaction, client, id, isSingle, answers) {
+  const config = await getConfig(interaction.guild.id);
+  if (!config) return interaction.editReply('❌ Ticket system not configured. Ask an admin to run `/ticket setup`.');
+
+  const openRes = await query(
+    'SELECT COUNT(*) as c FROM tickets WHERE guild_id=$1 AND user_id=$2 AND status=$3',
+    [interaction.guild.id, interaction.user.id, 'open']
+  );
+  if (Number(openRes.rows[0].c) >= config.max_open)
+    return interaction.editReply(`❌ You already have ${config.max_open} open ticket(s).`);
+
+  let type = null, panel = null;
+  if (!isSingle) {
+    const tRes = await query('SELECT * FROM ticket_types WHERE id=$1', [id]);
+    type = tRes.rows[0];
+    const pRes = await query('SELECT * FROM ticket_panels WHERE id=$1', [type.panel_id]);
+    panel = pRes.rows[0];
+  } else {
+    const pRes = await query('SELECT * FROM ticket_panels WHERE id=$1', [id]);
+    panel = pRes.rows[0];
+  }
+
+  const typeName    = type?.name || 'General';
+  const threadName  = `ticket-${interaction.user.username}-${typeName}`.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 100);
+
+  const panelChannel = (await interaction.guild.channels.fetch(panel?.channel_id || interaction.channel.id).catch(() => null));
+  if (!panelChannel) return interaction.editReply('❌ Panel channel not found.');
+
+  let thread;
+  try {
+    thread = await panelChannel.threads.create({
+      name: threadName,
+      type: ChannelType.PrivateThread,
+      invitable: false,
+    });
+  } catch(e) {
+    console.error('[Ticket] thread create error:', e.message);
+    return interaction.editReply('❌ Failed to create ticket thread. Make sure the bot has permission to create private threads.');
+  }
+
+  await thread.members.add(interaction.user.id);
+
+  const ticketRes = await query(
+    'INSERT INTO tickets (guild_id, channel_id, user_id, type_name, panel_id, status) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+    [interaction.guild.id, thread.id, interaction.user.id, typeName, panel?.id||null, 'open']
+  );
+  const ticketId = ticketRes.rows[0].id;
+
+  const openMsg = type?.open_message || panel?.open_message ||
+    `Thank you for opening a ticket, <@${interaction.user.id}>! Our staff will be with you shortly. <a:purplesparkle:1512912828489793626>`;
+
+  await thread.send({ embeds: [
+    new EmbedBuilder().setColor(panel?.color || '#d6c2ee')
+      .setTitle(`<a:tickets:1523139713278672996> ${typeName} Ticket`)
+      .setDescription(openMsg)
+      .addFields({ name: '<a:InfoSticker:1523152442437664879> Your Information', value: answers.join('\n') || '—' })
+      .setFooter({ text: `Ticket #${ticketId}` })
+      .setTimestamp()
+  ]});
+
+  const actionMsg = await thread.send({ components: [buildActionRow(ticketId)] });
+  stickyMessages.set(String(ticketId), actionMsg.id);
+
+  if (config.staff_channel_id) {
+    const staffCh = (await interaction.client.channels.fetch(config.staff_channel_id).catch(() => null));
+    if (staffCh) {
+      const staffEmbed = new EmbedBuilder()
+        .setColor(panel?.color || '#d6c2ee')
+        .setTitle('<a:tickets:1523139713278672996> New Ticket Opened')
+        .setDescription(`A new ticket has been opened by <@${interaction.user.id}>.`)
+        .addFields(
+          { name: '<:member:1512912827424309278> Opened By',          value: `<@${interaction.user.id}>`,            inline: true },
+          { name: '<a:tickets:1523139713278672996> Type',             value: typeName,                               inline: true },
+          { name: '<a:RojasClock:1512912822613446787> Created At',    value: `<t:${Math.floor(Date.now()/1000)}:F>`, inline: true },
+          { name: '<:staff:1523146914701512764> Staff In Ticket',     value: '0',                                    inline: true },
+          { name: '<a:memberin:1523491508203032596> Staff Members',   value: 'None yet',                             inline: false },
+          { name: '<a:InfoSticker:1523152442437664879> Info',         value: answers.join('\n') || '—',             inline: false },
+        )
+        .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
+        .setTimestamp();
+
+      const joinRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`ticket_join:${ticketId}`)
+          .setLabel('Join Ticket')
+          .setEmoji('<a:tickets:1523139713278672996>')
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      let staffMsg;
+      if (config.staff_role_id) {
+        staffMsg = await staffCh.send({ content: `<@&${config.staff_role_id}>`, embeds: [staffEmbed], components: [joinRow] });
+      } else {
+        staffMsg = await staffCh.send({ embeds: [staffEmbed], components: [joinRow] });
+      }
+      if (staffMsg) await query('UPDATE tickets SET staff_message_id=$1, staff_channel_id_ref=$2 WHERE id=$3',
+        [staffMsg.id, config.staff_channel_id, ticketId]).catch(() => {});
+    }
+  }
+
+  return interaction.editReply(`✅ Your ticket has been created: <#${thread.id}>`);
+}
+
 async function generateTranscript(thread) {
   const messages = await thread.messages.fetch({ limit: 100 });
   const sorted = [...messages.values()].reverse();
@@ -403,9 +508,9 @@ module.exports = {
       await interaction.deferReply({ ephemeral: true });
 
       const title        = interaction.options.getString('title');
-      const description  = interaction.options.getString('description') || 'Select <a:click:1512912824500748448> the type of ticket you\'d like to open below. <:down:1523102907937984512>';
+      const description  = interaction.options.getString('description')?.replace(/\\n/g, '\n') || 'Select <a:click:1512912824500748448> the type of ticket you\'d like to open below. <:down:1523102907937984512>';
       const color        = interaction.options.getString('color') || '#d6c2ee';
-      const openMessage  = interaction.options.getString('open_message') || null;
+      const openMessage  = interaction.options.getString('open_message')?.replace(/\\n/g, '\n') || null;
       const singleButton = interaction.options.getBoolean('single_button') || false;
 
       const res = await query(
@@ -443,9 +548,9 @@ module.exports = {
       const panelId     = interaction.options.getString('panel_id');
       const name        = interaction.options.getString('name');
       const emoji       = interaction.options.getString('emoji') || null;
-      const description = interaction.options.getString('description') || null;
+      const description = interaction.options.getString('description')?.replace(/\\n/g, '\n') || null;
       const questions   = interaction.options.getString('questions') || null;
-      const openMessage = interaction.options.getString('open_message') || null;
+      const openMessage = interaction.options.getString('open_message')?.replace(/\\n/g, '\n') || null;
 
       const panelRes = await query('SELECT * FROM ticket_panels WHERE id = $1 AND guild_id = $2', [panelId, interaction.guild.id]);
       if (!panelRes.rows.length) return interaction.editReply('❌ Panel not found.');
@@ -505,9 +610,9 @@ module.exports = {
       const name       = interaction.options.getString('name');
       const newName    = interaction.options.getString('new_name');
       const emoji      = interaction.options.getString('emoji');
-      const description = interaction.options.getString('description');
+      const description = interaction.options.getString('description')?.replace(/\\n/g, '\n');
       const questions  = interaction.options.getString('questions');
-      const openMessage = interaction.options.getString('open_message');
+      const openMessage = interaction.options.getString('open_message')?.replace(/\\n/g, '\n');
 
       const existingRes = await query(
         'SELECT * FROM ticket_types WHERE panel_id = $1 AND guild_id = $2 AND name = $3',
@@ -560,9 +665,9 @@ module.exports = {
 
       const panelId     = interaction.options.getString('panel_id');
       const title       = interaction.options.getString('title');
-      const description = interaction.options.getString('description');
+      const description = interaction.options.getString('description')?.replace(/\\n/g, '\n');
       const color       = interaction.options.getString('color');
-      const openMsg     = interaction.options.getString('open_message');
+      const openMsg     = interaction.options.getString('open_message')?.replace(/\\n/g, '\n');
 
       const panelRes = await query('SELECT * FROM ticket_panels WHERE id = $1 AND guild_id = $2', [panelId, interaction.guild.id]);
       if (!panelRes.rows.length) return interaction.editReply('❌ Panel not found.');
@@ -678,7 +783,14 @@ module.exports = {
         .setCustomId(`ticket_modal:${action === 'ticket_open' ? type.id : id}:${action === 'ticket_open' ? 'type' : 'single'}`)
         .setTitle(`${type?.name || 'Open a Ticket'}`.slice(0, 45));
 
-      const questions = type?.questions ? type.questions.split('|').slice(0, 5) : ['Please describe your issue'];
+      // No questions configured for this type/panel — skip the modal
+      // entirely and create the ticket straight away.
+      if (!type?.questions) {
+        await interaction.deferReply({ ephemeral: true });
+        return createTicketThread(interaction, client, action === 'ticket_open' ? type.id : id, action !== 'ticket_open', []);
+      }
+
+      const questions = type.questions.split('|').slice(0, 5);
       for (let i = 0; i < questions.length; i++) {
         modal.addComponents(new ActionRowBuilder().addComponents(
           new TextInputBuilder()
@@ -818,59 +930,9 @@ module.exports = {
     const id       = parts[1];
     const isSingle = parts[2] === 'single';
 
-    const config = await getConfig(interaction.guild.id);
-    if (!config) return interaction.editReply('❌ Ticket system not configured. Ask an admin to run `/ticket setup`.');
-
-    const openRes = await query(
-      'SELECT COUNT(*) as c FROM tickets WHERE guild_id=$1 AND user_id=$2 AND status=$3',
-      [interaction.guild.id, interaction.user.id, 'open']
-    );
-    if (Number(openRes.rows[0].c) >= config.max_open)
-      return interaction.editReply(`❌ You already have ${config.max_open} open ticket(s).`);
-
-    let type = null, panel = null;
-    if (!isSingle) {
-      const tRes = await query('SELECT * FROM ticket_types WHERE id=$1', [id]);
-      type = tRes.rows[0];
-      const pRes = await query('SELECT * FROM ticket_panels WHERE id=$1', [type.panel_id]);
-      panel = pRes.rows[0];
-    } else {
-      const pRes = await query('SELECT * FROM ticket_panels WHERE id=$1', [id]);
-      panel = pRes.rows[0];
-    }
-
-    const typeName    = type?.name || 'General';
-    const threadName  = `ticket-${interaction.user.username}-${typeName}`.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 100);
-
-    // Find panel channel to create thread under
-    const panelChannel = (await interaction.guild.channels.fetch(panel?.channel_id || interaction.channel.id).catch(() => null));
-    if (!panelChannel) return interaction.editReply('❌ Panel channel not found.');
-
-    // Create private thread
-    let thread;
-    try {
-      thread = await panelChannel.threads.create({
-        name: threadName,
-        type: ChannelType.PrivateThread,
-        invitable: false,
-      });
-    } catch(e) {
-      console.error('[Ticket] thread create error:', e.message);
-      return interaction.editReply('❌ Failed to create ticket thread. Make sure the bot has permission to create private threads.');
-    }
-
-    // Add ticket opener to thread
-    await thread.members.add(interaction.user.id);
-
-    // Save to DB
-    const ticketRes = await query(
-      'INSERT INTO tickets (guild_id, channel_id, user_id, type_name, panel_id, status) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
-      [interaction.guild.id, thread.id, interaction.user.id, typeName, panel?.id||null, 'open']
-    );
-    const ticketId = ticketRes.rows[0].id;
-
-    // Build answers
-    const questionsArr = type?.questions ? type.questions.split('|') : ['Details'];
+    const questionsArr = !isSingle
+      ? (await query('SELECT questions FROM ticket_types WHERE id=$1', [id])).rows[0]?.questions?.split('|') || ['Details']
+      : ['Details'];
     const answers = [];
     interaction.fields.fields.forEach((field, key) => {
       if (field.value) {
@@ -880,62 +942,7 @@ module.exports = {
       }
     });
 
-    const openMsg = type?.open_message || panel?.open_message ||
-      `Thank you for opening a ticket, <@${interaction.user.id}>! Our staff will be with you shortly. <a:purplesparkle:1512912828489793626>`;
-
-    // Post ticket info embed in thread
-    await thread.send({ embeds: [
-      new EmbedBuilder().setColor(panel?.color || '#d6c2ee')
-        .setTitle(`<a:tickets:1523139713278672996> ${typeName} Ticket`)
-        .setDescription(openMsg)
-        .addFields({ name: '<a:InfoSticker:1523152442437664879> Your Information', value: answers.join('\n') || '—' })
-        .setFooter({ text: `Ticket #${ticketId}` })
-        .setTimestamp()
-    ]});
-
-    // Post sticky action row
-    const actionMsg = await thread.send({ components: [buildActionRow(ticketId)] });
-    stickyMessages.set(String(ticketId), actionMsg.id);
-
-    // Post to staff channel
-    if (config.staff_channel_id) {
-      const staffCh = (await interaction.client.channels.fetch(config.staff_channel_id).catch(() => null));
-      if (staffCh) {
-        const staffEmbed = new EmbedBuilder()
-          .setColor(panel?.color || '#d6c2ee')
-          .setTitle('<a:tickets:1523139713278672996> New Ticket Opened')
-          .setDescription(`A new ticket has been opened by <@${interaction.user.id}>.`)
-          .addFields(
-            { name: '<:member:1512912827424309278> Opened By',          value: `<@${interaction.user.id}>`,            inline: true },
-            { name: '<a:tickets:1523139713278672996> Type',             value: typeName,                               inline: true },
-            { name: '<a:RojasClock:1512912822613446787> Created At',    value: `<t:${Math.floor(Date.now()/1000)}:F>`, inline: true },
-            { name: '<:staff:1523146914701512764> Staff In Ticket',     value: '0',                                    inline: true },
-            { name: '<a:memberin:1523491508203032596> Staff Members',   value: 'None yet',                             inline: false },
-            { name: '<a:InfoSticker:1523152442437664879> Info',         value: answers.join('\n') || '—',             inline: false },
-          )
-          .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
-          .setTimestamp();
-
-        const joinRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`ticket_join:${ticketId}`)
-            .setLabel('Join Ticket')
-            .setEmoji('<a:tickets:1523139713278672996>')
-            .setStyle(ButtonStyle.Secondary)
-        );
-
-        let staffMsg;
-        if (config.staff_role_id) {
-          staffMsg = await staffCh.send({ content: `<@&${config.staff_role_id}>`, embeds: [staffEmbed], components: [joinRow] });
-        } else {
-          staffMsg = await staffCh.send({ embeds: [staffEmbed], components: [joinRow] });
-        }
-        if (staffMsg) await query('UPDATE tickets SET staff_message_id=$1, staff_channel_id_ref=$2 WHERE id=$3',
-          [staffMsg.id, config.staff_channel_id, ticketId]).catch(() => {});
-      }
-    }
-
-    return interaction.editReply(`✅ Your ticket has been created: <#${thread.id}>`);
+    return createTicketThread(interaction, client, id, isSingle, answers);
   },
 
   // ── Sticky action row handler (called from messageCreate) ─────────────────
