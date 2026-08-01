@@ -20,6 +20,16 @@ const CATEGORIES = {
     label: 'Rumble Royale',
     description: 'RR tracking & management',
   },
+  season: {
+    emoji: '<a:rumblesword:1522372420894330921>',
+    label: 'Seasons',
+    description: 'Multi-channel seasons & achievement roles',
+  },
+  wheel: {
+    emoji: '<a:color_wheel:1532822238120644627>',
+    label: 'Wheel',
+    description: 'Instant spins & Wheel Roles campaigns',
+  },
   payments: {
     emoji: '<a:payout:1512913911953756291>',
     label: 'Payments',
@@ -101,6 +111,8 @@ function buildHomeEmbed() {
       { name: '🚀 Getting Started',                                value: 'Step-by-step setup guide for new servers', inline: true },
       { name: '<a:tickets:1523139713278672996> Tickets',          value: 'Create & manage support tickets',         inline: true },
       { name: '<:rumble:1522372419338375299> Rumble Royale',      value: 'Track RR battles, wins & seasons',        inline: true },
+      { name: '<a:rumblesword:1522372420894330921> Seasons',      value: 'Multi-channel seasons & achievements',    inline: true },
+      { name: '<a:color_wheel:1532822238120644627> Wheel',        value: 'Instant spins & Wheel Roles campaigns',   inline: true },
       { name: '<a:payout:1512913911953756291> Payments',         value: 'Track payments & send receipts',           inline: true },
       { name: '📌 Sticky Notes',                                  value: 'Pin persistent messages in channels',     inline: true },
       { name: '🔔 Ping Panels',                                   value: 'Role notification toggle panels',         inline: true },
@@ -109,7 +121,7 @@ function buildHomeEmbed() {
       { name: '<a:purplesparkle:1512912828489793626> Giveaways',  value: 'Live giveaways with bonus entries',       inline: true },
       { name: '<a:trophies:1512912823062364281> Level System',   value: 'XP, levels & leaderboard',                inline: true },
       { name: '<a:payout:1512913911953756291> Staff & Payroll',  value: 'Staff roster, eligibility & payouts',     inline: true },
-      { name: '🤖 General',                                       value: 'Lock, Ban Log, Embed, Wheel & more',      inline: true },
+      { name: '🤖 General',                                       value: 'Lock, Ban Log, Embed & more',             inline: true },
       { name: '🔐 Verification',                                  value: 'Rules, captcha & auto role assignment',  inline: true },
       { name: '<a:SINS:1522338148380704910> Play & Regret',       value: 'Sins currency & RR integration',          inline: true },
       { name: '⚙️ Server Config',                                 value: 'Setup guide & current server config',     inline: true },
@@ -146,6 +158,29 @@ function buildCategoryEmbed(category) {
         { name: 'Can I run multiple seasons at once?', value: 'Yes — run `/server-setup` → Rumble Setup for the full season toolkit (start/end/info/add-channel/remove-channel/link-campaign). Each season is independent, and can link to a Wheel Roles campaign.', inline: false },
       ),
 
+    season: new EmbedBuilder().setColor('#d6c2ee')
+      .setTitle('⚔️ Seasons')
+      .addFields(
+        { name: 'What is a season?', value: 'A group of RR/RS channels tracked together, with an achievement role for members who win the winner role in *every* channel in the season.', inline: false },
+        { name: 'How do I create one?', value: '`/rumble season create name:"..."` then `/rumble season addchannel name:"..." channel:#ch` for each channel that\'s part of it. Repeat addchannel for every channel.', inline: false },
+        { name: 'How do I set the achievement role/channel?', value: 'Run `/server-setup` → Rumble Setup → Role Achievement Channel — this is where members get pinged once they collect every winner role in the season.', inline: false },
+        { name: 'How do I check a season\'s progress?', value: '`/rumble season info name:"..."` — shows every channel in it and who\'s completed it so far.', inline: false },
+        { name: 'How do I end a season?', value: '`/rumble season end name:"..."` — resets achievement progress for that season only; other active seasons are unaffected. If a Wheel Roles campaign is linked, it auto-ends too and its posted message greys out with a "closed" notice.', inline: false },
+        { name: 'Can I link a season to a wheel giveaway?', value: 'Yes — `/wheel roles create name:"..." season:"..." require_all_season_roles:True` builds a campaign that only qualifies members who\'ve completed every role in that season. Then `/wheel roles post` to actually let people enter.', inline: false },
+      ),
+
+    wheel: new EmbedBuilder().setColor('#d6c2ee')
+      .setTitle('🎡 Wheel')
+      .addFields(
+        { name: 'How do I do a quick spin?', value: '`/wheel members entries:"@a, @b, @c"` — repeat a name to weight their odds (e.g. `@a, @a, @b` gives @a double odds). Also: `/wheel reactions`, `/wheel boosted`, `/wheel prizes`, `/wheel combo`.', inline: false },
+        { name: 'What\'s a Wheel Roles campaign?', value: 'An ongoing entry pool tied to roles — unlike a quick spin, members get added automatically as they qualify, and you spin whenever you\'re ready.', inline: false },
+        { name: 'How do I set one up?', value: '`/wheel roles create name:"..." season:"..."` to pull qualifying roles from a season (add `require_all_season_roles:True` to require every role, not just one). Or skip `season` and use `roles:` to mention roles manually.', inline: false },
+        { name: 'How do members actually enter?', value: 'Either automatically the moment they get a qualifying role (`auto_signup` is on by default), or by reacting to a posted message — run `/wheel roles post name:"..." channel:#ch` to post one with a live-updating wheel image.', inline: false },
+        { name: 'How do I spin it?', value: '`/wheel roles spin name:"..."` — uses everyone currently entered, weighted by how many qualifying roles they have if `extra_entries` was enabled.', inline: false },
+        { name: 'How do I see who\'s entered?', value: '`/wheel roles list name:"..."` — shows every entrant and their exact odds.', inline: false },
+        { name: 'How do I end or delete a campaign?', value: '`/wheel roles end name:"..."` stops new entries but keeps existing ones for spinning. `/wheel roles delete name:"..."` wipes it completely.', inline: false },
+      ),
+
     payments: new EmbedBuilder().setColor('#d6c2ee')
       .setTitle('💳 Payments')
       .addFields(
@@ -173,7 +208,7 @@ function buildCategoryEmbed(category) {
         { name: 'How do I lock a channel?', value: '`/lock channel:#ch reason:"..."`', inline: false },
         { name: 'How do I set up ban logging?', value: 'Run `/server-setup` → Other Settings.', inline: false },
         { name: 'How do I post a custom embed?', value: '`/embed create description:"..."` — `/embed edit` to change it later without retyping.', inline: false },
-        { name: 'How do I spin a wheel for a winner?', value: '`/wheel members entries:"@a, @b, @c"`', inline: false },
+        { name: 'How do I report a bug or issue?', value: '`/report bug category:"..." description:"..."` — admins set the channel it goes to with `/report setup`.', inline: false },
       ),
 
     level: new EmbedBuilder().setColor('#d6c2ee')
@@ -181,6 +216,9 @@ function buildCategoryEmbed(category) {
       .addFields(
         { name: 'How do I turn leveling on?', value: 'Run `/server-setup` → Other Settings — off by default.', inline: false },
         { name: 'How do I check my level?', value: '`/level check` — or `/level leaderboard` for the top of the server.', inline: false },
+        { name: 'How do I manually set someone\'s level?', value: '`/level set user:@member level:5` (admin only) — posts publicly so it\'s visible, not just to you.', inline: false },
+        { name: 'What are the tiers?', value: 'Levels 1–10 are 🟢 Easy, 11–25 are 🟡 Medium, 26+ are 🔴 Hard — this is automatic based on level, shown on level-up announcements.', inline: false },
+        { name: 'Can members buy levels?', value: 'Yes — add a shop item with `type: Level Up` and set how many `levels` it grants. Members use it via `/shop use`, which instantly applies the levels and announces it publicly.', inline: false },
       ),
 
     staffpay: new EmbedBuilder().setColor('#d6c2ee')
@@ -217,9 +255,9 @@ function buildCategoryEmbed(category) {
     giveaway: new EmbedBuilder().setColor('#d6c2ee')
       .setTitle('🎁 Giveaways')
       .addFields(
-        { name: 'How do I start a giveaway?', value: '`/giveaway start prize:"..." duration_amount:1 duration_unit:Days`', inline: false },
-        { name: 'How do I give certain roles extra entries?', value: 'Run `/server-setup` → Game & Perks Settings.', inline: false },
-        { name: 'How do I require a role to enter?', value: 'Run `/server-setup` → Game & Perks Settings.', inline: false },
+        { name: 'How do I start a giveaway?', value: '`/giveaway start prize:"..." duration_amount:1 duration_unit:Days` — or set `prize_type:"Server Currency"` and an `amount` to auto-award your server\'s currency to the winner (the owner mints it free; anyone else funds it from their own balance).', inline: false },
+        { name: 'How do I give certain roles extra entries, or require a role to enter?', value: 'Two steps: first build the role library in `/server-setup` → Game & Perks Settings ("Add Bonus Role" / "Add Required Role") — this doesn\'t restrict anything yet, it just builds a pool. Then when you run `/giveaway start`, a prompt appears letting you pick which of those roles apply to *this specific* giveaway. If the library is empty, no prompt appears.', inline: false },
+        { name: 'What happens if someone without a required role reacts?', value: 'Their reaction gets removed automatically and a temporary message explains which role they\'re missing — enforced the instant they react, not just at draw time.', inline: false },
         { name: 'How can members check their own entries?', value: 'Every giveaway has a "Check My Entries" button — no command needed.', inline: false },
         { name: 'How do I edit, cancel, or end one early?', value: '`/giveaway edit id:`, `/giveaway cancel id:` (host only, no winner picked), `/giveaway end id:` (picks a winner now).', inline: false },
       ),
