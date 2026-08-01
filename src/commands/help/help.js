@@ -162,10 +162,10 @@ function buildCategoryEmbed(category) {
       .setTitle('⚔️ Seasons')
       .addFields(
         { name: 'What is a season?', value: 'A group of RR/RS channels tracked together, with an achievement role for members who win the winner role in *every* channel in the season.', inline: false },
-        { name: 'How do I create one?', value: '`/rumble season create name:"..."` then `/rumble season addchannel name:"..." channel:#ch` for each channel that\'s part of it. Repeat addchannel for every channel.', inline: false },
+        { name: 'How do I create one?', value: 'Season management is inside `/server-setup` → Rumble Setup — start a season, then add each channel that\'s part of it, one at a time.', inline: false },
         { name: 'How do I set the achievement role/channel?', value: 'Run `/server-setup` → Rumble Setup → Role Achievement Channel — this is where members get pinged once they collect every winner role in the season.', inline: false },
-        { name: 'How do I check a season\'s progress?', value: '`/rumble season info name:"..."` — shows every channel in it and who\'s completed it so far.', inline: false },
-        { name: 'How do I end a season?', value: '`/rumble season end name:"..."` — resets achievement progress for that season only; other active seasons are unaffected. If a Wheel Roles campaign is linked, it auto-ends too and its posted message greys out with a "closed" notice.', inline: false },
+        { name: 'How do I check a season\'s progress?', value: 'Run `/server-setup` → Rumble Setup → season info — shows every channel in it and who\'s completed it so far.', inline: false },
+        { name: 'How do I end a season?', value: 'Run `/server-setup` → Rumble Setup → end season — resets achievement progress for that season only; other active seasons are unaffected. If a Wheel Roles campaign is linked, it auto-ends too and its posted message greys out with a "closed" notice.', inline: false },
         { name: 'Can I link a season to a wheel giveaway?', value: 'Yes — `/wheel roles create name:"..." season:"..." require_all_season_roles:True` builds a campaign that only qualifies members who\'ve completed every role in that season. Then `/wheel roles post` to actually let people enter.', inline: false },
       ),
 
