@@ -660,7 +660,20 @@ async function campaignSpin(interaction) {
     .addFields({ name: e('trophies') + ' Winner', value: winner.userId ? `<@${winner.userId}>` : winner.text, inline: false })
     .setFooter({ text: `${entRes.rows.length} qualified entrant(s), ${entryObjects.length} total entries` });
 
-  return interaction.editReply({ embeds: [embed], files: [attachment] });
+  await interaction.editReply({ embeds: [embed], files: [attachment] });
+
+  // Post to #winners channel, same as raffles/giveaways do
+  try {
+    const winnerCfgRes = await query(`SELECT winner_channel_id FROM guild_config WHERE guild_id=$1`, [interaction.guildId]);
+    if (winnerCfgRes.rows.length && winnerCfgRes.rows[0].winner_channel_id) {
+      const winnerCh = await interaction.client.channels.fetch(winnerCfgRes.rows[0].winner_channel_id).catch(() => null);
+      if (winnerCh) {
+        const winnersEmbed = baseEmbed(`${e('diamond')} Wheel Winner — ${camp.name}`, embedColor, interaction.guild?.name)
+          .addFields({ name: `${e('trophies')} Winner`, value: winner.userId ? `<@${winner.userId}>` : winner.text, inline: true });
+        await winnerCh.send({ content: winner.userId ? `${e('diamond')} Congratulations <@${winner.userId}>!` : undefined, embeds: [winnersEmbed] }).catch(() => {});
+      }
+    }
+  } catch (err) { console.error('[Wheel] winners channel post failed:', err.message); }
 }
 
 // Edits a campaign's posted entry message to visually show it's ended and

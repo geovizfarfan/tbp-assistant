@@ -453,6 +453,24 @@ async function finishGiveaway(client, giveawayId) {
     await channel.send({
       content: `<a:purplesparkle:1512912828489793626> Congratulations ${winners.map(id => `<@${id}>`).join(', ')}! You won **${gw.prize}**!\n**Hosted by:** <@${gw.host_id}>\n${claimLine}`,
     }).catch(() => {});
+
+    // Post to #winners channel, same as raffles do
+    try {
+      const winnerCfgRes = await query(`SELECT winner_channel_id FROM guild_config WHERE guild_id=$1`, [gw.guild_id]);
+      if (winnerCfgRes.rows.length && winnerCfgRes.rows[0].winner_channel_id) {
+        const winnerCh = await client.channels.fetch(winnerCfgRes.rows[0].winner_channel_id).catch(() => null);
+        if (winnerCh) {
+          const winnersEmbed = baseEmbed(`${e('gift')} Giveaway Winner${winners.length > 1 ? 's' : ''} — ${gw.prize}`, COLORS.pastelblue, channel.guild.name)
+            .addFields(
+              { name: `${e('trophies')} Winner${winners.length > 1 ? 's' : ''}`, value: winners.map(id => `<@${id}>`).join(', '), inline: true },
+              { name: `${e('purplesparkle')} Prize`, value: gw.prize, inline: true },
+              { name: `${e('members')} Host`,        value: `<@${gw.host_id}>`, inline: true },
+              { name: `${e('receipt')} Giveaway ID`, value: `#${gw.id}`, inline: true },
+            );
+          await winnerCh.send({ content: `<a:purplesparkle:1512912828489793626> Congratulations ${winners.map(id => `<@${id}>`).join(', ')}!`, embeds: [winnersEmbed] }).catch(() => {});
+        }
+      }
+    } catch (err) { console.error('[Giveaway] winners channel post failed:', err.message); }
   } else {
     await channel.send({
       content: `${e('wrong')} Giveaway for **${gw.prize}** ended with no eligible entries.`,
