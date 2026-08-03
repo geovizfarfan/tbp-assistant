@@ -66,12 +66,11 @@ function buildChampionEmbed(cfg, member, { pot, guildName, channelName, totalSer
 
   const embed = new EmbedBuilder()
     .setColor(cfg.embed_color || '#d6c2ee')
-    .setTitle('💀 <a:trophies:1512912823062364281> CHAMPION!')
+    .setTitle('<a:rumblesword:1522372420894330921> <a:trophies:1512912823062364281> CHAMPION!')
     .setDescription(descLines.join('\n'))
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
     .setFooter({ text: `VELOURA has tracked ${Number(totalServerWins || 0)} Rumble Slaughter wins globally.` })
     .setTimestamp();
-  if (cfg.image_url) embed.setImage(cfg.image_url);
   return embed;
 }
 
@@ -220,6 +219,7 @@ async function handleChampion(message, embed) {
 
   // Same "battle finished" follow-up as Rumble Royale, adapted for whether
   // the next battle starts on its own or needs someone to run the command.
+  console.log(`[RumbleSlaughter] auto_battle for channel ${message.channel.id}: ${JSON.stringify(cfg.auto_battle)} (type: ${typeof cfg.auto_battle})`);
   if (cfg.auto_battle) {
     await message.channel.send('Battle Finished! New auto battle will start soon!').catch(() => {});
   } else {
@@ -234,11 +234,6 @@ async function handleChampion(message, embed) {
         last_type = 'champion', last_winner_id = $2, last_pot = $3
       WHERE channel_id = $4
     `, [sentMsg.id, member.id, pot, message.channel.id]).catch(() => {});
-  }
-
-  // Ping to get a new game going
-  if (pings) {
-    await message.channel.send({ content: `${pings} ready to run another round of Rumble Slaughter?` }).catch(() => {});
   }
 
   // Clear the one-time reward/description now that it's been used

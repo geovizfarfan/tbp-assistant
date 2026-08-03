@@ -104,6 +104,7 @@ module.exports = {
       let liveUpdateNote = '';
       const freshRes = await query('SELECT * FROM rumble_slaughter_config WHERE channel_id = $1', [channel.id]);
       const freshCfg = freshRes.rows[0];
+      console.log(`[RS setup] channel ${channel.id}: autoBattle option passed in = ${JSON.stringify(autoBattle)}, stored value after save = ${JSON.stringify(freshCfg.auto_battle)}`);
 
       if (freshCfg.last_message_id && freshCfg.announce_style !== 'ping') {
         const liveMsg = await channel.messages.fetch(freshCfg.last_message_id).catch(() => null);
