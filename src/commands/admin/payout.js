@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ComponentType } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ComponentType, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { query } = require('../../utils/database');
 const { e } = require('../../utils/appEmojis');
 const { baseEmbed, tsF, COLORS } = require('../../utils/embeds');
@@ -8,17 +8,12 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('payout')
     .setDescription('Confirm a prize was paid out')
-    .addUserOption(o => o.setName('staff').setDescription('Admin only: view another staff members unpaid games').setRequired(false))
-    .addStringOption(o => o.setName('status').setDescription('Mark as paid, or as not claimed (default: Paid)').addChoices(
-      { name: 'Paid — winner was paid', value: 'paid' },
-      { name: 'Not Claimed — winner never claimed', value: 'not_claimed' },
-    )),
+    .addUserOption(o => o.setName('staff').setDescription('Admin only: view another staff members unpaid games').setRequired(false)),
 
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: true });
     const now = new Date();
     const staffOverride = interaction.options.getUser('staff');
-    const statusChoice = interaction.options.getString('status') || 'paid';
 
     const staffRes = await query(`SELECT role FROM staff WHERE user_id=$1 AND active=true`, [interaction.user.id]);
     if (!staffRes.rows.length || !['admin','owner','staff','host','rumble_host'].includes(staffRes.rows[0].role)) {
@@ -103,6 +98,34 @@ module.exports = {
 
     const finalWinnerId = found.winner_id;
     const prize = found.prize || (found.prize_amount ? `${found.prize_amount} ${found.currency}` : 'N/A');
+
+    // Show exactly what's being confirmed, then let them pick paid vs not
+    // claimed right here — instead of choosing that blind before even
+    // seeing which game/raffle they're about to confirm.
+    const confirmRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('payout_mark_paid').setLabel('Mark Paid').setEmoji('<:checkmark:1512916161493205165>').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('payout_mark_notclaimed').setLabel('Mark Not Claimed').setEmoji('<:wrong:1512916350375301160>').setStyle(ButtonStyle.Danger),
+    );
+    const confirmEmbed = baseEmbed(`${e('payout')} Confirm Payout`, COLORS.tbppurple, interaction.guild?.name)
+      .addFields(
+        { name: `${e('controller')} Type`,     value: foundType.charAt(0).toUpperCase() + foundType.slice(1), inline: true },
+        { name: `${e('trophies')} Winner`,     value: finalWinnerId ? `<@${finalWinnerId}>` : 'N/A', inline: true },
+        { name: `${e('purplesparkle')} Prize`, value: prize, inline: true },
+      );
+    const confirmMsg = await interaction.editReply({ embeds: [confirmEmbed], components: [confirmRow] });
+
+    let statusClick;
+    try {
+      statusClick = await confirmMsg.awaitMessageComponent({
+        filter: i => i.user.id === interaction.user.id,
+        componentType: ComponentType.Button,
+        time: 60_000,
+      });
+    } catch {
+      return interaction.editReply({ content: `${e('wrong')} Timed out.`, embeds: [], components: [] });
+    }
+    await statusClick.deferUpdate();
+    const statusChoice = statusClick.customId === 'payout_mark_paid' ? 'paid' : 'not_claimed';
 
     await query(`UPDATE ${tableMap[foundType]} SET payout_status=$1, payout_confirmed_at=$2 WHERE id=$3`, [statusChoice, now, id]);
     await query(`UPDATE member_wins SET payout_status=$1, paid_at=$2 WHERE ref_id=$3 AND type=$4`, [statusChoice, now, id, foundType]);
