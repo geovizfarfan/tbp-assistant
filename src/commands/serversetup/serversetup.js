@@ -31,6 +31,12 @@ const CATEGORIES = {
     description: 'General server-wide behavior, GoosDate reminders, and full leveling management — buttons below. Verify setup stays standalone (`/verify setup`) since it involves 2 channels, a role, and long rules text — too much for one form. Shop and Staff setup live under their own categories.',
     items: [],
   },
+  automod: {
+    label: 'Triggers, Filter & Staff Bios',
+    emoji: '⚡',
+    description: 'Custom trigger words, the word filter, and Meet the Staff setup — buttons below. Role-restricted triggers and exact-match word filters need the extra options only `/trigger`/`/wordfilter` support directly.',
+    items: [],
+  },
   roles: {
     label: 'Server Role Set',
     emoji: '🎭',
@@ -565,6 +571,13 @@ module.exports = {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
         components: [buildSettingsButtons(), buildSettingsButtons2(), buildSettingsButtons3(), buildSettingsButtons4(), buildBackButton()],
+      });
+    }
+
+    if (key === 'automod') {
+      return interaction.update({
+        embeds: [buildCategoryEmbed(key, interaction.guild)],
+        components: [buildAutomodButtons(), buildAutomodButtons2(), buildBackButton()],
       });
     }
 
@@ -1351,6 +1364,95 @@ module.exports = {
     return interaction.editReply({ embeds: [embed], components });
   },
 
+  async handleTriggerAddMsgModal(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    const word = interaction.fields.getTextInputValue('word').trim();
+    const message = interaction.fields.getTextInputValue('message');
+
+    const existing = await query(`SELECT id FROM custom_triggers WHERE guild_id=$1 AND trigger_word=$2`, [interaction.guildId, word]);
+    if (existing.rows.length) return interaction.editReply('❌ That trigger word already exists — remove it first if you want to replace it.');
+
+    await query(
+      `INSERT INTO custom_triggers (guild_id, trigger_word, action_type, response_text, created_by) VALUES ($1,$2,'message',$3,$4)`,
+      [interaction.guildId, word, message, interaction.user.id]
+    );
+    return interaction.editReply(`✅ Trigger **${word}** added — posts your message when typed. (Need it restricted to a role? Use \`/trigger add\` directly — role restriction isn't available in this quick form.)`);
+  },
+
+  async handleTriggerAddReactModal(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    const word = interaction.fields.getTextInputValue('word').trim();
+    const emojis = interaction.fields.getTextInputValue('emojis').trim().split(/\s+/);
+
+    const existing = await query(`SELECT id FROM custom_triggers WHERE guild_id=$1 AND trigger_word=$2`, [interaction.guildId, word]);
+    if (existing.rows.length) return interaction.editReply('❌ That trigger word already exists — remove it first if you want to replace it.');
+
+    await query(
+      `INSERT INTO custom_triggers (guild_id, trigger_word, action_type, reaction_emojis, created_by) VALUES ($1,$2,'reaction',$3,$4)`,
+      [interaction.guildId, word, emojis, interaction.user.id]
+    );
+    return interaction.editReply(`✅ Trigger **${word}** added — reacts with ${emojis.join(' ')} when typed.`);
+  },
+
+  async handleTriggerRemovePicked(interaction) {
+    await interaction.deferUpdate();
+    const word = interaction.values[0];
+    await query(`DELETE FROM custom_triggers WHERE guild_id=$1 AND trigger_word=$2`, [interaction.guildId, word]);
+    return interaction.editReply({
+      embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ Trigger **${word}** removed.`)],
+      components: [buildBackButton()],
+    });
+  },
+
+  async handleFilterAddModal(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    const phrase = interaction.fields.getTextInputValue('phrase').trim();
+
+    const existing = await query(`SELECT id FROM word_filters WHERE guild_id=$1 AND phrase=$2 AND match_type='contains'`, [interaction.guildId, phrase]);
+    if (existing.rows.length) return interaction.editReply('❌ That phrase is already filtered.');
+
+    await query(
+      `INSERT INTO word_filters (guild_id, phrase, match_type, created_by) VALUES ($1,$2,'contains',$3)`,
+      [interaction.guildId, phrase, interaction.user.id]
+    );
+    return interaction.editReply(`✅ Now auto-deleting messages containing **${phrase}**. (Need an exact-match-only filter instead? Use \`/wordfilter add\` directly.)`);
+  },
+
+  async handleFilterRemovePicked(interaction) {
+    await interaction.deferUpdate();
+    const [phrase, matchType] = interaction.values[0].split('::');
+    await query(`DELETE FROM word_filters WHERE guild_id=$1 AND phrase=$2 AND match_type=$3`, [interaction.guildId, phrase, matchType]);
+    return interaction.editReply({
+      embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ **${phrase}** removed from the filter.`)],
+      components: [buildBackButton()],
+    });
+  },
+
+  async handleStaffBioChannelPicked(interaction) {
+    const channelId = interaction.values[0];
+    const modal = new ModalBuilder().setCustomId(`serversetup_staffbioquestions_modal:${channelId}`).setTitle('Meet the Staff — Questions');
+    const questionsInput = new TextInputBuilder().setCustomId('questions').setLabel('Up to 5 questions, separated by |').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(500);
+    modal.addComponents(new ActionRowBuilder().addComponents(questionsInput));
+    return interaction.showModal(modal);
+  },
+
+  async handleStaffBioQuestionsModal(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    const channelId = interaction.customId.split(':')[1];
+    const questionsRaw = interaction.fields.getTextInputValue('questions');
+    const questions = questionsRaw.split('|').map(q => q.trim()).filter(Boolean).slice(0, 5);
+
+    if (!questions.length) return interaction.editReply('❌ Couldn\'t parse any questions — separate them with `|`.');
+
+    await query(
+      `INSERT INTO staff_bio_config (guild_id, channel_id, questions) VALUES ($1,$2,$3)
+       ON CONFLICT (guild_id) DO UPDATE SET channel_id=$2, questions=$3`,
+      [interaction.guildId, channelId, questions.join('|')]
+    );
+
+    return interaction.editReply(`✅ Meet the Staff configured — profiles post to <#${channelId}> with ${questions.length} question${questions.length === 1 ? '' : 's'}. Staff run \`/staffbio submit\` to fill theirs out.`);
+  },
+
   async handleWheelAddRolePicked(interaction) {
     const role = interaction.roles.first();
     const modal = new ModalBuilder().setCustomId(`serversetup_wheeladdmodal:${role.id}`).setTitle('Wheel Role Bonus');
@@ -1949,6 +2051,86 @@ module.exports = {
       return interaction.showModal(modal);
     }
 
+    if (action === 'triggeraddmsg') {
+      const modal = new ModalBuilder().setCustomId('serversetup_triggeraddmsg_modal').setTitle('Add Message Trigger');
+      const wordInput = new TextInputBuilder().setCustomId('word').setLabel('Trigger word, e.g. !yay').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(50);
+      const msgInput = new TextInputBuilder().setCustomId('message').setLabel('Message to post when triggered').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(1000);
+      modal.addComponents(new ActionRowBuilder().addComponents(wordInput), new ActionRowBuilder().addComponents(msgInput));
+      return interaction.showModal(modal);
+    }
+
+    if (action === 'triggeraddreact') {
+      const modal = new ModalBuilder().setCustomId('serversetup_triggeraddreact_modal').setTitle('Add Reaction Trigger');
+      const wordInput = new TextInputBuilder().setCustomId('word').setLabel('Trigger word, e.g. !hearts').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(50);
+      const emojiInput = new TextInputBuilder().setCustomId('emojis').setLabel('Emojis, space-separated').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(200);
+      modal.addComponents(new ActionRowBuilder().addComponents(wordInput), new ActionRowBuilder().addComponents(emojiInput));
+      return interaction.showModal(modal);
+    }
+
+    if (action === 'triggerlist') {
+      await interaction.deferUpdate();
+      const res = await query(`SELECT * FROM custom_triggers WHERE guild_id=$1 ORDER BY trigger_word`, [interaction.guildId]);
+      const desc = res.rows.length
+        ? res.rows.map(t => `**${t.trigger_word}** — ${t.action_type === 'message' ? 'posts a message' : `reacts: ${t.reaction_emojis.join(' ')}`}${t.restricted_role_id ? ` (restricted to <@&${t.restricted_role_id}>)` : ''}`).join('\n')
+        : 'No triggers configured yet.';
+      return interaction.editReply({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setTitle('⚡ Trigger Words').setDescription(desc)],
+        components: [buildBackButton()],
+      });
+    }
+
+    if (action === 'triggerremove') {
+      await interaction.deferUpdate();
+      const res = await query(`SELECT trigger_word FROM custom_triggers WHERE guild_id=$1 ORDER BY trigger_word LIMIT 25`, [interaction.guildId]);
+      if (!res.rows.length) {
+        return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('No triggers to remove.')], components: [buildBackButton()] });
+      }
+      const menu = new StringSelectMenuBuilder().setCustomId('serversetup_triggerremovepick').setPlaceholder('Pick a trigger to remove')
+        .addOptions(res.rows.map(r => ({ label: r.trigger_word, value: r.trigger_word })));
+      return interaction.editReply({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the trigger to remove:')],
+        components: [new ActionRowBuilder().addComponents(menu), buildBackButton()],
+      });
+    }
+
+    if (action === 'filteradd') {
+      const modal = new ModalBuilder().setCustomId('serversetup_filteradd_modal').setTitle('Add Word Filter');
+      const phraseInput = new TextInputBuilder().setCustomId('phrase').setLabel('Word/phrase to auto-delete').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(200);
+      modal.addComponents(new ActionRowBuilder().addComponents(phraseInput));
+      return interaction.showModal(modal);
+    }
+
+    if (action === 'filterlist') {
+      await interaction.deferUpdate();
+      const res = await query(`SELECT phrase, match_type FROM word_filters WHERE guild_id=$1 ORDER BY phrase`, [interaction.guildId]);
+      const desc = res.rows.length ? res.rows.map(f => `**${f.phrase}** — ${f.match_type}`).join('\n') : 'No filtered words yet.';
+      return interaction.editReply({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setTitle('🚫 Word Filter').setDescription(desc)],
+        components: [buildBackButton()],
+      });
+    }
+
+    if (action === 'filterremove') {
+      await interaction.deferUpdate();
+      const res = await query(`SELECT phrase, match_type FROM word_filters WHERE guild_id=$1 ORDER BY phrase LIMIT 25`, [interaction.guildId]);
+      if (!res.rows.length) {
+        return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('No filtered words to remove.')], components: [buildBackButton()] });
+      }
+      const menu = new StringSelectMenuBuilder().setCustomId('serversetup_filterremovepick').setPlaceholder('Pick a word/phrase to remove')
+        .addOptions(res.rows.map(r => ({ label: `${r.phrase} (${r.match_type})`, value: `${r.phrase}::${r.match_type}` })));
+      return interaction.editReply({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the word/phrase to remove:')],
+        components: [new ActionRowBuilder().addComponents(menu), buildBackButton()],
+      });
+    }
+
+    if (action === 'staffbiosetup') {
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the channel Meet the Staff profiles should post/update in:')],
+        components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('serversetup_staffbiochannel').setPlaceholder('Pick a channel')), buildBackButton()],
+      });
+    }
+
     if (action === 'levelsetmember') {
       return interaction.update({
         embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick the member whose level you want to set:')],
@@ -2290,6 +2472,24 @@ function buildPingRemoveChannelPicker() {
     .setCustomId('serversetup_pingremovechan')
     .setPlaceholder('Pick the channel to remove the panel from');
   return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildAutomodButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_gset:triggeraddmsg').setLabel('Add Message Trigger').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('serversetup_gset:triggeraddreact').setLabel('Add Reaction Trigger').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('serversetup_gset:triggerlist').setLabel('List Triggers').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_gset:triggerremove').setLabel('Remove Trigger').setStyle(ButtonStyle.Danger),
+  );
+}
+
+function buildAutomodButtons2() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_gset:filteradd').setLabel('Add Word Filter').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('serversetup_gset:filterlist').setLabel('List Word Filters').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_gset:filterremove').setLabel('Remove Word Filter').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('serversetup_gset:staffbiosetup').setLabel('Meet the Staff Setup').setStyle(ButtonStyle.Primary),
+  );
 }
 
 function buildSettingsButtons() {

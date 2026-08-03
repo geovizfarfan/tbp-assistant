@@ -272,6 +272,18 @@ client.on('interactionCreate', async (interaction) => {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleChannelSettingSelect(interaction);
   }
+  if (interaction.isStringSelectMenu() && interaction.customId === 'serversetup_triggerremovepick') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleTriggerRemovePicked(interaction);
+  }
+  if (interaction.isStringSelectMenu() && interaction.customId === 'serversetup_filterremovepick') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleFilterRemovePicked(interaction);
+  }
+  if (interaction.isChannelSelectMenu() && interaction.customId === 'serversetup_staffbiochannel') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleStaffBioChannelPicked(interaction);
+  }
   if (interaction.isChannelSelectMenu() && interaction.customId.startsWith('serversetup_channelset:')) {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleChannelPicked(interaction);
@@ -508,6 +520,26 @@ client.on('interactionCreate', async (interaction) => {
   }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('shop_nickname_modal:')) {
     return shopModule.handleNicknameModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('staffbio_modal')) {
+    const { handleModalSubmit } = require('./commands/staffbio/staffbio');
+    return handleModalSubmit(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId === 'serversetup_triggeraddmsg_modal') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleTriggerAddMsgModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId === 'serversetup_triggeraddreact_modal') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleTriggerAddReactModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId === 'serversetup_filteradd_modal') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleFilterAddModal(interaction);
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('serversetup_staffbioquestions_modal:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleStaffBioQuestionsModal(interaction);
   }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('embededit_modal:')) {
     const { handleEditModal } = require('./commands/embed/embed');
@@ -1039,6 +1071,57 @@ client.on('messageCreate', async (message) => {
   } catch (err) {
     // Not a tracked private room thread, or DB hiccup; safe to ignore.
   }
+});
+
+// Word filter — deletes messages containing (or exactly matching) a banned
+// phrase. Checked before custom triggers so a deleted message never fires one.
+client.on('messageCreate', async (message) => {
+  if (message.author.bot || !message.guild) return;
+  try {
+    const { query } = require('./utils/database');
+    const res = await query(`SELECT phrase, match_type FROM word_filters WHERE guild_id=$1`, [message.guild.id]);
+    if (!res.rows.length) return;
+
+    const content = message.content.toLowerCase();
+    const hit = res.rows.find(f => {
+      const phrase = f.phrase.toLowerCase();
+      return f.match_type === 'exact' ? content === phrase : content.includes(phrase);
+    });
+    if (hit) await message.delete().catch(() => {});
+  } catch (err) { console.error('[WordFilter] check error:', err.message); }
+});
+
+// Custom trigger words — exact match, posts a plain message or reacts.
+client.on('messageCreate', async (message) => {
+  if (message.author.bot || !message.guild) return;
+  try {
+    const { query } = require('./utils/database');
+    const res = await query(
+      `SELECT * FROM custom_triggers WHERE guild_id=$1 AND trigger_word=$2`,
+      [message.guild.id, message.content.trim()]
+    );
+    const trigger = res.rows[0];
+    if (!trigger) return;
+
+    if (trigger.restricted_role_id && !message.member?.roles.cache.has(trigger.restricted_role_id)) {
+      return; // silently ignore — not a wrong-command scenario, just not for them
+    }
+
+    if (trigger.action_type === 'message') {
+      await message.channel.send({ content: trigger.response_text }).catch(() => {});
+    } else if (trigger.action_type === 'reaction') {
+      // React to whatever this message replies to, if it's a reply — that's
+      // "react to a specific post" — otherwise fall back to this message itself.
+      let target = message;
+      if (message.reference?.messageId) {
+        const replied = await message.channel.messages.fetch(message.reference.messageId).catch(() => null);
+        if (replied) target = replied;
+      }
+      for (const emoji of trigger.reaction_emojis) {
+        await target.react(emoji).catch(() => {});
+      }
+    }
+  } catch (err) { console.error('[CustomTrigger] check error:', err.message); }
 });
 
 client.on('interactionCreate', async interaction => {
