@@ -998,3 +998,47 @@ CREATE TABLE IF NOT EXISTS sticky_permissions (
   target_id TEXT NOT NULL,
   UNIQUE (guild_id, target_type, target_id)
 );
+
+-- Custom trigger words: typing the word posts a plain message or reacts to
+-- a message with a set of emojis. No embed, deliberately plain/fast.
+CREATE TABLE IF NOT EXISTS custom_triggers (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  trigger_word TEXT NOT NULL,
+  action_type TEXT NOT NULL CHECK (action_type IN ('message','reaction')),
+  response_text TEXT,
+  reaction_emojis TEXT[],
+  restricted_role_id TEXT,
+  created_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (guild_id, trigger_word)
+);
+
+-- Auto-delete filter: messages containing these words/phrases get removed
+CREATE TABLE IF NOT EXISTS word_filters (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  phrase TEXT NOT NULL,
+  match_type TEXT NOT NULL DEFAULT 'contains' CHECK (match_type IN ('contains','exact')),
+  created_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (guild_id, phrase, match_type)
+);
+
+-- "Meet the Staff" — per-server customizable questions, auto-published profile
+CREATE TABLE IF NOT EXISTS staff_bio_config (
+  guild_id TEXT PRIMARY KEY,
+  channel_id TEXT NOT NULL,
+  questions TEXT NOT NULL, -- up to 5, separated by |
+  embed_color TEXT
+);
+
+CREATE TABLE IF NOT EXISTS staff_bios (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  answers TEXT[] NOT NULL,
+  message_id TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (guild_id, user_id)
+);
