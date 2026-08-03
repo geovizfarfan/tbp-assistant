@@ -1091,6 +1091,65 @@ client.on('messageCreate', async (message) => {
   } catch (err) { console.error('[WordFilter] check error:', err.message); }
 });
 
+// Built-in reaction triggers — always on, every server, no /trigger setup
+// needed, open to anyone. Reacts to whatever this message replies to (in
+// the exact order listed below), then deletes the trigger message itself.
+const BUILTIN_REACTION_TRIGGERS = {
+  '!love': [
+    '<a:heart1:1533837617148330094>',
+    '<a:heart2:1533837622965833920>',
+    '<a:heart3:1533837619232772156>',
+    '<a:heart4:1533837619954188348>',
+    '<a:heart5:1533837617878007908>',
+    '<a:heart7:1533838055142723745>',
+    '<a:heart6:1533838054006194206>',
+  ],
+  '!thanks': [
+    '<a:thanks1:1533841246089646110>',
+    '<a:thanks2:1533841247603523664>',
+    '<a:thanks3:1533841248782123239>',
+    '<a:thanks4:1533841250082357438>',
+    '<a:thanks5:1533841251496104186>',
+    '<a:thanks6:1533841252389490811>',
+    '<a:thanks7:1533841834173009941>',
+  ],
+  '!yay': [
+    '<a:yay1:1533844035414786298>',
+    '<a:yay2:1533844045397360710>',
+    '<a:yay3:1533844041278554246>',
+    '<a:yay4:1533844042264088706>',
+    '<a:yay5:1533844043228909568>',
+    '<a:yay6:1533844036761288815>',
+    '<a:yay7:1533844050594103388>',
+  ],
+  '!welcome': [
+    '<a:welcome1:1533845537223217303>',
+    '<a:welcome2:1533845537923661947>',
+    '<a:welcome3:1533845539094007908>',
+    '<a:welcome4:1533845540406825012>',
+    '<a:welcome5:1533845541476237466>',
+    '<a:welcome6:1533845542570819824>',
+    '<a:welcome7:1533845545435664485>',
+  ],
+};
+
+client.on('messageCreate', async (message) => {
+  if (message.author.bot || !message.guild) return;
+  const emojis = BUILTIN_REACTION_TRIGGERS[message.content.trim().toLowerCase()];
+  if (!emojis) return;
+  if (!message.reference?.messageId) return; // only makes sense as a reply — nothing to react to otherwise
+  try {
+    const target = await message.channel.messages.fetch(message.reference.messageId).catch(() => null);
+    if (!target) return;
+
+    for (const emoji of emojis) {
+      await target.react(emoji).catch(() => {});
+    }
+    // Clean up the trigger message itself, so only the reactions remain.
+    await message.delete().catch(() => {});
+  } catch (err) { console.error('[BuiltinReactionTrigger] error:', err.message); }
+});
+
 // Custom trigger words — exact match, posts a plain message or reacts.
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
