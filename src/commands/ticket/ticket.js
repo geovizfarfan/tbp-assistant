@@ -837,6 +837,13 @@ module.exports = {
         return interaction.reply({ content: `❌ Already claimed by <@${existing.rows[0]?.claimed_by}>.`, ephemeral: true });
       }
 
+      // Claiming counts as a staff response for the 1hr no-response reminder,
+      // even before staff has actually typed a message.
+      await query(
+        `UPDATE ticket_logs SET first_staff_reply_at=NOW(), first_staff_responder=$1 WHERE channel_id=$2 AND first_staff_reply_at IS NULL`,
+        [interaction.user.id, interaction.channel.id]
+      ).catch(() => {});
+
       await interaction.reply({ content: `<:checkmark:1512916161493205165> <@${interaction.user.id}> has claimed this ticket!` });
 
       const thread = interaction.channel;

@@ -340,6 +340,18 @@ client.on('interactionCreate', async (interaction) => {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleGrindRolePicked(interaction);
   }
+  if (interaction.isRoleSelectMenu() && interaction.customId === 'serversetup_stickypermaddrole') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleStickyPermAddRole(interaction);
+  }
+  if (interaction.isUserSelectMenu() && interaction.customId === 'serversetup_stickypermadduser') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleStickyPermAddUser(interaction);
+  }
+  if (interaction.isStringSelectMenu() && interaction.customId === 'serversetup_stickypermremove') {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleStickyPermRemove(interaction);
+  }
   if (interaction.isRoleSelectMenu() && interaction.customId === 'serversetup_wheeladdrole') {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleWheelAddRolePicked(interaction);

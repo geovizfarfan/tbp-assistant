@@ -422,7 +422,50 @@ function buildStickyButtons() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('serversetup_panels:stickyset').setLabel('Set Sticky').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('serversetup_panels:stickyremove').setLabel('Remove Sticky').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('serversetup_panels:stickyperms').setLabel('Sticky Permissions').setStyle(ButtonStyle.Secondary),
   );
+}
+
+async function buildStickyPermsView(guild) {
+  const res = await query('SELECT target_type, target_id FROM sticky_permissions WHERE guild_id=$1', [guild.id]);
+  const lines = res.rows.length
+    ? res.rows.map(r => r.target_type === 'role' ? `<@&${r.target_id}>` : `<@${r.target_id}>`).join('\n')
+    : 'No extra roles/users granted yet — admins only for now.';
+
+  const embed = new EmbedBuilder().setColor('#d6c2ee')
+    .setTitle('📌 Sticky Permissions')
+    .setDescription(lines);
+
+  const addRoleMenu = new RoleSelectMenuBuilder().setCustomId('serversetup_stickypermaddrole').setPlaceholder('Add a role');
+  const addUserMenu = new UserSelectMenuBuilder().setCustomId('serversetup_stickypermadduser').setPlaceholder('Add a user');
+
+  const components = [
+    new ActionRowBuilder().addComponents(addRoleMenu),
+    new ActionRowBuilder().addComponents(addUserMenu),
+  ];
+
+  if (res.rows.length) {
+    const options = [];
+    for (const r of res.rows.slice(0, 25)) {
+      let label;
+      if (r.target_type === 'role') {
+        const role = guild.roles.cache.get(r.target_id);
+        label = `Role: ${role ? role.name : 'unknown-role'}`;
+      } else {
+        const member = await guild.members.fetch(r.target_id).catch(() => null);
+        label = `User: ${member ? member.user.username : 'unknown-user'}`;
+      }
+      options.push({ label: label.slice(0, 100), value: `${r.target_type}:${r.target_id}` });
+    }
+    const removeMenu = new StringSelectMenuBuilder()
+      .setCustomId('serversetup_stickypermremove')
+      .setPlaceholder('Remove a role/user')
+      .addOptions(options);
+    components.push(new ActionRowBuilder().addComponents(removeMenu));
+  }
+
+  components.push(buildBackButton());
+  return { embed, components };
 }
 
 function buildPanelsButtons2() {
@@ -1275,6 +1318,39 @@ module.exports = {
     );
   },
 
+  async handleStickyPermAddRole(interaction) {
+    await interaction.deferUpdate();
+    const role = interaction.roles.first();
+    await query(
+      `INSERT INTO sticky_permissions (guild_id, target_type, target_id) VALUES ($1,'role',$2) ON CONFLICT DO NOTHING`,
+      [interaction.guildId, role.id]
+    );
+    const { embed, components } = await buildStickyPermsView(interaction.guild);
+    return interaction.editReply({ embeds: [embed], components });
+  },
+
+  async handleStickyPermAddUser(interaction) {
+    await interaction.deferUpdate();
+    const user = interaction.users.first();
+    await query(
+      `INSERT INTO sticky_permissions (guild_id, target_type, target_id) VALUES ($1,'user',$2) ON CONFLICT DO NOTHING`,
+      [interaction.guildId, user.id]
+    );
+    const { embed, components } = await buildStickyPermsView(interaction.guild);
+    return interaction.editReply({ embeds: [embed], components });
+  },
+
+  async handleStickyPermRemove(interaction) {
+    await interaction.deferUpdate();
+    const [targetType, targetId] = interaction.values[0].split(':');
+    await query(
+      `DELETE FROM sticky_permissions WHERE guild_id=$1 AND target_type=$2 AND target_id=$3`,
+      [interaction.guildId, targetType, targetId]
+    );
+    const { embed, components } = await buildStickyPermsView(interaction.guild);
+    return interaction.editReply({ embeds: [embed], components });
+  },
+
   async handleWheelAddRolePicked(interaction) {
     const role = interaction.roles.first();
     const modal = new ModalBuilder().setCustomId(`serversetup_wheeladdmodal:${role.id}`).setTitle('Wheel Role Bonus');
@@ -1569,6 +1645,12 @@ module.exports = {
         embeds: [new EmbedBuilder().setColor(res.rows.length ? '#2ecc71' : '#ff4444').setDescription(msg)],
         components: [buildStickyButtons(), buildBackButton()],
       });
+    }
+
+    if (action === 'stickyperms') {
+      await interaction.deferUpdate();
+      const { embed, components } = await buildStickyPermsView(interaction.guild);
+      return interaction.editReply({ embeds: [embed], components });
     }
 
     if (action === 'pingpost') {
