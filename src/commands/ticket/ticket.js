@@ -372,6 +372,12 @@ async function closeTicketFlow(interaction, client, ticketId, reason) {
   await query('UPDATE tickets SET status=$1, closed_at=NOW(), closed_by=$2, close_reason=$3 WHERE id=$4',
     ['closed', interaction.user.id, reason, ticket.id]);
 
+  // ticketTracker.js's 1hr "no staff response" reminder tracks tickets in a
+  // separate table (ticket_logs) — without this, closing here never told
+  // that reminder the ticket was done, so it could still fire an hour later.
+  await query(`UPDATE ticket_logs SET status='closed', closed_at=NOW() WHERE channel_id=$1 AND status='open'`,
+    [interaction.channel.id]).catch(() => {});
+
   // Clean up the staff notification message
   if (ticket.staff_message_id && ticket.staff_channel_id_ref) {
     const staffCh = (await client.channels.fetch(ticket.staff_channel_id_ref).catch(() => null));
@@ -417,7 +423,6 @@ module.exports = {
       .addStringOption(o => o.setName('panel_id').setDescription('Panel ID').setRequired(true))
       .addStringOption(o => o.setName('name').setDescription('Button label').setRequired(true))
       .addStringOption(o => o.setName('emoji').setDescription('Button emoji'))
-      .addStringOption(o => o.setName('description').setDescription('Shown in the modal'))
       .addStringOption(o => o.setName('questions').setDescription('Form questions separated by | (max 5)'))
       .addStringOption(o => o.setName('open_message').setDescription('Custom message when this ticket type opens')))
 
@@ -434,7 +439,6 @@ module.exports = {
       .addStringOption(o => o.setName('name').setDescription('Current exact button name to edit').setRequired(true))
       .addStringOption(o => o.setName('new_name').setDescription('New button label'))
       .addStringOption(o => o.setName('emoji').setDescription('New emoji for the button'))
-      .addStringOption(o => o.setName('description').setDescription('New modal description'))
       .addStringOption(o => o.setName('questions').setDescription('New form questions separated by |'))
       .addStringOption(o => o.setName('open_message').setDescription('New custom message shown when this ticket type opens')))
 
@@ -548,7 +552,6 @@ module.exports = {
       const panelId     = interaction.options.getString('panel_id');
       const name        = interaction.options.getString('name');
       const emoji       = interaction.options.getString('emoji') || null;
-      const description = interaction.options.getString('description')?.replace(/\\n/g, '\n') || null;
       const questions   = interaction.options.getString('questions') || null;
       const openMessage = interaction.options.getString('open_message')?.replace(/\\n/g, '\n') || null;
 
@@ -557,7 +560,7 @@ module.exports = {
       const panel = panelRes.rows[0];
 
       await query('INSERT INTO ticket_types (panel_id, guild_id, name, emoji, description, questions, open_message) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-        [panelId, interaction.guild.id, name, emoji, description, questions, openMessage]);
+        [panelId, interaction.guild.id, name, emoji, null, questions, openMessage]);
 
       const typesRes = await query('SELECT * FROM ticket_types WHERE panel_id = $1 ORDER BY id', [panelId]);
       const components = buildPanelComponents(typesRes.rows);
@@ -610,7 +613,6 @@ module.exports = {
       const name       = interaction.options.getString('name');
       const newName    = interaction.options.getString('new_name');
       const emoji      = interaction.options.getString('emoji');
-      const description = interaction.options.getString('description')?.replace(/\\n/g, '\n');
       const questions  = interaction.options.getString('questions');
       const openMessage = interaction.options.getString('open_message')?.replace(/\\n/g, '\n');
 
@@ -626,14 +628,13 @@ module.exports = {
       const updated = {
         name: newName ?? ex.name,
         emoji: emoji ?? ex.emoji,
-        description: description ?? ex.description,
         questions: questions ?? ex.questions,
         open_message: openMessage ?? ex.open_message,
       };
 
       await query(
-        'UPDATE ticket_types SET name = $1, emoji = $2, description = $3, questions = $4, open_message = $5 WHERE id = $6',
-        [updated.name, updated.emoji, updated.description, updated.questions, updated.open_message, ex.id]
+        'UPDATE ticket_types SET name = $1, emoji = $2, questions = $3, open_message = $4 WHERE id = $5',
+        [updated.name, updated.emoji, updated.questions, updated.open_message, ex.id]
       );
 
       const panelRes = await query('SELECT * FROM ticket_panels WHERE id = $1', [panelId]);

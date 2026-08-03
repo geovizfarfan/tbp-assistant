@@ -20,16 +20,54 @@ module.exports = {
       .addStringOption(o => o.setName('color').setDescription('New embed color hex')))
     .addSubcommand(sub => sub
       .setName('remove')
-      .setDescription('Remove the sticky message from the current channel')),
+      .setDescription('Remove the sticky message from the current channel'))
+    .addSubcommandGroup(group => group
+      .setName('permissions')
+      .setDescription('Grant non-admins the ability to manage stickies (admin only)')
+      .addSubcommand(sub => sub
+        .setName('add')
+        .setDescription('Allow a role or user to manage stickies')
+        .addRoleOption(o => o.setName('role').setDescription('Role to allow'))
+        .addUserOption(o => o.setName('user').setDescription('User to allow')))
+      .addSubcommand(sub => sub
+        .setName('remove')
+        .setDescription('Revoke sticky permission from a role or user')
+        .addRoleOption(o => o.setName('role').setDescription('Role to revoke'))
+        .addUserOption(o => o.setName('user').setDescription('User to revoke')))
+      .addSubcommand(sub => sub
+        .setName('list')
+        .setDescription('List every role/user currently allowed to manage stickies'))),
 
   async execute(interaction) {
-    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
-        interaction.user.id !== process.env.OWNER_ID) {
-      return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
+    const sub   = interaction.options.getSubcommand();
+    const group = interaction.options.getSubcommandGroup(false);
+    const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
+      interaction.user.id === process.env.OWNER_ID;
+
+    if (group === 'permissions') {
+      if (!isAdmin) return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
+      await interaction.deferReply({ ephemeral: true });
+      if (sub === 'add') return grantStickyPermission(interaction);
+      if (sub === 'remove') return revokeStickyPermission(interaction);
+      if (sub === 'list') return listStickyPermissions(interaction);
+      return;
+    }
+
+    if (!isAdmin) {
+      const roleIds = interaction.member.roles.cache.map(r => r.id);
+      const permRes = await query(
+        `SELECT 1 FROM sticky_permissions WHERE guild_id=$1 AND (
+           (target_type='user' AND target_id=$2) OR
+           (target_type='role' AND target_id = ANY($3::text[]))
+         ) LIMIT 1`,
+        [interaction.guildId, interaction.user.id, roleIds]
+      );
+      if (!permRes.rows.length) {
+        return interaction.reply({ content: '❌ Admin only, or a role/user granted sticky permission.', ephemeral: true });
+      }
     }
     await interaction.deferReply({ ephemeral: true });
 
-    const sub     = interaction.options.getSubcommand();
     const channel = interaction.channel;
 
     if (sub === 'set') {
@@ -127,3 +165,46 @@ module.exports = {
     } catch (e) { /* ignore */ }
   },
 };
+
+async function grantStickyPermission(interaction) {
+  const role = interaction.options.getRole('role');
+  const user = interaction.options.getUser('user');
+  if (!role && !user) return interaction.editReply('❌ Provide a `role` or a `user`.');
+  if (role && user) return interaction.editReply('❌ Provide only one of `role` or `user`, not both.');
+
+  const targetType = role ? 'role' : 'user';
+  const targetId = role ? role.id : user.id;
+
+  await query(
+    `INSERT INTO sticky_permissions (guild_id, target_type, target_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+    [interaction.guildId, targetType, targetId]
+  );
+
+  return interaction.editReply(`✅ ${role ? `<@&${role.id}>` : `<@${user.id}>`} can now manage stickies.`);
+}
+
+async function revokeStickyPermission(interaction) {
+  const role = interaction.options.getRole('role');
+  const user = interaction.options.getUser('user');
+  if (!role && !user) return interaction.editReply('❌ Provide a `role` or a `user`.');
+  if (role && user) return interaction.editReply('❌ Provide only one of `role` or `user`, not both.');
+
+  const targetType = role ? 'role' : 'user';
+  const targetId = role ? role.id : user.id;
+
+  const res = await query(
+    `DELETE FROM sticky_permissions WHERE guild_id=$1 AND target_type=$2 AND target_id=$3 RETURNING id`,
+    [interaction.guildId, targetType, targetId]
+  );
+  if (!res.rows.length) return interaction.editReply(`❌ ${role ? `<@&${role.id}>` : `<@${user.id}>`} didn't have sticky permission.`);
+
+  return interaction.editReply(`✅ Revoked sticky permission from ${role ? `<@&${role.id}>` : `<@${user.id}>`}.`);
+}
+
+async function listStickyPermissions(interaction) {
+  const res = await query(`SELECT target_type, target_id FROM sticky_permissions WHERE guild_id=$1`, [interaction.guildId]);
+  if (!res.rows.length) return interaction.editReply('No extra roles/users have sticky permission — admins only for now.');
+
+  const lines = res.rows.map(r => r.target_type === 'role' ? `<@&${r.target_id}>` : `<@${r.target_id}>`).join('\n');
+  return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#d6c2ee').setTitle('📌 Sticky Permissions').setDescription(lines)] });
+}

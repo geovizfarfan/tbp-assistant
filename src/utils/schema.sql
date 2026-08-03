@@ -989,3 +989,12 @@ CREATE TABLE IF NOT EXISTS bug_reports (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS report_channel_id TEXT;
+
+-- Non-admin roles/users allowed to manage sticky messages
+CREATE TABLE IF NOT EXISTS sticky_permissions (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  target_type TEXT NOT NULL CHECK (target_type IN ('role','user')),
+  target_id TEXT NOT NULL,
+  UNIQUE (guild_id, target_type, target_id)
+);
