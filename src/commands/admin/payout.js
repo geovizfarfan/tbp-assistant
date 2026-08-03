@@ -40,7 +40,7 @@ module.exports = {
               mw.username as winner_username
        FROM raffles r
        LEFT JOIN member_wins mw ON mw.ref_id = r.id AND mw.type = 'raffle'
-       WHERE r.guild_id=$1 AND r.host_id=$2 AND r.payout_status != 'paid' AND r.status='ended'
+       WHERE r.guild_id=$1 AND r.host_id=$2 AND r.payout_status NOT IN ('paid','n/a','not_claimed') AND r.status='ended'
        ORDER BY r.ended_at DESC`,
       [interaction.guildId, targetId]
     );
