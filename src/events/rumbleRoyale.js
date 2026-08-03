@@ -362,11 +362,13 @@ async function handleMessage(message, client) {
     // Give reward and get updated balance — either real Sins (Play & Regret) or this
     // guild's own locally-tracked custom currency
     let walletBalance = null;
+    console.log(`[RumbleRoyale] Reward check — userId: ${userId}, reward_amount: ${JSON.stringify(config.reward_amount)}, guildCfg.use_sins: ${guildCfg.use_sins}`);
     if (userId && config.reward_amount) {
       try {
         if (guildCfg.use_sins) {
           const { adjustBalance } = require('../utils/playAndRegretDb');
           walletBalance = await adjustBalance(userId, username || 'Unknown', Number(config.reward_amount));
+          console.log(`[RumbleRoyale] Sins credited — new balance: ${walletBalance}`);
         } else {
           const res = await query(`
             INSERT INTO rr_custom_balances (guild_id, user_id, username, balance)
