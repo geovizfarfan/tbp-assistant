@@ -316,6 +316,8 @@ async function handleMessage(message, client) {
 
   // ── Battle End / Winner ───────────────────────────────────────────────────
   if (title.includes('WINNER')) {
+    const receivedAt = Date.now();
+    console.log(`[RumbleRoyale] WINNER message received at ${new Date(receivedAt).toISOString()} (Discord message timestamp: ${message.createdAt.toISOString()}) — channel ${message.channel.id}`);
     const parsed = parseWinnerEmbed(message);
     if (!parsed) return;
 
@@ -431,6 +433,7 @@ async function handleMessage(message, client) {
 
       if (member?.user) winEmbed.setThumbnail(member.user.displayAvatarURL({ dynamic: true }));
 
+      console.log(`[RumbleRoyale] About to send WINNER embed — ${Date.now() - receivedAt}ms elapsed since message was received.`);
       await message.channel.send({ embeds: [winEmbed] });
 
       const hostPing = config.last_host ? `<@${config.last_host}>` : winnerMention;
