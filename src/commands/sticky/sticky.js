@@ -2,6 +2,15 @@ const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('disc
 const { query } = require('../../utils/database');
 const { markExpected } = require('../../utils/stickyDeleteTracker');
 
+// If two messages land in the same channel within milliseconds of each
+// other, handleStickyRepost could run twice concurrently — both fetching
+// the same old message before either updates the DB, both deleting it,
+// both posting a new one. Only one gets tracked, the other is orphaned and
+// piles up forever. This lock makes sure only one repost cycle runs at a
+// time per channel; anything that arrives while one is in flight is skipped
+// (the message that triggered it already did its job of prompting a repost).
+const stickyRepostInProgress = new Set();
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('sticky')
@@ -140,6 +149,10 @@ module.exports = {
     if (message.author.bot) return;
     if (!message.guild) return;
 
+    const lockKey = `${message.guild.id}:${message.channel.id}`;
+    if (stickyRepostInProgress.has(lockKey)) return; // a repost cycle for this channel is already running
+    stickyRepostInProgress.add(lockKey);
+
     try {
       const res = await query(
         'SELECT * FROM sticky_messages WHERE guild_id = $1 AND channel_id = $2',
@@ -151,7 +164,10 @@ module.exports = {
 
       // Delete old sticky message
       const oldMsg = await message.channel.messages.fetch(sticky.message_id).catch(() => null);
-      if (oldMsg) { markExpected(oldMsg.id); await oldMsg.delete().catch(() => {}); }
+      if (oldMsg) {
+        markExpected(oldMsg.id);
+        await oldMsg.delete().catch(err => console.error(`[Sticky] Failed to delete old message ${oldMsg.id} in channel ${message.channel.id}:`, err.message));
+      }
 
       // Repost
       const embed = new EmbedBuilder().setColor(sticky.color || '#d6c2ee').setDescription(sticky.content);
@@ -162,7 +178,11 @@ module.exports = {
       // Update stored message ID
       await query('UPDATE sticky_messages SET message_id = $1 WHERE guild_id = $2 AND channel_id = $3',
         [newMsg.id, message.guild.id, message.channel.id]);
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      console.error(`[Sticky] Repost cycle failed in channel ${message.channel.id}:`, e.message);
+    } finally {
+      stickyRepostInProgress.delete(lockKey);
+    }
   },
 };
 
