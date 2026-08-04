@@ -69,6 +69,17 @@ async function checkGoosDate(client) {
     for (const cfg of cfgRes.rows) {
       if (cfg.last_sent_minute_key === minuteKey) continue; // already sent this exact slot
 
+      // Atomic claim: only proceeds if we're the one who successfully flips
+      // last_sent_minute_key first. If another process (or an overlapping
+      // loop from a container restart) already claimed this slot, rowCount
+      // will be 0 and we skip sending — guarantees exactly one sender wins
+      // even if this function somehow runs more than once at the same time.
+      const claim = await query(
+        `UPDATE goosdate_config SET last_sent_minute_key=$1 WHERE guild_id=$2 AND last_sent_minute_key IS DISTINCT FROM $1`,
+        [minuteKey, cfg.guild_id]
+      );
+      if (claim.rowCount === 0) continue;
+
       try {
         const channel = await client.channels.fetch(cfg.channel_id);
         await channel.send({
@@ -80,7 +91,6 @@ async function checkGoosDate(client) {
             color: 0x7F36F5,
           }],
         });
-        await query(`UPDATE goosdate_config SET last_sent_minute_key=$1 WHERE guild_id=$2`, [minuteKey, cfg.guild_id]);
         console.log('[GoosDate] Sent reminder for', cfg.guild_id, 'at', minuteKey);
       } catch (err) {
         console.error('[GoosDate] Failed to send for guild', cfg.guild_id, '-', err.message);
