@@ -31,6 +31,17 @@ async function handleMessageXp(message, client) {
       xp = $4, level = $5, username = $3, last_xp_at = NOW()
   `, [guildId, message.author.id, message.author.username, newTotalXp, newLevel]);
 
+  if (newLevel > oldLevel) {
+    // A level-up can newly qualify (or disqualify, if capped) someone for a
+    // Wheel Roles campaign with a level requirement — role changes trigger
+    // this separately, but nothing else watches for level changes.
+    try {
+      const { recheckCampaignsForMember } = require('../commands/wheel/wheel');
+      const member = await message.guild.members.fetch(message.author.id).catch(() => null);
+      if (member) await recheckCampaignsForMember(client, member);
+    } catch (err) { console.error('[LevelXp] wheel campaign recheck error:', err.message); }
+  }
+
   if (newLevel > oldLevel && config.announce_levelup) {
     const tier = getTier(newLevel);
     const embed = new EmbedBuilder()

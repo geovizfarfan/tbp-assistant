@@ -198,6 +198,8 @@ CREATE TABLE IF NOT EXISTS giveaway_events (
 );
 ALTER TABLE giveaway_events ADD COLUMN IF NOT EXISTS required_role_ids TEXT[];
 ALTER TABLE giveaway_events ADD COLUMN IF NOT EXISTS board_message_id TEXT;
+ALTER TABLE giveaway_events ADD COLUMN IF NOT EXISTS min_level INT;
+ALTER TABLE giveaway_events ADD COLUMN IF NOT EXISTS max_level INT;
 
 -- Game logs
 CREATE TABLE IF NOT EXISTS game_logs (
@@ -450,6 +452,8 @@ ALTER TABLE wheel_role_campaigns ADD COLUMN IF NOT EXISTS host_id TEXT;
 -- mode — used so ending a season can auto-end any campaign linked to it.
 ALTER TABLE wheel_role_campaigns ADD COLUMN IF NOT EXISTS source_season_ids INTEGER[];
 ALTER TABLE wheel_role_campaigns ADD COLUMN IF NOT EXISTS board_message_id TEXT;
+ALTER TABLE wheel_role_campaigns ADD COLUMN IF NOT EXISTS min_level INT;
+ALTER TABLE wheel_role_campaigns ADD COLUMN IF NOT EXISTS max_level INT;
 
 CREATE TABLE IF NOT EXISTS wheel_role_campaign_entries (
   id SERIAL PRIMARY KEY,

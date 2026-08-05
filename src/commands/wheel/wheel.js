@@ -199,7 +199,9 @@ module.exports = {
         .addStringOption(o => o.setName('additional_seasons').setDescription('More seasons (comma-separated names) - qualifies by completing ANY one of them'))
         .addStringOption(o => o.setName('roles').setDescription('Or type @ to mention roles manually (skip if using season)'))
         .addBooleanOption(o => o.setName('auto_signup').setDescription('Auto-enter members who have any of these roles (default: True)'))
-        .addBooleanOption(o => o.setName('extra_entries').setDescription('Stack an extra entry per additional qualifying role (default: False)')))
+        .addBooleanOption(o => o.setName('extra_entries').setDescription('Stack an extra entry per additional qualifying role (default: False)'))
+        .addIntegerOption(o => o.setName('min_level').setDescription('Minimum level required to qualify'))
+        .addIntegerOption(o => o.setName('max_level').setDescription('Maximum level allowed to qualify')))
       .addSubcommand(sub => sub
         .setName('list')
         .setDescription('List all campaigns, or view one campaign\'s entries')
@@ -509,6 +511,12 @@ async function campaignCreate(interaction) {
   const rolesRaw = interaction.options.getString('roles');
   const autoSignup = interaction.options.getBoolean('auto_signup') ?? true;
   const extraEntries = interaction.options.getBoolean('extra_entries') ?? false;
+  const minLevel = interaction.options.getInteger('min_level');
+  const maxLevel = interaction.options.getInteger('max_level');
+
+  if (minLevel !== null && maxLevel !== null && minLevel > maxLevel) {
+    return interaction.editReply(`${e('wrong')} \`min_level\` can't be higher than \`max_level\`.`);
+  }
 
   if (!seasonName && !rolesRaw) {
     return interaction.editReply(`${e('wrong')} Pick a \`season\` to pull roles from, or type \`roles\` manually.`);
@@ -565,19 +573,22 @@ async function campaignCreate(interaction) {
   if (existing.rows.length) return interaction.editReply(`${e('wrong')} A campaign named **${name}** already exists.`);
 
   await query(
-    `INSERT INTO wheel_role_campaigns (guild_id, name, role_ids, auto_signup, extra_entries_allowed, created_by, qualify_mode, qualify_season_ids, source_season_ids)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-    [interaction.guildId, name, roleIds, autoSignup, extraEntries, interaction.user.id, qualifyMode, qualifySeasonIds, sourceSeasonIds]
+    `INSERT INTO wheel_role_campaigns (guild_id, name, role_ids, auto_signup, extra_entries_allowed, created_by, qualify_mode, qualify_season_ids, source_season_ids, min_level, max_level)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    [interaction.guildId, name, roleIds, autoSignup, extraEntries, interaction.user.id, qualifyMode, qualifySeasonIds, sourceSeasonIds, minLevel, maxLevel]
   );
 
   const roleLines = roleIds.map(id => `<@&${id}>`).join(', ');
   const qualifyExplainer = qualifyMode === 'full_season'
     ? `Must have **ALL** winner roles from ${qualifySeasonIds.length > 1 ? 'ANY ONE of the selected seasons' : 'this season'} to qualify.`
     : 'Qualifies with any ONE of these roles.';
+  const levelExplainer = minLevel !== null || maxLevel !== null
+    ? `\nLevel requirement: **${minLevel !== null && maxLevel !== null ? `${minLevel}–${maxLevel}` : minLevel !== null ? `${minLevel}+` : `${maxLevel} or under`}**`
+    : '';
 
   return interaction.editReply(
     `${e('checkmark')} Campaign **${name}** created${seasonName ? ` from season${qualifySeasonIds?.length > 1 ? 's' : ''} **${seasonName}${additionalSeasonsRaw ? `, ${additionalSeasonsRaw}` : ''}**` : ''} — roles involved: ${roleLines}\n` +
-    `${qualifyExplainer}\n` +
+    `${qualifyExplainer}${levelExplainer}\n` +
     `Auto-signup: **${autoSignup ? 'On' : 'Off'}** — Extra entries per extra role: **${extraEntries ? 'On' : 'Off'}**\n` +
     (autoSignup ? 'Qualifying members will be entered automatically going forward.' : 'Auto-signup is off — entries only happen through linked Rumble seasons.')
   );
@@ -795,8 +806,9 @@ async function handleCampaignReactionAdd(reaction, user) {
   }
 
   await reaction.users.remove(user.id).catch(() => {});
+  const levelNote = (camp.min_level !== null || camp.max_level !== null) ? ' and/or level requirement' : '';
   const notice = await reaction.message.channel.send({
-    content: `${e('wrong')} <@${user.id}> you don't qualify for **${camp.name}** yet — check the roles listed above.`,
+    content: `${e('wrong')} <@${user.id}> you don't qualify for **${camp.name}** yet — check the role${levelNote} listed above.`,
   }).catch(() => null);
   if (notice) setTimeout(() => notice.delete().catch(() => {}), 8000);
 }
@@ -889,28 +901,31 @@ async function checkCampaignQualification(camp, member) {
     quantity = camp.extra_entries_allowed ? Math.max(matchedRoles.length, 1) : 1;
   }
 
+  // Level requirement (if set) applies on top of whatever role check already
+  // ran above — both must pass.
+  if (qualifies && (camp.min_level !== null || camp.max_level !== null)) {
+    const levelRes = await query(`SELECT level FROM levels WHERE guild_id=$1 AND user_id=$2`, [camp.guild_id, member.id]);
+    const currentLevel = levelRes.rows[0]?.level ?? 0;
+    if (camp.min_level !== null && currentLevel < camp.min_level) qualifies = false;
+    if (camp.max_level !== null && currentLevel > camp.max_level) qualifies = false;
+  }
+
   return { qualifies, quantity };
 }
 
-async function checkAutoSignupCampaigns(client, oldMember, newMember) {
-  // Skip entirely if roles didn't actually change (nickname/boost/etc updates
-  // also fire guildMemberUpdate) — avoids a DB round-trip on every unrelated update.
-  const oldIds = oldMember.roles.cache;
-  const newIds = newMember.roles.cache;
-  if (oldIds.size === newIds.size && oldIds.every((_, id) => newIds.has(id))) return;
-
+async function recheckCampaignsForMember(client, member) {
   const campRes = await query(
     `SELECT * FROM wheel_role_campaigns WHERE guild_id=$1 AND status='active' AND auto_signup=true`,
-    [newMember.guild.id]
+    [member.guild.id]
   );
   if (!campRes.rows.length) return;
 
   for (const camp of campRes.rows) {
-    const { qualifies, quantity } = await checkCampaignQualification(camp, newMember);
+    const { qualifies, quantity } = await checkCampaignQualification(camp, member);
 
     const existingRes = await query(
       `SELECT currently_qualified FROM wheel_role_campaign_entries WHERE campaign_id=$1 AND user_id=$2`,
-      [camp.id, newMember.id]
+      [camp.id, member.id]
     );
     const wasQualified = existingRes.rows[0]?.currently_qualified ?? null; // null = no entry existed yet
     const changed = qualifies !== wasQualified;
@@ -921,12 +936,12 @@ async function checkAutoSignupCampaigns(client, oldMember, newMember) {
          VALUES ($1,$2,$3,true,NOW())
          ON CONFLICT (campaign_id, user_id) DO UPDATE SET
            quantity = $3, currently_qualified = true, last_qualified_at = NOW()`,
-        [camp.id, newMember.id, quantity]
+        [camp.id, member.id, quantity]
       ).catch(() => {});
     } else if (wasQualified) {
       await query(
         `UPDATE wheel_role_campaign_entries SET currently_qualified=false WHERE campaign_id=$1 AND user_id=$2`,
-        [camp.id, newMember.id]
+        [camp.id, member.id]
       ).catch(() => {});
     }
 
@@ -936,6 +951,16 @@ async function checkAutoSignupCampaigns(client, oldMember, newMember) {
       if (message) await updateCampaignWheelPreview(message, camp);
     }
   }
+}
+
+async function checkAutoSignupCampaigns(client, oldMember, newMember) {
+  // Skip entirely if roles didn't actually change (nickname/boost/etc updates
+  // also fire guildMemberUpdate) — avoids a DB round-trip on every unrelated update.
+  const oldIds = oldMember.roles.cache;
+  const newIds = newMember.roles.cache;
+  if (oldIds.size === newIds.size && oldIds.every((_, id) => newIds.has(id))) return;
+
+  await recheckCampaignsForMember(client, newMember);
 }
 
 async function roleBonusAdd(interaction) {
@@ -1101,6 +1126,7 @@ async function spinCombo(interaction) {
 }
 
 module.exports.checkAutoSignupCampaigns = checkAutoSignupCampaigns;
+module.exports.recheckCampaignsForMember = recheckCampaignsForMember;
 module.exports.handleCampaignReactionAdd = handleCampaignReactionAdd;
 module.exports.handleCampaignReactionRemove = handleCampaignReactionRemove;
 module.exports.markCampaignMessageEnded = markCampaignMessageEnded;

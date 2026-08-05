@@ -91,6 +91,12 @@ module.exports = {
         ON CONFLICT (guild_id, user_id) DO UPDATE SET xp = $4, level = $5, username = $3
       `, [interaction.guildId, user.id, user.username, totalXp, level]);
 
+      try {
+        const { recheckCampaignsForMember } = require('../wheel/wheel');
+        const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+        if (member) await recheckCampaignsForMember(interaction.client, member);
+      } catch (err) { console.error('[Level] wheel campaign recheck error:', err.message); }
+
       return interaction.editReply(`<:levelup:1532907741859807283> Set <@${user.id}> to **Level ${level}**.`);
     }
 

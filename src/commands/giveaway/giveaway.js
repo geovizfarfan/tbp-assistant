@@ -27,7 +27,9 @@ module.exports = {
       .addStringOption(o => o.setName('entry_emoji').setDescription('Emoji members react with to enter (default: 🎉)'))
       .addChannelOption(o => o.setName('channel').setDescription('Channel to post in (default: current channel)'))
       .addIntegerOption(o => o.setName('claim_hours').setDescription('Hours winner has to open a ticket and claim (default: server setting)'))
-      .addChannelOption(o => o.setName('ticket_channel').setDescription('Channel winner should open a ticket in to claim')))
+      .addChannelOption(o => o.setName('ticket_channel').setDescription('Channel winner should open a ticket in to claim'))
+      .addIntegerOption(o => o.setName('min_level').setDescription('Minimum level required to enter'))
+      .addIntegerOption(o => o.setName('max_level').setDescription('Maximum level allowed to enter')))
 
     .addSubcommand(sub => sub
       .setName('end')
@@ -206,6 +208,11 @@ function buildGiveawayEmbed(gw, bonusRoles = [], ended = false, winnerIds = null
     lines.push(`${e('member')} **Hosted by:** <@${gw.host_id}>`);
     lines.push(`${e('role')} **Ends:** ${tsF(gw.ends_at)} (${tsR(gw.ends_at)})`);
     if (gw.required_role_ids?.length) lines.push(`${e('rules')} **Requirement:** Must have all of ${gw.required_role_ids.map(id => `<@&${id}>`).join(', ')}`);
+    if (gw.min_level !== null || gw.max_level !== null) {
+      const levelReq = gw.min_level !== null && gw.max_level !== null ? `Level ${gw.min_level}–${gw.max_level}`
+        : gw.min_level !== null ? `Level ${gw.min_level}+` : `Level ${gw.max_level} or under`;
+      lines.push(`${e('trophies')} **Level Requirement:** ${levelReq}`);
+    }
     if (bonusRoles.length) {
       lines.push(`${e('purplesparkle')} **Bonus Entries:**`);
       for (const r of bonusRoles) lines.push(`-# ・<@&${r.role_id}> (+${r.bonus_entries})`);
@@ -275,6 +282,17 @@ async function handleCheckEntriesButton(interaction) {
   if (gw.required_role_ids?.length && !gw.required_role_ids.every(rid => interaction.member.roles.cache.has(rid))) {
     const missing = gw.required_role_ids.filter(rid => !interaction.member.roles.cache.has(rid));
     return interaction.editReply(`${e('wrong')} You've reacted, but you're missing required role(s): ${missing.map(rid => `<@&${rid}>`).join(', ')} — you won't be included in the draw.`);
+  }
+
+  if (gw.min_level !== null || gw.max_level !== null) {
+    const levelRes = await query(`SELECT level FROM levels WHERE guild_id=$1 AND user_id=$2`, [gw.guild_id, interaction.user.id]);
+    const currentLevel = levelRes.rows[0]?.level ?? 0;
+    if (gw.min_level !== null && currentLevel < gw.min_level) {
+      return interaction.editReply(`${e('wrong')} You've reacted, but you need to be level ${gw.min_level}+ (you're level ${currentLevel}) — you won't be included in the draw.`);
+    }
+    if (gw.max_level !== null && currentLevel > gw.max_level) {
+      return interaction.editReply(`${e('wrong')} You've reacted, but this giveaway is capped at level ${gw.max_level} (you're level ${currentLevel}) — you won't be included in the draw.`);
+    }
   }
 
   let tickets = 1;
@@ -354,6 +372,12 @@ async function buildWeightedEntrants(guild, users, gw) {
   const weighted = [];
   const ineligible = [];
 
+  let levelMap = new Map();
+  if (gw.min_level !== null || gw.max_level !== null) {
+    const levelsRes = await query(`SELECT user_id, level FROM levels WHERE guild_id=$1 AND user_id = ANY($2)`, [gw.guild_id, users.map(u => u.id)]);
+    levelMap = new Map(levelsRes.rows.map(r => [r.user_id, r.level]));
+  }
+
   for (const user of users) {
     const member = await guild.members.fetch(user.id).catch(() => null);
     if (!member) continue;
@@ -361,6 +385,14 @@ async function buildWeightedEntrants(guild, users, gw) {
     if (gw.required_role_ids?.length && !gw.required_role_ids.every(id => member.roles.cache.has(id))) {
       ineligible.push(user.id);
       continue;
+    }
+
+    if (gw.min_level !== null || gw.max_level !== null) {
+      const currentLevel = levelMap.get(user.id) ?? 0;
+      if ((gw.min_level !== null && currentLevel < gw.min_level) || (gw.max_level !== null && currentLevel > gw.max_level)) {
+        ineligible.push(user.id);
+        continue;
+      }
     }
 
     let tickets = 1;
@@ -499,6 +531,12 @@ async function startGiveaway(interaction) {
   const ticketChannel = interaction.options.getChannel('ticket_channel');
   let claimHours      = interaction.options.getInteger('claim_hours');
   const channel       = interaction.options.getChannel('channel') || interaction.channel;
+  const minLevel       = interaction.options.getInteger('min_level');
+  const maxLevel       = interaction.options.getInteger('max_level');
+
+  if (minLevel !== null && maxLevel !== null && minLevel > maxLevel) {
+    return interaction.reply({ content: `${e('wrong')} \`min_level\` can't be higher than \`max_level\`.`, ephemeral: true });
+  }
 
   if (durationAmt <= 0) return interaction.reply({ content: `${e('wrong')} Duration must be greater than 0.`, ephemeral: true });
   if (winnersCount <= 0) return interaction.reply({ content: `${e('wrong')} Winners must be at least 1.`, ephemeral: true });
@@ -580,10 +618,10 @@ async function startGiveaway(interaction) {
   const endsAt = new Date(Date.now() + ms);
 
   const res = await query(
-    `INSERT INTO giveaway_events (guild_id, channel_id, host_id, prize, winners_count, thumbnail_url, required_role_ids, bonus_role_ids, entry_emoji, claim_hours, ticket_channel_id, ends_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+    `INSERT INTO giveaway_events (guild_id, channel_id, host_id, prize, winners_count, thumbnail_url, required_role_ids, bonus_role_ids, entry_emoji, claim_hours, ticket_channel_id, ends_at, min_level, max_level)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
     [interaction.guildId, channel.id, interaction.user.id, prize, winnersCount,
-      thumbnail?.url || null, requiredRoleIds, chosenBonusRoles, entryEmoji, claimHours, ticketChannel?.id || null, endsAt]
+      thumbnail?.url || null, requiredRoleIds, chosenBonusRoles, entryEmoji, claimHours, ticketChannel?.id || null, endsAt, minLevel, maxLevel]
   );
   const gw = res.rows[0];
 
@@ -805,19 +843,35 @@ async function handleGiveawayReactionAdd(reaction, user) {
     [reaction.message.guild.id, reaction.message.id]
   );
   const gw = gwRes.rows[0];
-  if (!gw || !gw.required_role_ids?.length) return;
+  if (!gw) return;
+  if (!gw.required_role_ids?.length && gw.min_level === null && gw.max_level === null) return;
 
   const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);
   if (!member) return;
 
-  const missing = gw.required_role_ids.filter(rid => !member.roles.cache.has(rid));
-  if (!missing.length) return; // qualifies, leave the reaction alone
+  const reasons = [];
+
+  if (gw.required_role_ids?.length) {
+    const missing = gw.required_role_ids.filter(rid => !member.roles.cache.has(rid));
+    if (missing.length) {
+      const missingLines = missing.map(rid => reaction.message.guild.roles.cache.get(rid)?.name || 'a required role').join(', ');
+      reasons.push(`missing: ${missingLines}`);
+    }
+  }
+
+  if (gw.min_level !== null || gw.max_level !== null) {
+    const levelRes = await query(`SELECT level FROM levels WHERE guild_id=$1 AND user_id=$2`, [reaction.message.guild.id, user.id]);
+    const currentLevel = levelRes.rows[0]?.level ?? 0;
+    if (gw.min_level !== null && currentLevel < gw.min_level) reasons.push(`need level ${gw.min_level}+ (you're level ${currentLevel})`);
+    else if (gw.max_level !== null && currentLevel > gw.max_level) reasons.push(`this giveaway is capped at level ${gw.max_level} (you're level ${currentLevel})`);
+  }
+
+  if (!reasons.length) return; // qualifies, leave the reaction alone
 
   await reaction.users.remove(user.id).catch(() => {});
 
-  const missingLines = missing.map(rid => reaction.message.guild.roles.cache.get(rid)?.name || 'a required role').join(', ');
   const notice = await reaction.message.channel.send({
-    content: `${e('wrong')} <@${user.id}> you can't enter this giveaway — you're missing: ${missingLines}.`,
+    content: `${e('wrong')} <@${user.id}> you can't enter this giveaway — ${reasons.join('; ')}.`,
   }).catch(() => null);
   if (notice) setTimeout(() => notice.delete().catch(() => {}), 8000);
 }
