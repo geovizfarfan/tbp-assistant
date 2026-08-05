@@ -190,6 +190,20 @@ client.once('ready', async () => {
     console.log('[Giveaway] Restored active giveaway timers.');
   } catch(e) { console.error('[Giveaway] restore error:', e.message); }
 
+  try {
+    const { query: q } = require('./utils/database');
+    const pendingRes = await q('SELECT * FROM pending_ping_deletions', []);
+    for (const row of pendingRes.rows) {
+      const remainingMs = new Date(row.delete_at).getTime() - Date.now();
+      if (remainingMs <= 0) {
+        executePingDeletion(client, row.message_id, row.channel_id, row.guild_id);
+      } else {
+        setTimeout(() => executePingDeletion(client, row.message_id, row.channel_id, row.guild_id), remainingMs);
+      }
+    }
+    console.log(`[PingCleanup] Restored ${pendingRes.rows.length} pending deletion(s).`);
+  } catch (e) { console.error('[PingCleanup] restore error:', e.message); }
+
   startReminderLoop(client);
   startAutoPayrollLoop(client);
   const { startPrivateRoomCleanupLoop } = require('./utils/privateRooms');
@@ -1084,7 +1098,23 @@ client.on('messageCreate', async (message) => {
 // Ping cleanup — deletes a BARE ping message (a mention, no embed) from
 // another bot in a configured channel, after a fixed delay. A message with
 // an embed is assumed to be the "main" content and is never touched, even
-// if it also contains a mention.
+// if it also contains a mention. The pending deletion is persisted to the
+// DB (not just an in-memory setTimeout) so a bot restart mid-delay — which
+// happens on every deploy — doesn't silently lose the scheduled deletion.
+async function executePingDeletion(client, messageId, channelId, guildId) {
+  try {
+    const { query } = require('./utils/database');
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (channel) {
+      const msg = await channel.messages.fetch(messageId).catch(() => null);
+      if (msg) await msg.delete();
+    }
+    await query(`DELETE FROM pending_ping_deletions WHERE message_id=$1`, [messageId]).catch(() => {});
+  } catch (err) {
+    console.error(`[PingCleanup] Failed to delete message ${messageId} in channel ${channelId}:`, err.message);
+  }
+}
+
 client.on('messageCreate', async (message) => {
   if (!message.author.bot || message.author.id === client.user.id || !message.guild) return;
   if (message.embeds.length > 0) return; // has an embed — that's the main message, leave it
@@ -1094,7 +1124,13 @@ client.on('messageCreate', async (message) => {
     const res = await query(`SELECT delay_seconds FROM ping_cleanup_config WHERE guild_id=$1 AND channel_id=$2`, [message.guild.id, message.channel.id]);
     if (!res.rows.length) return;
     const delayMs = res.rows[0].delay_seconds * 1000;
-    setTimeout(() => message.delete().catch(() => {}), delayMs);
+    const deleteAt = new Date(Date.now() + delayMs);
+    await query(
+      `INSERT INTO pending_ping_deletions (message_id, channel_id, guild_id, delete_at) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (message_id) DO NOTHING`,
+      [message.id, message.channel.id, message.guild.id, deleteAt]
+    );
+    setTimeout(() => executePingDeletion(client, message.id, message.channel.id, message.guild.id), delayMs);
   } catch (err) { console.error('[PingCleanup] error:', err.message); }
 });
 

@@ -1067,3 +1067,13 @@ CREATE TABLE IF NOT EXISTS currency_transactions (
   new_balance NUMERIC,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Pending ping-cleanup deletions, persisted so a bot restart mid-delay
+-- doesn't silently lose the scheduled deletion (setTimeout alone doesn't
+-- survive a process restart).
+CREATE TABLE IF NOT EXISTS pending_ping_deletions (
+  message_id TEXT PRIMARY KEY,
+  channel_id TEXT NOT NULL,
+  guild_id TEXT NOT NULL,
+  delete_at TIMESTAMPTZ NOT NULL
+);
