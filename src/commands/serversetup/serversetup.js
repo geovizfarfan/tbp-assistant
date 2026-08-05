@@ -1054,8 +1054,10 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
     const name = interaction.fields.getTextInputValue('name');
     const wheelCampaign = interaction.fields.getTextInputValue('wheel_campaign') || null;
+    const resetRolesRaw = interaction.fields.getTextInputValue('reset_roles')?.trim().toLowerCase();
+    const resetRoles = resetRolesRaw === 'no' ? false : true;
     const { startSeasonCore } = require('../rumbleseasons/rumbleseasons');
-    const result = await startSeasonCore(interaction, name, wheelCampaign);
+    const result = await startSeasonCore(interaction, name, wheelCampaign, resetRoles);
     if (result.error) return interaction.editReply(result.error);
     return interaction.editReply({ embeds: [result.embed] });
   },
@@ -1170,6 +1172,28 @@ module.exports = {
     const wheelCampaign = interaction.fields.getTextInputValue('wheel_campaign') || null;
     const { linkSeasonCore } = require('../rumbleseasons/rumbleseasons');
     const result = await linkSeasonCore(interaction, seasonName, wheelCampaign);
+    if (result.error) return interaction.editReply(result.error);
+    return interaction.editReply(result.text);
+  },
+
+  async handleSeasonResetRolesPicked(interaction) {
+    const seasonName = interaction.values[0];
+    if (seasonName === 'none') return interaction.update({ content: 'No active seasons.', embeds: [], components: [] });
+
+    const modal = new ModalBuilder().setCustomId(`serversetup_seasonresetrolesmodal:${encodeURIComponent(seasonName)}`).setTitle(`Reset Roles — ${seasonName}`.slice(0, 45));
+    const resetInput = new TextInputBuilder().setCustomId('reset_roles').setLabel('Reset roles on completion? yes/no').setStyle(TextInputStyle.Short).setRequired(true).setValue('yes');
+    modal.addComponents(new ActionRowBuilder().addComponents(resetInput));
+    return interaction.showModal(modal);
+  },
+
+  async handleSeasonResetRolesModal(interaction) {
+    const [, encodedName] = interaction.customId.split(':');
+    const seasonName = decodeURIComponent(encodedName);
+    await interaction.deferReply({ ephemeral: true });
+    const raw = interaction.fields.getTextInputValue('reset_roles').trim().toLowerCase();
+    const resetRoles = raw !== 'no';
+    const { resetRolesSettingCore } = require('../rumbleseasons/rumbleseasons');
+    const result = await resetRolesSettingCore(interaction, seasonName, resetRoles);
     if (result.error) return interaction.editReply(result.error);
     return interaction.editReply(result.text);
   },
@@ -1938,9 +1962,11 @@ module.exports = {
       const modal = new ModalBuilder().setCustomId('serversetup_seasonstartmodal').setTitle('Start Season');
       const nameInput = new TextInputBuilder().setCustomId('name').setLabel('Season name').setStyle(TextInputStyle.Short).setRequired(true);
       const campaignInput = new TextInputBuilder().setCustomId('wheel_campaign').setLabel('Wheel Roles campaign (optional)').setStyle(TextInputStyle.Short).setRequired(false);
+      const resetInput = new TextInputBuilder().setCustomId('reset_roles').setLabel('Reset roles on completion? yes/no').setStyle(TextInputStyle.Short).setRequired(false).setValue('yes');
       modal.addComponents(
         new ActionRowBuilder().addComponents(nameInput),
         new ActionRowBuilder().addComponents(campaignInput),
+        new ActionRowBuilder().addComponents(resetInput),
       );
       return interaction.showModal(modal);
     }
@@ -1981,6 +2007,14 @@ module.exports = {
       const row = await buildSeasonSelectMenu(interaction.guildId, 'serversetup_seasonlinkpick', 'Pick a season');
       return interaction.update({
         embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick which season to link (or unlink) a Wheel Roles campaign for:')],
+        components: [row, buildBackButton()],
+      });
+    }
+
+    if (action === 'seasonresetroles') {
+      const row = await buildSeasonSelectMenu(interaction.guildId, 'serversetup_seasonresetrolespick', 'Pick a season');
+      return interaction.update({
+        embeds: [new EmbedBuilder().setColor('#d6c2ee').setDescription('Pick which season to change the role-reset setting for:')],
         components: [row, buildBackButton()],
       });
     }
@@ -2553,6 +2587,7 @@ function buildRumbleButtons3() {
     new ButtonBuilder().setCustomId('serversetup_gset:seasonaddchan').setLabel('Add Channel to Season').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('serversetup_gset:seasonremovechan').setLabel('Remove Channel from Season').setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId('serversetup_gset:seasonlink').setLabel('Link Wheel Campaign').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('serversetup_gset:seasonresetroles').setLabel('Reset Roles Setting').setStyle(ButtonStyle.Secondary),
   );
 }
 

@@ -8,7 +8,7 @@ async function getLogChannel(client, guildId, type = 'admin') {
   return id ? (await client.channels.fetch(id).catch(() => null)) : null;
 }
 
-async function startSeasonCore(interaction, name, wheelCampaignName) {
+async function startSeasonCore(interaction, name, wheelCampaignName, resetRoles = true) {
   const existing = await query('SELECT id FROM rr_seasons WHERE guild_id=$1 AND name=$2 AND status=$3', [interaction.guildId, name, 'active']);
   if (existing.rows.length) {
     return { error: `❌ A season named **${name}** is already active. Pick a different name, or end it first.` };
@@ -21,12 +21,12 @@ async function startSeasonCore(interaction, name, wheelCampaignName) {
     wheelCampaignId = campRes.rows[0].id;
   }
 
-  await query('INSERT INTO rr_seasons (guild_id, name, status, linked_wheel_campaign_id) VALUES ($1, $2, $3, $4) RETURNING id', [interaction.guildId, name, 'active', wheelCampaignId]);
+  await query('INSERT INTO rr_seasons (guild_id, name, status, linked_wheel_campaign_id, reset_roles_on_completion) VALUES ($1, $2, $3, $4, $5) RETURNING id', [interaction.guildId, name, 'active', wheelCampaignId, resetRoles]);
 
   const adminLog = await getLogChannel(interaction.client, interaction.guildId, 'admin');
   const embed = new EmbedBuilder().setColor('#d6c2ee')
     .setTitle('<:rumble:1522372419338375299> New Season Started!')
-    .setDescription(`**${name}** has begun! Add channels to it from Rumble Setup.\n\nOther active seasons keep running independently — this doesn't affect them.${wheelCampaignName ? `\n\n🎡 Completing this season will auto-enter members into Wheel Roles campaign **${wheelCampaignName}**.` : ''}`)
+    .setDescription(`**${name}** has begun! Add channels to it from Rumble Setup.\n\nOther active seasons keep running independently — this doesn't affect them.${wheelCampaignName ? `\n\n🎡 Completing this season will auto-enter members into Wheel Roles campaign **${wheelCampaignName}**.` : ''}${!resetRoles ? `\n\n🔒 Winner roles are **kept** on completion, not reset.` : ''}`)
     .setTimestamp().setFooter({ text: interaction.guild.name });
   if (adminLog) await adminLog.send({ embeds: [embed] }).catch(() => {});
   return { embed };
@@ -47,6 +47,19 @@ async function linkSeasonCore(interaction, seasonName, wheelCampaignName) {
 
   await query('UPDATE rr_seasons SET linked_wheel_campaign_id = $1 WHERE id = $2', [campRes.rows[0].id, season.id]);
   return { text: `✅ **${seasonName}** now auto-enters members into Wheel Roles campaign **${wheelCampaignName}** when they complete it.` };
+}
+
+async function resetRolesSettingCore(interaction, seasonName, resetRoles) {
+  const seasonRes = await query('SELECT * FROM rr_seasons WHERE guild_id=$1 AND name=$2 AND status=$3', [interaction.guildId, seasonName, 'active']);
+  const season = seasonRes.rows[0];
+  if (!season) return { error: `❌ No active season named **${seasonName}**.` };
+
+  await query('UPDATE rr_seasons SET reset_roles_on_completion = $1 WHERE id = $2', [resetRoles, season.id]);
+  return {
+    text: resetRoles
+      ? `✅ **${seasonName}** will remove winner roles from members when they next complete it.`
+      : `✅ **${seasonName}** will now keep winner roles on members when they complete it — this doesn't retroactively restore roles already removed from a past completion, only affects what happens going forward.`
+  };
 }
 
 async function addChannelCore(interaction, seasonName, channel) {
@@ -184,12 +197,18 @@ module.exports = {
         .setName('start')
         .setDescription('Start a new season — doesn\'t require ending any other active season')
         .addStringOption(o => o.setName('name').setDescription('Season name').setRequired(true))
-        .addStringOption(o => o.setName('wheel_campaign').setDescription('Wheel Roles campaign to auto-enter members into when they complete this season').setAutocomplete(true)))
+        .addStringOption(o => o.setName('wheel_campaign').setDescription('Wheel Roles campaign to auto-enter members into when they complete this season').setAutocomplete(true))
+        .addBooleanOption(o => o.setName('reset_roles').setDescription('Remove winner roles on completion? Off keeps wheel-linked members qualified (default: True)')))
       .addSubcommand(sub => sub
         .setName('link')
         .setDescription('Link (or unlink) a season to a Wheel Roles campaign')
         .addStringOption(o => o.setName('season').setDescription('Season name').setRequired(true).setAutocomplete(true))
         .addStringOption(o => o.setName('wheel_campaign').setDescription('Campaign name (leave blank to unlink)').setAutocomplete(true)))
+      .addSubcommand(sub => sub
+        .setName('reset-roles')
+        .setDescription('Change whether an existing season removes winner roles on completion')
+        .addStringOption(o => o.setName('season').setDescription('Season name').setRequired(true).setAutocomplete(true))
+        .addBooleanOption(o => o.setName('reset_roles').setDescription('Remove winner roles on completion? Off keeps members qualified for a wheel').setRequired(true)))
       .addSubcommand(sub => sub
         .setName('add')
         .setDescription('Add a channel to a season')
@@ -240,7 +259,8 @@ module.exports = {
     if (sub === 'start') {
       const name = interaction.options.getString('name');
       const wheelCampaignName = interaction.options.getString('wheel_campaign');
-      const result = await startSeasonCore(interaction, name, wheelCampaignName);
+      const resetRoles = interaction.options.getBoolean('reset_roles');
+      const result = await startSeasonCore(interaction, name, wheelCampaignName, resetRoles === null ? true : resetRoles);
       if (result.error) return interaction.editReply(result.error);
       return interaction.editReply({ embeds: [result.embed] });
     }
@@ -249,6 +269,14 @@ module.exports = {
       const seasonName = interaction.options.getString('season');
       const wheelCampaignName = interaction.options.getString('wheel_campaign');
       const result = await linkSeasonCore(interaction, seasonName, wheelCampaignName);
+      if (result.error) return interaction.editReply(result.error);
+      return interaction.editReply(result.text);
+    }
+
+    if (sub === 'reset-roles') {
+      const seasonName = interaction.options.getString('season');
+      const resetRoles = interaction.options.getBoolean('reset_roles');
+      const result = await resetRolesSettingCore(interaction, seasonName, resetRoles);
       if (result.error) return interaction.editReply(result.error);
       return interaction.editReply(result.text);
     }
@@ -319,6 +347,7 @@ module.exports = {
 
 module.exports.startSeasonCore = startSeasonCore;
 module.exports.linkSeasonCore = linkSeasonCore;
+module.exports.resetRolesSettingCore = resetRolesSettingCore;
 module.exports.addChannelCore = addChannelCore;
 module.exports.removeChannelCore = removeChannelCore;
 module.exports.endSeasonCore = endSeasonCore;
