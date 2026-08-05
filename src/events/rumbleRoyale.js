@@ -381,6 +381,12 @@ async function handleMessage(message, client) {
           `, [message.guild.id, userId, username || 'Unknown', Number(config.reward_amount)]);
           walletBalance = Number(res.rows[0].balance);
         }
+        if (walletBalance !== null) {
+          await query(
+            `INSERT INTO currency_transactions (guild_id, user_id, username, amount, reason, new_balance) VALUES ($1,$2,$3,$4,$5,$6)`,
+            [message.guild.id, userId, username || 'Unknown', Number(config.reward_amount), 'RR reward', walletBalance]
+          ).catch(err => console.error('[RumbleRoyale] Failed to log transaction:', err.message));
+        }
       } catch (e) { console.error('[RumbleRoyale] reward crediting error:', e.message); }
     }
 

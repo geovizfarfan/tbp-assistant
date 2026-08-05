@@ -1073,6 +1073,23 @@ client.on('messageCreate', async (message) => {
   }
 });
 
+// Ping cleanup — deletes a BARE ping message (a mention, no embed) from
+// another bot in a configured channel, after a fixed delay. A message with
+// an embed is assumed to be the "main" content and is never touched, even
+// if it also contains a mention.
+client.on('messageCreate', async (message) => {
+  if (!message.author.bot || message.author.id === client.user.id || !message.guild) return;
+  if (message.embeds.length > 0) return; // has an embed — that's the main message, leave it
+  if (!message.mentions.roles.size && !message.mentions.users.size && !message.mentions.everyone) return;
+  try {
+    const { query } = require('./utils/database');
+    const res = await query(`SELECT delay_seconds FROM ping_cleanup_config WHERE guild_id=$1 AND channel_id=$2`, [message.guild.id, message.channel.id]);
+    if (!res.rows.length) return;
+    const delayMs = res.rows[0].delay_seconds * 1000;
+    setTimeout(() => message.delete().catch(() => {}), delayMs);
+  } catch (err) { console.error('[PingCleanup] error:', err.message); }
+});
+
 // Word filter — deletes messages containing (or exactly matching) a banned
 // phrase. Checked before custom triggers so a deleted message never fires one.
 client.on('messageCreate', async (message) => {

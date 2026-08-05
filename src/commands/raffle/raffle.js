@@ -114,7 +114,7 @@ async function startRaffle(interaction) {
       if (hostBalance === null || Number(hostBalance) < amount) {
         return interaction.editReply(`${e('wrong')} You don't have enough ${serverCurrencyName} to fund this raffle (need ${amount.toLocaleString()}, you have ${Number(hostBalance || 0).toLocaleString()}). Raffles are paid from your own balance.`);
       }
-      await adjustGuildBalance(interaction.guildId, interaction.user.id, interaction.user.username, -amount);
+      await adjustGuildBalance(interaction.guildId, interaction.user.id, interaction.user.username, -amount, 'Raffle: host funding currency prize');
       hostFunded = true;
     }
   }
@@ -194,7 +194,7 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
         refundNote = ' Reserved Sins have been refunded to the host.';
       } else if (raffle.currency === 'SERVER_CURRENCY' && raffle.prize_amount && raffle.host_funded) {
         const hostUser = await client.users.fetch(raffle.host_id).catch(() => null);
-        await adjustGuildBalance(guildId, raffle.host_id, hostUser?.username || 'Unknown', Number(raffle.prize_amount)).catch(() => {});
+        await adjustGuildBalance(guildId, raffle.host_id, hostUser?.username || 'Unknown', Number(raffle.prize_amount), 'Raffle: refund to host (no entries/cancelled)').catch(() => {});
         refundNote = ` Reserved ${raffle.prize} have been refunded to the host.`;
       }
       await channel.send({ embeds: [baseEmbed(`${e('raffle')} RAFFLE ENDED`, COLORS.grey, guild.name).setDescription('No entries — no winner.' + refundNote)] });
@@ -225,7 +225,7 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
       currencyAwarded = true;
     } else if (isServerCurrencyRaffle && !hostWonOwnRaffle) {
       try {
-        await adjustGuildBalance(guildId, winner.user_id, winner.username, raffle.prize_amount);
+        await adjustGuildBalance(guildId, winner.user_id, winner.username, raffle.prize_amount, 'Raffle: winner prize payout');
         currencyAwarded = true;
         console.log(`[Raffle] Auto-awarded ${raffle.prize_amount} ${raffle.prize} to ${winner.username}`);
       } catch (err) {
@@ -235,7 +235,7 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
       // Host won their own raffle — refund the reserved amount if they funded it themselves
       if (raffle.host_funded) {
         const hostUser = await client.users.fetch(raffle.host_id).catch(() => null);
-        await adjustGuildBalance(guildId, raffle.host_id, hostUser?.username || 'Unknown', Number(raffle.prize_amount)).catch(() => {});
+        await adjustGuildBalance(guildId, raffle.host_id, hostUser?.username || 'Unknown', Number(raffle.prize_amount), 'Raffle: refund to host (no entries/cancelled)').catch(() => {});
       }
       currencyAwarded = true;
     }
@@ -326,11 +326,17 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
           winnersMsgPayload.components = [new ActionRowBuilder().addComponents(raffleClaimedButton, raffleNotClaimedButton)];
         }
         const winnerMsg = await winnerCh.send(winnersMsgPayload);
-        await query(
-          `INSERT INTO winner_announcements (guild_id, game_id, channel_id, message_id, winner_id, prize, is_booster)
-           VALUES ($1,$2,$3,$4,$5,$6,false)`,
-          [guildId, raffleId, winnerChId, winnerMsg.id, winner.user_id, prizeText]
-        );
+        // Only track this for the auto-expiry "did they open a ticket" check
+        // when there's actually something to claim via a ticket — a currency
+        // prize was already delivered the instant the raffle ended, so
+        // there's nothing to expire and no ticket will ever come.
+        if (!hostWonOwnRaffle && !currencyAwarded) {
+          await query(
+            `INSERT INTO winner_announcements (guild_id, game_id, channel_id, message_id, winner_id, prize, is_booster)
+             VALUES ($1,$2,$3,$4,$5,$6,false)`,
+            [guildId, raffleId, winnerChId, winnerMsg.id, winner.user_id, prizeText]
+          );
+        }
       }
     } catch (err) { console.error('[Raffle] #winners post failed:', err.message); }
     // Remove raffle from board
@@ -366,7 +372,7 @@ async function cancelRaffleCore(interaction, id, reason) {
     await adjustBalance(raffle.host_id, hostUser?.username || 'Unknown', Number(raffle.prize_amount)).catch(() => {});
   } else if (raffle.currency === 'SERVER_CURRENCY' && raffle.prize_amount && raffle.host_funded) {
     const hostUser = await interaction.client.users.fetch(raffle.host_id).catch(() => null);
-    await adjustGuildBalance(interaction.guildId, raffle.host_id, hostUser?.username || 'Unknown', Number(raffle.prize_amount)).catch(() => {});
+    await adjustGuildBalance(interaction.guildId, raffle.host_id, hostUser?.username || 'Unknown', Number(raffle.prize_amount), 'Raffle: refund to host (cancelled)').catch(() => {});
   }
 
   // Edit original raffle message if possible

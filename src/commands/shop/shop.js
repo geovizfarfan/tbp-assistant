@@ -151,7 +151,7 @@ function scheduleNicknameRevert(guild, targetId, originalNickname, ms, purchaseI
 // ── Buy: charge + add to inventory (no activation yet) ─────────────────────
 async function buyItem(interaction, item) {
   const currency = await getGuildCurrencyConfig(interaction.guildId);
-  const newBalance = await adjustGuildBalance(interaction.guildId, interaction.user.id, interaction.user.username, -item.price);
+  const newBalance = await adjustGuildBalance(interaction.guildId, interaction.user.id, interaction.user.username, -item.price, `Shop purchase: ${item.name}`);
 
   const purchaseRes = await query(
     'INSERT INTO shop_purchases (guild_id, item_id, user_id, quantity) VALUES ($1,$2,$3,1) RETURNING id',

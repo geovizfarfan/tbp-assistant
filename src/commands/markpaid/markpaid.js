@@ -106,7 +106,7 @@ async function payUser(interaction) {
     }
 
     let newBalanceNote = '';
-    const staffNewBalance = await adjustGuildBalance(interaction.guildId, user.id, user.username, staffAmount);
+    const staffNewBalance = await adjustGuildBalance(interaction.guildId, user.id, user.username, staffAmount, '/mark-paid: staff pay');
     if (staffNewBalance !== null) newBalanceNote = ` | New ${currencyName} balance: ${Number(staffNewBalance).toLocaleString()}`;
 
     await query(`UPDATE staff SET last_paid_at=$1, next_pay_due_at=$2 WHERE user_id=$3`, [now, nextDue, user.id]);
@@ -128,7 +128,7 @@ async function payUser(interaction) {
     const boosterAmount = amount || b.amount_owed;
 
     let newBalanceNote = '';
-    const boosterNewBalance = await adjustGuildBalance(interaction.guildId, user.id, user.username, boosterAmount);
+    const boosterNewBalance = await adjustGuildBalance(interaction.guildId, user.id, user.username, boosterAmount, '/mark-paid: booster pay');
     if (boosterNewBalance !== null) newBalanceNote = ` | New ${currencyName} balance: ${Number(boosterNewBalance).toLocaleString()}`;
 
     await query(`UPDATE boosters SET last_paid_at=$1, next_pay_due_at=$2, currency=$3 WHERE guild_id=$4 AND user_id=$5`, [now, nextDue, currencyName, interaction.guildId, user.id]);
@@ -190,7 +190,7 @@ async function revokeUser(interaction) {
 
       let clawbackNote = '';
       if (last.amount) {
-        const newBalance = await adjustGuildBalance(interaction.guildId, user.id, user.username, -last.amount);
+        const newBalance = await adjustGuildBalance(interaction.guildId, user.id, user.username, -last.amount, '/mark-paid revoke: staff pay clawback');
         if (newBalance !== null) clawbackNote = ` | ${last.amount} ${last.currency} clawed back — new balance: ${Number(newBalance).toLocaleString()}`;
       }
 
@@ -219,7 +219,7 @@ async function revokeUser(interaction) {
 
       let clawbackNote = '';
       if (last.amount) {
-        const newBalance = await adjustGuildBalance(interaction.guildId, user.id, user.username, -last.amount);
+        const newBalance = await adjustGuildBalance(interaction.guildId, user.id, user.username, -last.amount, '/mark-paid revoke: booster pay clawback');
         if (newBalance !== null) clawbackNote = ` | ${last.amount} ${last.currency} clawed back — new balance: ${Number(newBalance).toLocaleString()}`;
       }
 

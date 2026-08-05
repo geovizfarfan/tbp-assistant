@@ -43,7 +43,7 @@ async function payDueStaff(client, guildId) {
     const nextDue = new Date();
     nextDue.setDate(nextDue.getDate() + 30);
 
-    const newBalance = await adjustGuildBalance(guildId, s.user_id, s.username, amount);
+    const newBalance = await adjustGuildBalance(guildId, s.user_id, s.username, amount, 'Auto-payroll: staff pay');
     if (newBalance === null) continue; // don't mark as paid if the credit failed
 
     await query(`UPDATE staff SET last_paid_at=$1, next_pay_due_at=$2 WHERE user_id=$3 AND guild_id=$4`, [now, nextDue, s.user_id, guildId]);
@@ -88,7 +88,7 @@ async function payDueBoosters(client, guildId) {
     const nextDue = new Date();
     nextDue.setDate(nextDue.getDate() + 30);
 
-    const newBalance = await adjustGuildBalance(guildId, b.user_id, b.username, amount);
+    const newBalance = await adjustGuildBalance(guildId, b.user_id, b.username, amount, 'Auto-payroll: booster pay');
     if (newBalance === null) continue;
 
     await query(`UPDATE boosters SET last_paid_at=$1, next_pay_due_at=$2 WHERE user_id=$3 AND guild_id=$4`, [now, nextDue, b.user_id, guildId]);

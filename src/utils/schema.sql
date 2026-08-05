@@ -1042,3 +1042,27 @@ CREATE TABLE IF NOT EXISTS staff_bios (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (guild_id, user_id)
 );
+
+-- Auto-delete a bare ping message (no embed) from another bot in a channel,
+-- after a fixed delay - leaves any separate embed message alone.
+CREATE TABLE IF NOT EXISTS ping_cleanup_config (
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  delay_seconds INT NOT NULL DEFAULT 30,
+  PRIMARY KEY (guild_id, channel_id)
+);
+
+-- Audit trail for every currency adjustment made through adjustGuildBalance,
+-- regardless of source (RR reward, shop purchase, raffle/giveaway prize,
+-- manual /currency give, etc). Lets staff verify payments are actually
+-- landing rather than just trusting the running balance.
+CREATE TABLE IF NOT EXISTS currency_transactions (
+  id SERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  username TEXT,
+  amount NUMERIC NOT NULL,
+  reason TEXT NOT NULL DEFAULT 'unspecified',
+  new_balance NUMERIC,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);

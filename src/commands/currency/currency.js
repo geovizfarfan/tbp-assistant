@@ -27,7 +27,11 @@ module.exports = {
       .setDescription('Give (or take) this server\'s currency from a member (admin only)')
       .addUserOption(o => o.setName('user').setDescription('User to adjust').setRequired(true))
       .addIntegerOption(o => o.setName('amount').setDescription('Amount to give — negative to take away').setRequired(true))
-      .addStringOption(o => o.setName('reason').setDescription('Reason'))),
+      .addStringOption(o => o.setName('reason').setDescription('Reason')))
+    .addSubcommand(sub => sub
+      .setName('log')
+      .setDescription('See the most recent currency transactions (admin only)')
+      .addUserOption(o => o.setName('user').setDescription('Only show this user\'s transactions'))),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
@@ -76,7 +80,7 @@ module.exports = {
       const reason = interaction.options.getString('reason') || 'No reason provided';
       const cfg = await getGuildCurrencyConfig(interaction.guildId);
 
-      const newBalance = await adjustGuildBalance(interaction.guildId, target.id, target.username, amount);
+      const newBalance = await adjustGuildBalance(interaction.guildId, target.id, target.username, amount, `/currency give: ${reason}`);
       if (newBalance === null) {
         return interaction.editReply(`${e('wrong')} Failed to adjust balance — try again in a moment.`);
       }
@@ -89,6 +93,37 @@ module.exports = {
           `> **Reason:** ${reason}\n` +
           `New balance: **${Number(newBalance).toLocaleString()} ${cfg.currencyName}**`
         );
+      return interaction.editReply({ embeds: [embed] });
+    }
+
+    if (sub === 'log') {
+      if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
+          interaction.user.id !== process.env.OWNER_ID) {
+        return interaction.reply({ content: `${e('wrong')} Admin only.`, ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+
+      const target = interaction.options.getUser('user');
+      const cfg = await getGuildCurrencyConfig(interaction.guildId);
+
+      const res = target
+        ? await query(`SELECT * FROM currency_transactions WHERE guild_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 10`, [interaction.guildId, target.id])
+        : await query(`SELECT * FROM currency_transactions WHERE guild_id=$1 ORDER BY created_at DESC LIMIT 10`, [interaction.guildId]);
+
+      if (!res.rows.length) {
+        return interaction.editReply(`No transactions logged yet${target ? ` for ${target.username}` : ''}.`);
+      }
+
+      const lines = res.rows.map(t => {
+        const sign = Number(t.amount) >= 0 ? '+' : '';
+        const ts = `<t:${Math.floor(new Date(t.created_at).getTime() / 1000)}:R>`;
+        return `**${sign}${Number(t.amount).toLocaleString()}** ${cfg.currencyName} — <@${t.user_id}> — *${t.reason}* — balance after: ${Number(t.new_balance).toLocaleString()} — ${ts}`;
+      }).join('\n');
+
+      const embed = new EmbedBuilder()
+        .setColor('#d6c2ee')
+        .setTitle(`${e('payday')} Latest ${res.rows.length} Transaction${res.rows.length === 1 ? '' : 's'}${target ? ` — ${target.username}` : ''}`)
+        .setDescription(lines);
       return interaction.editReply({ embeds: [embed] });
     }
 

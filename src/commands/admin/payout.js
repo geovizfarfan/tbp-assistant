@@ -137,7 +137,7 @@ module.exports = {
     } catch {}
 
     try {
-      const annRes = await query(`SELECT * FROM winner_announcements WHERE game_id=$1 AND guild_id=$2 AND status='pending'`, [id, interaction.guildId]);
+      const annRes = await query(`SELECT * FROM winner_announcements WHERE game_id=$1 AND guild_id=$2`, [id, interaction.guildId]);
       if (annRes.rows.length) {
         const ann = annRes.rows[0];
         const winnerCh = await interaction.client.channels.fetch(ann.channel_id);
@@ -147,11 +147,13 @@ module.exports = {
           const statusText = statusChoice === 'paid'
             ? `${e('checkmark')} Claimed — paid by <@${interaction.user.id}>`
             : `${e('wrong')} Not Claimed — confirmed by <@${interaction.user.id}>`;
-          // Update the specific winner's line in the Payout field
+          // Update the specific winner's line in the Payout field — matches
+          // either "Pending" (first confirmation) or an existing "Not Claimed"
+          // line (staff overriding an auto-expired status after the fact).
           const fields = oldEmbed.fields.map(f => {
             if (f.name.includes('Payout') || f.name.includes('payout') || f.name.includes('Status')) {
               const updatedValue = f.value.replace(
-                new RegExp(`${e('Loading')} Pending[^\\n]*`),
+                new RegExp(`${e('Loading')} Pending[^\\n]*|${e('wrong')} Not Claimed[^\\n]*`),
                 statusText
               );
               return { name: f.name, value: updatedValue, inline: f.inline };

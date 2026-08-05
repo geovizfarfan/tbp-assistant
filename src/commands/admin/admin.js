@@ -100,6 +100,7 @@ async function pingGames(interaction) {
 
 async function fixPayout(interaction) {
   const id     = interaction.options.getInteger('id');
+  const type   = interaction.options.getString('type') || 'game';
   const status = interaction.options.getString('status');
   const winnerOverride = interaction.options.getUser('winner');
   await interaction.deferReply({ ephemeral: true });
@@ -113,31 +114,34 @@ async function fixPayout(interaction) {
     return interaction.editReply({ content: `${e('wrong')} Provide \`status\`, \`winner\`, or both.` });
   }
 
-  const gameRes = await query(`SELECT * FROM game_logs WHERE id=$1 AND guild_id=$2`, [id, interaction.guildId]);
-  if (!gameRes.rows.length) return interaction.editReply({ content: `${e('wrong')} Game #${id} not found.` });
+  const table = type === 'raffle' ? 'raffles' : 'game_logs';
+  const label = type === 'raffle' ? 'Raffle' : 'Game';
+
+  const gameRes = await query(`SELECT * FROM ${table} WHERE id=$1 AND guild_id=$2`, [id, interaction.guildId]);
+  if (!gameRes.rows.length) return interaction.editReply({ content: `${e('wrong')} ${label} #${id} not found. (Wrong \`type\`? This defaults to Game — pass \`type: Raffle\` if that's what you meant.)` });
   const game = gameRes.rows[0];
   const now = new Date();
 
-  // End the game if it was never ended
+  // End it if it was never ended
   if (game.status === 'active') {
-    await query(`UPDATE game_logs SET status='ended', ended_at=$1 WHERE id=$2`, [now, id]);
+    await query(`UPDATE ${table} SET status='ended', ended_at=$1 WHERE id=$2`, [now, id]);
   }
 
   // Correct the winner, if provided
   if (winnerOverride) {
-    await query(`UPDATE game_logs SET winner_id=$1 WHERE id=$2`, [winnerOverride.id, id]);
+    await query(`UPDATE ${table} SET winner_id=$1 WHERE id=$2`, [winnerOverride.id, id]);
     await query(
-      `UPDATE member_wins SET user_id=$1, username=$2 WHERE ref_id=$3 AND type='game'`,
-      [winnerOverride.id, winnerOverride.username, id]
+      `UPDATE member_wins SET user_id=$1, username=$2 WHERE ref_id=$3 AND type=$4`,
+      [winnerOverride.id, winnerOverride.username, id, type]
     );
   }
 
   if (status === 'claimed') {
-    await query(`UPDATE game_logs SET payout_status='paid', payout_confirmed_at=$1 WHERE id=$2`, [now, id]);
-    await query(`UPDATE member_wins SET payout_status='paid', paid_at=$1 WHERE ref_id=$2 AND type='game'`, [now, id]);
-    await query(`UPDATE payout_reminders SET resolved=true WHERE type='game' AND ref_id=$1`, [id]);
+    await query(`UPDATE ${table} SET payout_status='paid', payout_confirmed_at=$1 WHERE id=$2`, [now, id]);
+    await query(`UPDATE member_wins SET payout_status='paid', paid_at=$1 WHERE ref_id=$2 AND type=$3`, [now, id, type]);
+    await query(`UPDATE payout_reminders SET resolved=true WHERE type=$1 AND ref_id=$2`, [type, id]);
   } else if (status === 'not_claimed') {
-    await query(`UPDATE game_logs SET payout_status='not_claimed' WHERE id=$1`, [id]);
+    await query(`UPDATE ${table} SET payout_status='not_claimed' WHERE id=$1`, [id]);
     await query(`UPDATE winner_announcements SET status='not_claimed' WHERE game_id=$1 AND guild_id=$2`, [id, interaction.guildId]);
   }
 
@@ -188,7 +192,8 @@ async function fixPayout(interaction) {
   const parts = [];
   if (winnerOverride) parts.push(`winner corrected to <@${winnerOverride.id}>`);
   if (status) parts.push(`marked as **${status === 'claimed' ? 'Claimed ✅' : 'Not Claimed ❌'}**`);
-  await interaction.editReply({ content: `${e('checkmark')} Game #${id} (**${game.game_name}**) — ${parts.join(' and ')}.` });
+  const displayName = type === 'raffle' ? game.prize : game.game_name;
+  await interaction.editReply({ content: `${e('checkmark')} ${label} #${id} (**${displayName}**) — ${parts.join(' and ')}.` });
 }
 
 module.exports = {
@@ -229,8 +234,13 @@ module.exports = {
     )
     .addSubcommand(sub => sub
       .setName('fix-payout')
-      .setDescription('Admin: manually update a game\'s payout status and/or correct its winner')
-      .addIntegerOption(o => o.setName('id').setDescription('Game ID').setRequired(true))
+      .setDescription('Admin: manually update a game or raffle\'s payout status and/or correct its winner')
+      .addIntegerOption(o => o.setName('id').setDescription('Game or Raffle ID').setRequired(true))
+      .addStringOption(o => o.setName('type').setDescription('Which log this ID belongs to (default: Game)')
+        .addChoices(
+          { name: 'Game', value: 'game' },
+          { name: 'Raffle', value: 'raffle' },
+        ))
       .addStringOption(o => o.setName('status').setDescription('Payout status (leave blank to only change winner)')
         .addChoices(
           { name: 'Claimed — winner was paid', value: 'claimed' },
