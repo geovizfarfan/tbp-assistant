@@ -671,6 +671,7 @@ CREATE TABLE IF NOT EXISTS rr_seasons (
   linked_wheel_campaign_id INTEGER REFERENCES wheel_role_campaigns(id) ON DELETE SET NULL
 );
 ALTER TABLE rr_seasons ADD COLUMN IF NOT EXISTS linked_wheel_campaign_id INTEGER REFERENCES wheel_role_campaigns(id) ON DELETE SET NULL;
+ALTER TABLE rr_seasons ADD COLUMN IF NOT EXISTS reset_roles_on_completion BOOLEAN NOT NULL DEFAULT TRUE;
 
 CREATE TABLE IF NOT EXISTS rr_season_channels (
   id SERIAL PRIMARY KEY,
