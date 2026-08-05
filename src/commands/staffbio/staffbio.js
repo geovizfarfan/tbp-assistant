@@ -22,7 +22,7 @@ module.exports = {
       .setName('setup')
       .setDescription('Configure where profiles post and what questions to ask (admin only)')
       .addChannelOption(o => o.setName('channel').setDescription('Channel profiles get posted/updated in').setRequired(true))
-      .addStringOption(o => o.setName('questions').setDescription('Up to 5 questions, separated by |').setRequired(true))
+      .addStringOption(o => o.setName('questions').setDescription('Up to 5 questions, separated by | — include an emoji in the text to show it').setRequired(true))
       .addStringOption(o => o.setName('color').setDescription('Embed color hex, e.g. #d6c2ee')))
     .addSubcommand(sub => sub
       .setName('submit')
@@ -96,6 +96,16 @@ async function submitStaffBio(interaction) {
   return interaction.showModal(modal);
 }
 
+async function getRoleDisplay(guildId, role) {
+  const col = role === 'admin' ? 'admin_role_id' : role === 'staff' ? 'mod_role_id' : null;
+  if (col) {
+    const res = await query(`SELECT ${col} FROM guild_config WHERE guild_id=$1`, [guildId]);
+    const roleId = res.rows[0]?.[col];
+    if (roleId) return `<@&${roleId}>`;
+  }
+  return ROLE_LABELS[role] || role;
+}
+
 async function handleBioModal(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
@@ -112,9 +122,9 @@ async function handleBioModal(interaction) {
 
   const embed = new EmbedBuilder()
     .setColor(cfg.embed_color || '#d6c2ee')
-    .setTitle(`${e('purplesparkle')} Meet ${interaction.user.username}!`)
+    .setTitle(`${e('purplesparkle')} Meet <@${interaction.user.id}>!`)
     .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true, size: 256 }))
-    .addFields({ name: `${e('trophies')} Role`, value: ROLE_LABELS[staffRow.role] || staffRow.role, inline: false });
+    .addFields({ name: `${e('trophies')} Role`, value: await getRoleDisplay(interaction.guildId, staffRow.role), inline: false });
   questions.forEach((q, i) => embed.addFields({ name: q, value: answers[i], inline: false }));
 
   const channel = await interaction.client.channels.fetch(cfg.channel_id).catch(() => null);
