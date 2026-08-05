@@ -296,7 +296,8 @@ async function autoEndRaffle(client, raffleId, guildId, channelId, messageId) {
       if (winnerCfgRes.rows.length && winnerCfgRes.rows[0].winner_channel_id) {
         const winnerChId = winnerCfgRes.rows[0].winner_channel_id;
         const winnerCh = await guild.channels.fetch(winnerChId);
-        const winnersEmbed = baseEmbed(`${e('confetti')} Raffle Winner — ${prizeText} Raffle`, hostWonOwnRaffle ? 0xFFFF00 : 0xFF00C1, guild.name)
+        const winnersEmbedColor = hostWonOwnRaffle ? 0xFFFF00 : (currencyAwarded ? 0x7F36F5 : 0xFF00C1);
+        const winnersEmbed = baseEmbed(`${e('confetti')} Raffle Winner — ${prizeText} Raffle`, winnersEmbedColor, guild.name)
           .addFields(
             { name: `${e('trophies')} Winner`,    value: `<@${winner.user_id}>`, inline: true },
             { name: `${e('purplesparkle')} Prize`, value: prizeText, inline: true },
