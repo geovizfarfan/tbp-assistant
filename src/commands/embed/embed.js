@@ -353,28 +353,27 @@ async function repostEmbed(interaction) {
   return interaction.editReply(result);
 }
 
-async function deleteEmbedCore(interaction, channel, messageId) {
-  const msg = await channel.messages.fetch(messageId).catch(() => null);
+async function deleteEmbedCore(interaction, id) {
+  const res = await query('SELECT * FROM custom_embeds WHERE id = $1 AND guild_id = $2', [id, interaction.guildId]);
+  if (!res.rows.length) return `❌ No embed #${id} found.`;
+  const stored = res.rows[0];
+
+  const channel = stored.channel_id ? await interaction.client.channels.fetch(stored.channel_id).catch(() => null) : null;
+  const msg = channel && stored.message_id ? await channel.messages.fetch(stored.message_id).catch(() => null) : null;
   if (msg && msg.author.id !== interaction.client.user.id) {
     return `❌ That message wasn't posted by Veloura — can't delete it with this command.`;
   }
 
   if (msg) await msg.delete().catch(() => {});
+  await query('DELETE FROM custom_embeds WHERE id = $1', [id]);
 
-  const del = await query('DELETE FROM custom_embeds WHERE message_id = $1 AND guild_id = $2 RETURNING id', [messageId, interaction.guildId]);
-
-  if (!msg && !del.rows.length) {
-    return `❌ Couldn't find that message or any stored data for it — it may already be gone.`;
-  }
-
-  return `✅ Deleted${msg ? ' the message' : ' the stored data (message was already gone)'} in <#${channel.id}>.`;
+  return `✅ Deleted embed #${id}${msg ? ' (message and stored data)' : ' — stored data removed (message was already gone)'}.`;
 }
 
 async function deleteEmbed(interaction) {
-  const channel = interaction.options.getChannel('channel') || interaction.channel;
-  const messageId = interaction.options.getString('message_id').trim();
+  const id = interaction.options.getInteger('id');
   await interaction.deferReply({ ephemeral: true });
-  const result = await deleteEmbedCore(interaction, channel, messageId);
+  const result = await deleteEmbedCore(interaction, id);
   return interaction.editReply(result);
 }
 

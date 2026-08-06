@@ -1028,9 +1028,10 @@ module.exports = {
 
   async handleEmbedDeleteModal(interaction) {
     await interaction.deferReply({ ephemeral: true });
-    const messageId = interaction.fields.getTextInputValue('message_id').trim();
+    const id = parseInt(interaction.fields.getTextInputValue('id'), 10);
+    if (isNaN(id)) return interaction.editReply('❌ Embed ID must be a number.');
     const { deleteEmbedCore } = require('../embed/embed');
-    const result = await deleteEmbedCore(interaction, interaction.channel, messageId);
+    const result = await deleteEmbedCore(interaction, id);
     return interaction.editReply(result);
   },
 
@@ -1814,8 +1815,8 @@ module.exports = {
 
     if (action === 'embeddelete') {
       const modal = new ModalBuilder().setCustomId('serversetup_embeddeletemodal').setTitle('Delete Embed');
-      const msgIdInput = new TextInputBuilder().setCustomId('message_id').setLabel('Message ID of the embed to delete').setStyle(TextInputStyle.Short).setRequired(true);
-      modal.addComponents(new ActionRowBuilder().addComponents(msgIdInput));
+      const idInput = new TextInputBuilder().setCustomId('id').setLabel('Embed ID (see List Embeds)').setStyle(TextInputStyle.Short).setRequired(true);
+      modal.addComponents(new ActionRowBuilder().addComponents(idInput));
       return interaction.showModal(modal);
     }
 
