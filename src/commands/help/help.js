@@ -85,6 +85,11 @@ const CATEGORIES = {
     label: 'Play & Regret',
     description: 'Sins currency & connection',
   },
+  automod: {
+    emoji: '⚡',
+    label: 'Triggers, Filter & Bios',
+    description: 'Trigger words, word filter, ping cleanup, Meet the Staff',
+  },
 };
 
 function buildSelectMenu(selected = null) {
@@ -124,6 +129,7 @@ function buildHomeEmbed() {
       { name: '🤖 General',                                       value: 'Lock, Ban Log, Embed & more',             inline: true },
       { name: '🔐 Verification',                                  value: 'Rules, captcha & auto role assignment',  inline: true },
       { name: '<a:SINS:1522338148380704910> Play & Regret',       value: 'Sins currency & RR integration',          inline: true },
+      { name: '⚡ Triggers, Filter & Bios',                        value: 'Trigger words, word filter, staff bios',  inline: true },
       { name: '⚙️ Server Config',                                 value: 'Setup guide & current server config',     inline: true },
     )
     .setFooter({ text: '𝚃𝙷𝙴 𝙱𝙾𝙰𝚁𝙳 𝙿𝚁𝙸𝙽𝙲𝙴𝚂𝚂 • VELOURA' })
@@ -167,6 +173,7 @@ function buildCategoryEmbed(category) {
         { name: 'How do I check a season\'s progress?', value: 'Run `/server-setup` → Rumble Setup → season info — shows every channel in it and who\'s completed it so far.', inline: false },
         { name: 'How do I end a season?', value: 'Run `/server-setup` → Rumble Setup → end season — resets achievement progress for that season only; other active seasons are unaffected. If a Wheel Roles campaign is linked, it auto-ends too and its posted message greys out with a "closed" notice.', inline: false },
         { name: 'Can I link a season to a wheel giveaway?', value: 'Yes — `/wheel roles create name:"..." season:"..." require_all_season_roles:True` builds a campaign that only qualifies members who\'ve completed every role in that season. Then `/wheel roles post` to actually let people enter.', inline: false },
+        { name: 'A member completing a season loses their roles — can I stop that?', value: 'Yes — `/server-setup` → Rumble Setup → Reset Roles Setting, pick the season, set it to "no". Useful when the season feeds a Wheel Roles campaign, since members need to *keep* the roles to stay qualified. This only affects completions going forward, not roles already removed.', inline: false },
       ),
 
     wheel: new EmbedBuilder().setColor('#d6c2ee')
@@ -179,6 +186,7 @@ function buildCategoryEmbed(category) {
         { name: 'How do I spin it?', value: '`/wheel roles spin name:"..."` — uses everyone currently entered, weighted by how many qualifying roles they have if `extra_entries` was enabled.', inline: false },
         { name: 'How do I see who\'s entered?', value: '`/wheel roles list name:"..."` — shows every entrant and their exact odds.', inline: false },
         { name: 'How do I end or delete a campaign?', value: '`/wheel roles end name:"..."` stops new entries but keeps existing ones for spinning. `/wheel roles delete name:"..."` wipes it completely.', inline: false },
+        { name: 'Can I require a level instead of (or alongside) roles?', value: 'Yes — `/wheel roles create` has `min_level`/`max_level`, independent of the role requirement. Someone must pass both if both are set. Leveling up (or an admin using `/level set`) re-checks qualification automatically, same as gaining a role does.', inline: false },
       ),
 
     payments: new EmbedBuilder().setColor('#d6c2ee')
@@ -228,6 +236,8 @@ function buildCategoryEmbed(category) {
         { name: 'How do I mark someone as paid?', value: '`/mark-paid user:@member amount:500` — works for staff and boosters, auto-detects which.', inline: false },
         { name: 'How do I see staff activity or pay status?', value: '`/admin staff-report period:` for activity, `/admin pay-summary` for pay status.', inline: false },
         { name: 'How do I configure pay requirements or goals?', value: 'Use `/staff requirements` and `/staff daily-goals` — both support per-role settings. For roles/channels/timezone, run `/server-setup`.', inline: false },
+        { name: 'A game or raffle payout status looks wrong — how do I fix it?', value: '`/admin fix-payout id:<id> type:<Game/Raffle> status:<...>` — corrects the status and updates the posted announcement. Defaults to Game if `type` isn\'t set.', inline: false },
+        { name: 'How do I verify currency payments are actually landing?', value: '`/currency log` — shows the latest 10 transactions server-wide (or filter to one user), with the reason and resulting balance for each.', inline: false },
       ),
 
     playregret: new EmbedBuilder().setColor('#d6c2ee')
@@ -260,6 +270,17 @@ function buildCategoryEmbed(category) {
         { name: 'What happens if someone without a required role reacts?', value: 'Their reaction gets removed automatically and a temporary message explains which role they\'re missing — enforced the instant they react, not just at draw time.', inline: false },
         { name: 'How can members check their own entries?', value: 'Every giveaway has a "Check My Entries" button — no command needed.', inline: false },
         { name: 'How do I edit, cancel, or end one early?', value: '`/giveaway edit id:`, `/giveaway cancel id:` (host only, no winner picked), `/giveaway end id:` (picks a winner now).', inline: false },
+        { name: 'Can I require a level instead of (or alongside) a role?', value: 'Yes — `/giveaway start` has `min_level`/`max_level`, independent of the role requirement. Checked in real time when someone reacts, and again when a winner is actually picked.', inline: false },
+      ),
+
+    automod: new EmbedBuilder().setColor('#d6c2ee')
+      .setTitle('⚡ Triggers, Filter & Bios')
+      .addFields(
+        { name: 'How do I set up a custom trigger word?', value: '`/trigger add word:"!yay" type:"Post a message" message:"..."` for a plain text response, or `type:"React with emojis" emojis:"❤️ 💕"` to react instead. Reaction triggers react to whatever the message replies to, and always stay open to everyone. Message triggers can be restricted with `restricted_role`.', inline: false },
+        { name: 'Are there any built-in trigger words already?', value: 'Yes — `!love`, `!thanks`, `!yay`, and `!welcome` work out of the box for anyone, no setup needed. Used as a reply to a message, they react with a themed set of emojis in order, then delete themselves.', inline: false },
+        { name: 'How do I auto-delete messages containing certain words?', value: '`/wordfilter add phrase:"..."` — deletes any message containing that phrase. Use `match_type: Exact` to only catch messages that are *exactly* that phrase.', inline: false },
+        { name: 'Can I clean up a bot\'s ping message without deleting the real content?', value: 'Yes — `/pingcleanup add channel:#ch delay_seconds:30`. It only ever targets a bare message (just a mention, no embed) from another bot — a message with an embed is always left alone, even if it also pings someone.', inline: false },
+        { name: 'What\'s "Meet the Staff"?', value: 'A customizable staff intro system. Admin sets it up with `/staffbio setup channel:#ch questions:"Q1|Q2|Q3"` (up to 5, include an emoji in the text to show it). Each staff member then runs `/staffbio submit` themselves to fill out (or update) their own profile — auto-published with their name, role, and profile picture.', inline: false },
       ),
 
     verify: new EmbedBuilder().setColor('#d6c2ee')
