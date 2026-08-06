@@ -229,6 +229,12 @@ function buildStaffButtons() {
   );
 }
 
+function buildStaffButtons2() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('serversetup_staff:edit').setLabel('Edit Staff').setStyle(ButtonStyle.Primary),
+  );
+}
+
 function buildStaffUserPicker(action) {
   const menu = new UserSelectMenuBuilder()
     .setCustomId(`serversetup_staffuser:${action}`)
@@ -605,7 +611,7 @@ module.exports = {
     if (key === 'staff') {
       return interaction.update({
         embeds: [buildCategoryEmbed(key, interaction.guild)],
-        components: [buildStaffButtons(), buildBackButton()],
+        components: [buildStaffButtons(), buildStaffButtons2(), buildBackButton()],
       });
     }
 
@@ -851,12 +857,38 @@ module.exports = {
       return interaction.showModal(modal);
     }
 
+    if (action === 'edit') {
+      const existingRes = await query(`SELECT * FROM staff WHERE user_id=$1`, [user.id]);
+      if (!existingRes.rows.length) {
+        return interaction.update({
+          embeds: [new EmbedBuilder().setColor('#ff4444').setDescription(`❌ <@${user.id}> isn't on staff — use Add Staff instead.`)],
+          components: [buildStaffButtons(), buildStaffButtons2(), buildBackButton()],
+        });
+      }
+      const existing = existingRes.rows[0];
+
+      const modal = new ModalBuilder()
+        .setCustomId(`serversetup_staffeditmodal:${user.id}`)
+        .setTitle(`Edit Staff: ${user.username}`.slice(0, 45));
+
+      const roleInput = new TextInputBuilder().setCustomId('role').setLabel('Role (owner/admin/staff/host/rumble_host)').setStyle(TextInputStyle.Short).setRequired(true).setValue(existing.role);
+      const payInput = new TextInputBuilder().setCustomId('pay').setLabel('Pay Amount').setStyle(TextInputStyle.Short).setRequired(false).setValue(String(existing.pay_amount ?? 0));
+      const currencyInput = new TextInputBuilder().setCustomId('currency').setLabel('Pay Currency (leave blank for server default)').setStyle(TextInputStyle.Short).setRequired(false).setValue(existing.pay_currency || '');
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(roleInput),
+        new ActionRowBuilder().addComponents(payInput),
+        new ActionRowBuilder().addComponents(currencyInput),
+      );
+      return interaction.showModal(modal);
+    }
+
     if (action === 'remove') {
       await interaction.deferUpdate();
       await query(`UPDATE staff SET active=false WHERE user_id=$1`, [user.id]);
       return interaction.editReply({
         embeds: [new EmbedBuilder().setColor('#2ecc71').setDescription(`✅ <@${user.id}> removed from staff.`)],
-        components: [buildStaffButtons(), buildBackButton()],
+        components: [buildStaffButtons(), buildStaffButtons2(), buildBackButton()],
       });
     }
 
@@ -900,6 +932,38 @@ module.exports = {
     );
 
     return interaction.editReply(`✅ <@${user.id}> added as **${role}** — ${pay} ${currency}/period.`);
+  },
+
+  async handleStaffEditModal(interaction) {
+    const [, userId] = interaction.customId.split(':');
+    await interaction.deferReply({ ephemeral: true });
+
+    const role = interaction.fields.getTextInputValue('role').toLowerCase().trim();
+    const payRaw = interaction.fields.getTextInputValue('pay');
+    const currencyRaw = interaction.fields.getTextInputValue('currency')?.trim();
+
+    const validRoles = ['owner', 'admin', 'staff', 'host', 'rumble_host'];
+    if (!validRoles.includes(role)) return interaction.editReply(`❌ Role must be one of: ${validRoles.join(', ')}`);
+
+    const pay = payRaw ? parseInt(payRaw, 10) : null;
+    if (payRaw && isNaN(pay)) return interaction.editReply('❌ Pay amount must be a number.');
+
+    let currency = currencyRaw;
+    if (!currency) {
+      const currRes = await query('SELECT currency_name FROM guild_config WHERE guild_id=$1', [interaction.guildId]);
+      currency = currRes.rows[0]?.currency_name || 'Coins';
+    }
+
+    const existingRes = await query(`SELECT * FROM staff WHERE user_id=$1`, [userId]);
+    if (!existingRes.rows.length) return interaction.editReply(`❌ That staff record no longer exists.`);
+    const existing = existingRes.rows[0];
+
+    await query(
+      `UPDATE staff SET role=$1, pay_currency=$2, pay_amount=$3 WHERE user_id=$4`,
+      [role, currency, pay ?? existing.pay_amount, userId]
+    );
+
+    return interaction.editReply(`✅ <@${userId}> updated — **${role}**, ${pay ?? existing.pay_amount} ${currency}/period. This doesn't change any already-paid history, only what applies going forward.`);
   },
 
   async handleExtrasButton(interaction) {

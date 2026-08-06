@@ -591,6 +591,10 @@ client.on('interactionCreate', async (interaction) => {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleStaffAddModal(interaction);
   }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('serversetup_staffeditmodal:')) {
+    const serverSetupModule = require('./commands/serversetup/serversetup');
+    return serverSetupModule.handleStaffEditModal(interaction);
+  }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('serversetup_gwbonusmodal:')) {
     const serverSetupModule = require('./commands/serversetup/serversetup');
     return serverSetupModule.handleBonusRoleModal(interaction);
