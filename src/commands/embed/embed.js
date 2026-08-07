@@ -31,7 +31,8 @@ function buildPageRow(dbId, pageIndex, totalPages) {
 
 function buildPageEmbed(stored, pages, pageIndex) {
   const hexColor = stored.color || '#d6c2ee';
-  const embed = new EmbedBuilder().setColor(hexColor).setDescription(pages[pageIndex - 1]);
+  const embed = new EmbedBuilder().setColor(hexColor);
+  if (pages[pageIndex - 1]) embed.setDescription(pages[pageIndex - 1]);
   if (stored.title) embed.setTitle(stored.title);
   if (stored.image) embed.setImage(stored.image);
   if (stored.thumbnail) embed.setThumbnail(stored.thumbnail);
@@ -332,19 +333,15 @@ async function repostEmbedCore(interaction, id) {
     if (existing) return `✅ That embed's message still exists — no repost needed. ${existing.url}`;
   }
 
-  const embed = new EmbedBuilder().setColor(stored.color || '#d6c2ee');
-  if (stored.description) embed.setDescription(stored.description);
-  if (stored.title) embed.setTitle(stored.title);
-  if (stored.image) embed.setImage(stored.image);
-  if (stored.thumbnail) embed.setThumbnail(stored.thumbnail);
-  if (stored.footer) embed.setFooter({ text: stored.footer });
-  if (stored.author) embed.setAuthor({ name: stored.author });
+  const pages = splitIntoPages(stored.description || '');
+  const embed = buildPageEmbed(stored, pages, 1);
 
-  const msg = await channel.send({ embeds: [embed] }).catch(() => null);
+  const components = pages.length > 1 ? [buildPageRow(stored.id, 1, pages.length)] : [];
+  const msg = await channel.send({ embeds: [embed], components }).catch(() => null);
   if (!msg) return `❌ Failed to repost — Veloura may lack permission in <#${channel.id}>.`;
 
   await query('UPDATE custom_embeds SET message_id = $1 WHERE id = $2', [msg.id, id]);
-  return `✅ Reposted embed #${id} in <#${channel.id}>. ${msg.url}`;
+  return `✅ Reposted embed #${id} in <#${channel.id}>${pages.length > 1 ? ` across **${pages.length} pages**` : ''}. ${msg.url}`;
 }
 
 async function repostEmbed(interaction) {
