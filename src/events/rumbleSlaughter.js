@@ -96,12 +96,10 @@ async function handleMessage(message, client) {
 async function handleArenaOpen(message, embed) {
   // Host is a direct mention at the start of the description — Play & Regret
   // uses randomized flavor text after it, so don't require specific wording.
+  // Auto-started battles ("A new arena opened automatically") have no human
+  // host at all, so there's nothing to match — that's expected, not an error.
   const match = embed.description?.match(/^\*{0,3}<@!?(\d+)>/);
-  if (!match) {
-    console.log('[RumbleSlaughter] Could not parse host mention from arena-open message:', embed.description?.slice(0, 80));
-    return;
-  }
-  const hostId = match[1];
+  const hostId = match ? match[1] : null;
 
   if (await alreadyProcessed(message.id)) return;
 
@@ -123,8 +121,8 @@ async function handleArenaOpen(message, embed) {
   const eraMatch = embed.description?.match(/Era:\s*\*{0,2}([^\n*]+)/i);
   const era = eraMatch ? eraMatch[1].trim() : null;
 
-  const hostMember = await message.guild.members.fetch(hostId).catch(() => null);
-  const hostName = hostMember?.user?.username || 'Unknown';
+  const hostMember = hostId ? await message.guild.members.fetch(hostId).catch(() => null) : null;
+  const hostName = hostMember?.user?.username || (hostId ? 'Unknown' : 'Auto-Battle');
 
   const startEmbed = buildArenaEmbed(cfg, {
     hostId, hostName, entryFee, era,
