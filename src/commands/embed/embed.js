@@ -332,7 +332,8 @@ async function repostEmbedCore(interaction, id) {
     if (existing) return `✅ That embed's message still exists — no repost needed. ${existing.url}`;
   }
 
-  const embed = new EmbedBuilder().setColor(stored.color || '#d6c2ee').setDescription(stored.description || '');
+  const embed = new EmbedBuilder().setColor(stored.color || '#d6c2ee');
+  if (stored.description) embed.setDescription(stored.description);
   if (stored.title) embed.setTitle(stored.title);
   if (stored.image) embed.setImage(stored.image);
   if (stored.thumbnail) embed.setThumbnail(stored.thumbnail);
