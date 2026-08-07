@@ -45,9 +45,8 @@ async function payUser(interaction) {
   const nextDue = new Date();
   nextDue.setDate(nextDue.getDate() + 30);
 
-  await interaction.deferReply({ ephemeral: true });
-
-  const staffRes   = await query('SELECT * FROM staff WHERE user_id=$1 AND active=true', [user.id]);
+  await interaction.deferReply();
+  const staffRes    = await query('SELECT * FROM staff WHERE user_id=$1 AND active=true', [user.id]);
   const boosterRes = await query('SELECT * FROM boosters WHERE guild_id=$1 AND user_id=$2 AND active=true', [interaction.guildId, user.id]);
 
   if (!staffRes.rows.length && !boosterRes.rows.length) {
@@ -171,7 +170,7 @@ async function payUser(interaction) {
 async function revokeUser(interaction) {
   const user = interaction.options.getUser('user');
   const type = interaction.options.getString('type') || 'both';
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply();
 
   const revokedLines = [];
 

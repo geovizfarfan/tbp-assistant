@@ -345,7 +345,7 @@ async function paySummary(interaction) {
 
 async function paycheckCheck(interaction) {
   const user = interaction.options.getUser('user');
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply();
 
   const staffRes = await query(`SELECT * FROM staff WHERE user_id=$1`, [user.id]);
   if (!staffRes.rows.length) return interaction.editReply({ content: `${e('wrong')} Not in staff database.` });
