@@ -50,7 +50,12 @@ module.exports = {
     .addSubcommand(sub => sub
       .setName('repost')
       .setDescription('Repost the last arena-open or champion announcement if it was deleted')
-      .addChannelOption(o => o.setName('channel').setDescription('RS channel').setRequired(true))),
+      .addChannelOption(o => o.setName('channel').setDescription('RS channel').setRequired(true))
+      .addStringOption(o => o.setName('type').setDescription('Force which type to rebuild (default: whatever was last successfully posted)')
+        .addChoices(
+          { name: 'Arena Open', value: 'arena' },
+          { name: 'Champion', value: 'champion' },
+        ))),
 
   async execute(interaction) {
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
@@ -204,26 +209,50 @@ module.exports = {
 
     if (sub === 'repost') {
       const channel = interaction.options.getChannel('channel');
+      const typeOverride = interaction.options.getString('type');
       const res = await query('SELECT * FROM rumble_slaughter_config WHERE channel_id = $1', [channel.id]);
       if (!res.rows.length) return interaction.editReply(`❌ <#${channel.id}> isn't configured for Rumble Slaughter.`);
       const cfg = res.rows[0];
 
-      if (!cfg.last_type) return interaction.editReply(`❌ No announcement has been posted in <#${channel.id}> yet — nothing to repost.`);
+      const { buildArenaEmbed, buildChampionEmbed, buildPings } = require('../../events/rumbleSlaughter');
+      const pings = buildPings(cfg);
+      let rebuiltEmbed, content;
+
+      // An explicit type:Arena Open always works, regardless of what
+      // last_type is stuck on — rebuilds fresh from current config, same
+      // as /rr repost always can. Useful exactly when the real event never
+      // got saved in the first place (e.g. an auto-battle with no host to
+      // parse), which is precisely when the stored-state path below can't help.
+      if (typeOverride === 'arena') {
+        rebuiltEmbed = buildArenaEmbed(cfg, {
+          hostId: null,
+          hostName: interaction.user.username,
+          entryFee: null,
+          era: null,
+          guildName: interaction.guild.name,
+          channelName: channel.name,
+        });
+        content = pings || undefined;
+        const msg = await channel.send({ content, embeds: [rebuiltEmbed] });
+        await query(`
+          UPDATE rumble_slaughter_config SET last_message_id = $1, last_ping_content = $2, last_type = 'arena', last_host_id = NULL, last_entry_fee = NULL, last_era = NULL, last_pot = NULL
+          WHERE channel_id = $3
+        `, [msg.id, pings || null, channel.id]).catch(() => {});
+        return interaction.editReply(`✅ Posted a fresh arena announcement in <#${channel.id}>. ${msg.url}`);
+      }
+
+      if (!cfg.last_type) return interaction.editReply(`❌ No announcement has been posted in <#${channel.id}> yet — nothing to repost. Try \`type: Arena Open\` to force a fresh one instead.`);
 
       if (cfg.last_message_id) {
         const existing = await channel.messages.fetch(cfg.last_message_id).catch(() => null);
         if (existing) return interaction.editReply(`✅ That announcement still exists — no repost needed. ${existing.url}`);
       }
 
-      const { buildArenaEmbed, buildChampionEmbed, buildPings } = require('../../events/rumbleSlaughter');
-      const pings = buildPings(cfg);
-      let rebuiltEmbed, content;
-
       if (cfg.last_type === 'arena') {
         const hostMember = cfg.last_host_id ? await interaction.guild.members.fetch(cfg.last_host_id).catch(() => null) : null;
         rebuiltEmbed = buildArenaEmbed(cfg, {
           hostId: cfg.last_host_id,
-          hostName: hostMember?.user?.username || 'Unknown',
+          hostName: hostMember?.user?.username || (cfg.last_host_id ? 'Unknown' : 'Auto-Battle'),
           entryFee: cfg.last_entry_fee,
           era: cfg.last_era,
           guildName: interaction.guild.name,
