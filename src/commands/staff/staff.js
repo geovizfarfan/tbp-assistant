@@ -114,8 +114,38 @@ async function setDailyGoals(interaction) {
      ON CONFLICT (guild_id, role) DO UPDATE SET games=COALESCE($3,daily_goals.games), autogames=COALESCE($4,daily_goals.autogames), payouts=COALESCE($5,daily_goals.payouts), updated_at=NOW()`,
     [interaction.guildId, role, games, autogames, payouts]
   );
+
+  // A daily goal times the pay period length is the natural monthly total —
+  // auto-apply it to the matching pay requirement so the two never drift out
+  // of sync with each other. min_games_hosted <- games, min_rumble <-
+  // autogames. "payouts" has no direct pay_requirements equivalent, so it's
+  // stored but not projected onto anything.
+  let monthlyNote = '';
+  if (games !== null || autogames !== null) {
+    const { getPayRequirements } = require('../../utils/eligibility');
+    const req = await getPayRequirements(interaction.guildId, role);
+    const periodDays = req.pay_period_days || 30;
+
+    const monthlyGames = games !== null ? games * periodDays : null;
+    const monthlyAuto  = autogames !== null ? autogames * periodDays : null;
+
+    await query(
+      `INSERT INTO pay_requirements (guild_id, role, min_games_hosted, min_rumble)
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT (guild_id, role) DO UPDATE SET
+         min_games_hosted = COALESCE($3, pay_requirements.min_games_hosted),
+         min_rumble       = COALESCE($4, pay_requirements.min_rumble)`,
+      [interaction.guildId, role, monthlyGames, monthlyAuto]
+    );
+
+    const parts = [];
+    if (monthlyGames !== null) parts.push(`min_games_hosted → **${monthlyGames}** (${games}/day × ${periodDays} days)`);
+    if (monthlyAuto !== null) parts.push(`min_rumble → **${monthlyAuto}** (${autogames}/day × ${periodDays} days)`);
+    monthlyNote = `\n${e('checkmark')} Pay requirement auto-updated: ${parts.join(', ')}`;
+  }
+
   const roleLabels = { owner:'Owner', admin:'Admin', staff:'Mod', host:'Host', rumble_host:'Rumble Host' };
-  await interaction.editReply({ content: e('checkmark') + ' Daily goals set for **' + (roleLabels[role]||role) + '**.' });
+  await interaction.editReply({ content: e('checkmark') + ' Daily goals set for **' + (roleLabels[role]||role) + '**.' + monthlyNote });
 }
 
 async function listStaff(interaction) {

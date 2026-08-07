@@ -88,20 +88,36 @@ async function payUser(interaction) {
   if (staffRes.rows.length && !notYetDueStaff) {
     const s = staffRes.rows[0];
 
-    let staffAmount = amount;
-    if (staffAmount === null) {
-      const { getPayRequirements } = require('../../utils/eligibility');
-      const req = await getPayRequirements(interaction.guildId, s.role);
-      const bonusPerGame = req.bonus_per_game || 400;
-      const periodDays   = req.pay_period_days || 30;
-      const periodStart  = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
+    const { getPayRequirements, checkEligibility } = require('../../utils/eligibility');
+    const req = await getPayRequirements(interaction.guildId, s.role);
+    const bonusPerGame = req.bonus_per_game || 400;
+    const periodDays   = req.pay_period_days || 30;
+    const periodStart  = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
 
-      const gamesRes = await query(
-        `SELECT COUNT(*) FROM game_logs WHERE guild_id=$1 AND host_id=$2 AND started_at > $3`,
-        [interaction.guildId, user.id, periodStart]
-      );
-      const gamesHosted = parseInt(gamesRes.rows[0].count);
-      staffAmount = (s.pay_amount || 0) + gamesHosted * bonusPerGame;
+    const gamesRes = await query(
+      `SELECT COUNT(*) FROM game_logs WHERE guild_id=$1 AND host_id=$2 AND started_at > $3`,
+      [interaction.guildId, user.id, periodStart]
+    );
+    const gamesHosted = parseInt(gamesRes.rows[0].count);
+    const gameBonus = gamesHosted * bonusPerGame;
+
+    // Same proration as /admin pay-summary — base pay is scaled by how much
+    // of each requirement was actually met when only partially eligible.
+    // The game bonus itself is never prorated since it already tracks 1:1
+    // with actual games hosted.
+    const eligibility = await checkEligibility(interaction.guildId, user.id, s.role, periodDays);
+    const applicableChecks = eligibility.checks.filter(c => c.required > 0);
+    const percentMet = applicableChecks.length
+      ? applicableChecks.reduce((sum, c) => sum + Math.min(c.actual / c.required, 1), 0) / applicableChecks.length
+      : 1;
+    const isPartial = eligibility.eligible === 'partial';
+    const basePay = isPartial ? Math.round((s.pay_amount || 0) * percentMet) : (s.pay_amount || 0);
+
+    let staffAmount = amount;
+    let proratedNote = '';
+    if (staffAmount === null) {
+      staffAmount = basePay + gameBonus;
+      if (isPartial) proratedNote = `\n${e('atention')} Partial — base prorated to **${Math.round(percentMet * 100)}%** of ${s.pay_amount || 0} (only met some requirements this period)`;
     }
 
     let newBalanceNote = '';
@@ -116,10 +132,10 @@ async function payUser(interaction) {
 
     embed.addFields({
       name: `${e('payday')} Staff Pay`,
-      value: `Amount: **${staffAmount} ${currencyName}**${newBalanceNote}\nNext Due: ${tsF(nextDue)}`,
+      value: `Amount: **${staffAmount} ${currencyName}**${newBalanceNote}\nNext Due: ${tsF(nextDue)}\nGames Hosted: **${gamesHosted}** × ${bonusPerGame} ${currencyName} = **${gameBonus} ${currencyName}** bonus${amount !== null ? ' (informational — a manual amount was used instead)' : ''}${proratedNote}`,
       inline: true,
     });
-    receiptLines.push(`${e('payday')} **Staff Pay:** ${staffAmount} ${currencyName}`);
+    receiptLines.push(`${e('payday')} **Staff Pay:** ${staffAmount} ${currencyName} (${gamesHosted} games hosted, ${gameBonus} ${currencyName} bonus)${isPartial ? ` — base prorated to ${Math.round(percentMet * 100)}% this period` : ''}`);
   }
 
   if (boosterRes.rows.length && !notYetDueBooster) {

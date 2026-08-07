@@ -284,7 +284,7 @@ function chunkLines(lines, limit = 1000) {
 async function paySummary(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
-  const { getPayRequirements } = require('../../utils/eligibility');
+  const { getPayRequirements, checkEligibility } = require('../../utils/eligibility');
   const defaultReq = await getPayRequirements(interaction.guildId, 'default');
   const periodDays  = defaultReq.pay_period_days || 30;
   const periodStart = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
@@ -300,10 +300,25 @@ async function paySummary(interaction) {
     const gamesRes = await query(`SELECT COUNT(*) FROM game_logs WHERE guild_id=$1 AND host_id=$2 AND started_at > $3`, [interaction.guildId, s.user_id, periodStart]);
     const gamesHosted = parseInt(gamesRes.rows[0].count);
     const gameBonus   = gamesHosted * bonusPerGame;
-    const totalPay    = (s.pay_amount || 0) + gameBonus;
+
+    // Prorate the base pay by how much of each requirement was actually met —
+    // full marks (games/rumble/raffles/giveaways) all count equally, capped
+    // at 100% each so overperforming one doesn't offset falling short on
+    // another. The game bonus itself is never prorated since it's already
+    // tied 1:1 to actual games hosted.
+    const eligibility = await checkEligibility(interaction.guildId, s.user_id, s.role, periodDays);
+    const applicableChecks = eligibility.checks.filter(c => c.required > 0);
+    const percentMet = applicableChecks.length
+      ? applicableChecks.reduce((sum, c) => sum + Math.min(c.actual / c.required, 1), 0) / applicableChecks.length
+      : 1;
+    const isPartial = eligibility.eligible === 'partial';
+    const basePay = isPartial ? Math.round((s.pay_amount || 0) * percentMet) : (s.pay_amount || 0);
+    const totalPay = basePay + gameBonus;
+
     staffTotals[s.pay_currency] = (staffTotals[s.pay_currency] || 0) + totalPay;
     const overdue = s.next_pay_due_at && new Date(s.next_pay_due_at) < new Date();
-    staffLines.push(`${overdue ? e('atention') : e('checkmark')} ${s.username} — **${totalPay} ${s.pay_currency}** (base: ${s.pay_amount || 0} + ${gamesHosted} games × ${bonusPerGame})`);
+    const partialNote = isPartial ? ` — ${e('atention')} partial (${Math.round(percentMet * 100)}% of requirements met, base prorated from ${s.pay_amount || 0})` : '';
+    staffLines.push(`${overdue ? e('atention') : e('checkmark')} ${s.username} — **${totalPay} ${s.pay_currency}** (base: ${basePay} + ${gamesHosted} games × ${bonusPerGame})${partialNote}`);
   }
 
   // Booster totals
